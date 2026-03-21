@@ -63,12 +63,12 @@ export default function App() {
 
       {/* Main Content */}
       <main className="min-h-[calc(100vh-3.5rem)]">
-        {activeTab === 'feed' && <Feed />}
-        {activeTab === 'search' && <Search />}
+        {activeTab === 'feed' && <Feed onNavigate={setActiveTab} />}
+        {activeTab === 'search' && <Search onNavigate={setActiveTab} />}
         {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}
         {activeTab === 'notifications' && <Notifications />}
-        {activeTab === 'profile' && <Profile />}
-        {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} />}
+        {activeTab === 'profile' && <Profile onNavigate={setActiveTab} />}
+        {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} onNavigate={setActiveTab} />}
       </main>
 
       {/* Navigation */}

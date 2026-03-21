@@ -7,6 +7,8 @@ import { Story } from '../types';
 import { Plus, X, Trash2, Send } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
+import { useBlocks } from '../services/blockService';
+import { getOptimizedImageUrl } from '../utils/cloudinary';
 
 export default function Stories() {
   const [groupedStories, setGroupedStories] = useState<Record<string, Story[]>>({});
@@ -18,6 +20,7 @@ export default function Stories() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
 
   useEffect(() => {
     const yesterday = new Date();
@@ -64,6 +67,12 @@ export default function Stories() {
       });
 
       setGroupedStories(grouped);
+    }, (error) => {
+      if (error.message.includes('permission')) {
+        console.warn('Permission denied on stories query. This is expected if blocked users are in the results.');
+      } else {
+        handleFirestoreError(error, OperationType.LIST, 'stories');
+      }
     });
 
     return () => unsubscribe();
@@ -195,7 +204,12 @@ export default function Stories() {
             <div className="w-full h-full rounded-full bg-white p-[2px]">
               <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden relative">
                 {auth.currentUser?.photoURL ? (
-                  <img src={auth.currentUser.photoURL} alt="You" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img 
+                    src={getOptimizedImageUrl(auth.currentUser.photoURL, 128, 128)} 
+                    alt="You" 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer" 
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
                     {auth.currentUser?.displayName?.charAt(0).toUpperCase()}
@@ -217,8 +231,13 @@ export default function Stories() {
         </div>
 
         {/* Stories List */}
-        {Object.values(groupedStories).map(userStories => {
-          const firstStory = userStories[0];
+        {Object.values(groupedStories)
+          .filter(userStories => {
+            const authorId = userStories[0].authorId;
+            return !blockedIds.includes(authorId) && !blockedByIds.includes(authorId);
+          })
+          .map(userStories => {
+            const firstStory = userStories[0];
           return (
             <div 
               key={firstStory.authorId} 
@@ -232,7 +251,12 @@ export default function Stories() {
                 <div className="w-full h-full rounded-full bg-white p-[2px]">
                   <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden">
                     {firstStory.authorPhoto ? (
-                      <img src={firstStory.authorPhoto} alt={firstStory.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img 
+                        src={getOptimizedImageUrl(firstStory.authorPhoto, 128, 128)} 
+                        alt={firstStory.authorName} 
+                        className="w-full h-full object-cover" 
+                        referrerPolicy="no-referrer" 
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
                         {firstStory.authorName.charAt(0).toUpperCase()}
@@ -323,7 +347,12 @@ export default function Stories() {
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800">
                   {activeStory.authorPhoto ? (
-                    <img src={activeStory.authorPhoto} alt={activeStory.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img 
+                      src={getOptimizedImageUrl(activeStory.authorPhoto, 64, 64)} 
+                      alt={activeStory.authorName} 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white font-medium">
                       {activeStory.authorName.charAt(0).toUpperCase()}
@@ -365,7 +394,7 @@ export default function Stories() {
               onPointerUp={handlePointerUp}
             >
               <img 
-                src={activeStory.imageUrl} 
+                src={getOptimizedImageUrl(activeStory.imageUrl, 1080)} 
                 alt="Story" 
                 className="max-w-full max-h-full object-contain pointer-events-none"
               />

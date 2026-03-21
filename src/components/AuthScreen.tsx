@@ -3,7 +3,7 @@ import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, si
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Camera, Mail, Lock, User as UserIcon, AtSign } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../utils';
+import { handleFirestoreError, OperationType } from '../utils/firestore';
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -17,23 +17,34 @@ export default function AuthScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const checkUsernameUnique = async (usernameToCheck: string) => {
-    const q = query(collection(db, 'users'), where('username', '==', usernameToCheck.toLowerCase()));
-    const snapshot = await getDocs(q);
-    return snapshot.empty;
+    console.log('Checking username uniqueness:', usernameToCheck);
+    try {
+      const q = query(collection(db, 'users'), where('username', '==', usernameToCheck.toLowerCase()));
+      const snapshot = await getDocs(q);
+      console.log('Username uniqueness check complete. Empty:', snapshot.empty);
+      return snapshot.empty;
+    } catch (err) {
+      console.error('Error checking username uniqueness:', err);
+      handleFirestoreError(err, OperationType.LIST, 'users');
+      return false;
+    }
   };
 
   const handleGoogleSignIn = async () => {
+    console.log('Starting Google Sign-In');
     setLoading(true);
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+      console.log('Google Sign-In successful for user:', user.uid);
 
       const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
+        console.log('Creating new user document for Google user');
         // Generate a random username for Google sign-in
         const baseUsername = user.email?.split('@')[0] || 'user';
         const randomSuffix = Math.floor(Math.random() * 10000);
@@ -50,6 +61,7 @@ export default function AuthScreen() {
             followingCount: 0,
             createdAt: serverTimestamp(),
           });
+          console.log('User document created successfully');
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
         }
@@ -65,6 +77,7 @@ export default function AuthScreen() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Starting Email Auth. Mode:', isLogin ? 'Login' : 'Signup');
     setLoading(true);
     setError(null);
 
@@ -90,14 +103,20 @@ export default function AuthScreen() {
 
     try {
       if (isLogin) {
+        console.log('Attempting sign-in with email:', email);
         await signInWithEmailAndPassword(auth, email, password);
+        console.log('Sign-in successful');
       } else {
+        console.log('Attempting sign-up with email:', email);
         const result = await createUserWithEmailAndPassword(auth, email, password);
         const user = result.user;
+        console.log('Sign-up successful for user:', user.uid);
         
         await updateProfile(user, { displayName: name });
+        console.log('Auth profile updated with name:', name);
 
         const userRef = doc(db, 'users', user.uid);
+        console.log('Creating user document in Firestore');
         try {
           await setDoc(userRef, {
             uid: user.uid,
@@ -109,6 +128,7 @@ export default function AuthScreen() {
             followingCount: 0,
             createdAt: serverTimestamp(),
           });
+          console.log('User document created successfully');
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
         }

@@ -7,6 +7,7 @@ import { Post, Comment } from '../types';
 import PostCard from './PostCard';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'motion/react';
+import { getOptimizedImageUrl } from '../utils/cloudinary';
 
 interface PostDetailsModalProps {
   post: Post;
@@ -94,7 +95,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
         {/* Left side: Post Image (hidden on small screens, shown on md+) */}
         <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center">
           <img 
-            src={post.imageUrl} 
+            src={getOptimizedImageUrl(post.imageUrl, 1200)} 
             alt="Post content" 
             className="max-w-full max-h-full object-contain"
             referrerPolicy="no-referrer"
@@ -114,7 +115,12 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                 className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden hover:opacity-80 transition-opacity"
               >
                 {post.authorPhoto ? (
-                  <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img 
+                    src={getOptimizedImageUrl(post.authorPhoto, 64, 64)} 
+                    alt={post.authorName} 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer" 
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
                     {post.authorName.charAt(0).toUpperCase()}
@@ -142,7 +148,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
           {/* Mobile Image (only visible on small screens) */}
           <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center">
              <img 
-              src={post.imageUrl} 
+              src={getOptimizedImageUrl(post.imageUrl, 800)} 
               alt="Post content" 
               className="max-w-full max-h-full object-contain"
               referrerPolicy="no-referrer"
@@ -162,7 +168,12 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                   className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
                 >
                   {post.authorPhoto ? (
-                    <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img 
+                      src={getOptimizedImageUrl(post.authorPhoto, 64, 64)} 
+                      alt={post.authorName} 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
                       {post.authorName.charAt(0).toUpperCase()}
@@ -198,7 +209,12 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                   className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
                 >
                   {comment.authorPhoto ? (
-                    <img src={comment.authorPhoto} alt={comment.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img 
+                      src={getOptimizedImageUrl(comment.authorPhoto, 64, 64)} 
+                      alt={comment.authorName} 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
                       {comment.authorName.charAt(0).toUpperCase()}

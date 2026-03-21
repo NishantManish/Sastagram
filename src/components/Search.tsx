@@ -5,12 +5,14 @@ import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { User } from '../types';
 import { Search as SearchIcon, User as UserIcon } from 'lucide-react';
 import Profile from './Profile';
+import { useBlocks } from '../services/blockService';
 
-export default function Search() {
+export default function Search({ onNavigate }: { onNavigate?: (tab: any) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
 
   useEffect(() => {
     const searchUsers = async () => {
@@ -54,9 +56,14 @@ export default function Search() {
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
+  const filteredResults = results.filter(user => 
+    !blockedIds.includes(user.uid) && 
+    !blockedByIds.includes(user.uid)
+  );
+
   if (selectedUserId) {
     return (
-      <Profile userId={selectedUserId} onBack={() => setSelectedUserId(null)} />
+      <Profile userId={selectedUserId} onBack={() => setSelectedUserId(null)} onNavigate={onNavigate} />
     );
   }
 
@@ -82,9 +89,9 @@ export default function Search() {
           <div className="flex justify-center py-8">
             <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
           </div>
-        ) : results.length > 0 ? (
+        ) : filteredResults.length > 0 ? (
           <div className="space-y-4">
-            {results.map(user => (
+            {filteredResults.map(user => (
               <div 
                 key={user.uid} 
                 className="flex items-center gap-3 cursor-pointer hover:bg-zinc-50 p-2 rounded-xl transition-colors"

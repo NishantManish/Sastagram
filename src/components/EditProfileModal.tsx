@@ -5,6 +5,7 @@ import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { User } from '../types';
 import { Loader2, X, Camera, Upload } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getOptimizedImageUrl } from '../utils/cloudinary';
 
 interface EditProfileModalProps {
   userProfile: User;
@@ -128,7 +129,12 @@ export default function EditProfileModal({ userProfile, onClose }: EditProfileMo
           <div className="flex flex-col items-center gap-4 mb-4">
             <div className="relative w-24 h-24 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden group">
               {imagePreview ? (
-                <img src={imagePreview} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img 
+                  src={getOptimizedImageUrl(imagePreview, 192, 192)} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover" 
+                  referrerPolicy="no-referrer" 
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-zinc-400">
                   <Camera className="w-8 h-8" />

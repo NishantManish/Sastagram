@@ -5,10 +5,14 @@ import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Notification } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { Bell, Heart, MessageCircle, UserPlus } from 'lucide-react';
+import { getOptimizedImageUrl } from '../utils/cloudinary';
+
+import { useBlocks } from '../services/blockService';
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -43,6 +47,11 @@ export default function Notifications() {
     return () => unsubscribe();
   }, []);
 
+  const filteredNotifications = notifications.filter(notification => 
+    !blockedIds.includes(notification.senderId) && 
+    !blockedByIds.includes(notification.senderId)
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -57,7 +66,7 @@ export default function Notifications() {
         <h1 className="text-xl font-bold text-zinc-900">Notifications</h1>
       </div>
 
-      {notifications.length === 0 ? (
+      {filteredNotifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-[60vh] text-zinc-500">
           <Bell className="w-12 h-12 mb-4 text-zinc-300" />
           <p className="text-lg font-medium text-zinc-900">No notifications yet</p>
@@ -65,12 +74,17 @@ export default function Notifications() {
         </div>
       ) : (
         <div className="divide-y divide-zinc-100">
-          {notifications.map((notification) => (
+          {filteredNotifications.map((notification) => (
             <div key={notification.id} className={`p-4 flex items-start gap-3 ${!notification.read ? 'bg-indigo-50/50' : ''}`}>
               <div className="relative">
                 <div className="w-10 h-10 rounded-full bg-zinc-200 overflow-hidden shrink-0">
                   {notification.senderPhoto ? (
-                    <img src={notification.senderPhoto} alt={notification.senderName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img 
+                      src={getOptimizedImageUrl(notification.senderPhoto, 80, 80)} 
+                      alt={notification.senderName} 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
                       {notification.senderName.charAt(0).toUpperCase()}

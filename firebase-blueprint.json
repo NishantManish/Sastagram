@@ -6,14 +6,16 @@
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "The unique user ID from Firebase Auth." },
+        "username": { "type": "string", "description": "The user's unique username." },
         "displayName": { "type": "string", "description": "The user's display name." },
         "photoURL": { "type": "string", "description": "The user's profile picture URL." },
         "bio": { "type": "string", "description": "The user's biography." },
         "followersCount": { "type": "number", "description": "Number of followers." },
         "followingCount": { "type": "number", "description": "Number of users followed." },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User's role." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the user profile was created." }
       },
-      "required": ["uid", "displayName", "followersCount", "followingCount", "createdAt"]
+      "required": ["uid", "username", "displayName", "followersCount", "followingCount", "createdAt"]
     },
     "Post": {
       "title": "Post",
@@ -130,6 +132,17 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
       },
       "required": ["chatId", "senderId", "text", "createdAt"]
+    },
+    "Block": {
+      "title": "Block",
+      "description": "A record of a user blocking another user.",
+      "type": "object",
+      "properties": {
+        "blockerId": { "type": "string", "description": "The ID of the user who is blocking." },
+        "blockedId": { "type": "string", "description": "The ID of the user being blocked." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the block was created." }
+      },
+      "required": ["blockerId", "blockedId", "createdAt"]
     }
   },
   "firestore": {
@@ -172,6 +185,10 @@
     "/chats/{chatId}/messages/{messageId}": {
       "schema": { "$ref": "#/entities/Message" },
       "description": "Stores messages within a chat."
+    },
+    "/blocks/{blockId}": {
+      "schema": { "$ref": "#/entities/Block" },
+      "description": "Stores block records."
     }
   }
 }

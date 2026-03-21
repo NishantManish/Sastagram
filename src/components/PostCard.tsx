@@ -6,6 +6,7 @@ import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post } from '../types';
 import { cn } from '../utils';
+import { getOptimizedImageUrl } from '../utils/cloudinary';
 
 interface PostCardProps {
   key?: string | number;
@@ -161,7 +162,12 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden hover:opacity-80 transition-opacity"
         >
           {post.authorPhoto ? (
-            <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <img 
+              src={getOptimizedImageUrl(post.authorPhoto, 64, 64)} 
+              alt={post.authorName} 
+              className="w-full h-full object-cover" 
+              referrerPolicy="no-referrer" 
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
               {post.authorName.charAt(0).toUpperCase()}
@@ -179,7 +185,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       {/* Image */}
       <div className="w-full aspect-square bg-zinc-100 relative">
         <img 
-          src={post.imageUrl} 
+          src={getOptimizedImageUrl(post.imageUrl, 800)} 
           alt="Post content" 
           className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
