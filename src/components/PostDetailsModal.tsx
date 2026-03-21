@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send } from 'lucide-react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment } from 'firebase/firestore';
+import { X, Send, Trash2 } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, Comment } from '../types';
@@ -8,6 +8,9 @@ import PostCard from './PostCard';
 import { formatDistanceToNow } from 'date-fns';
 import { motion } from 'motion/react';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
+import { deleteFromCloudinary } from '../utils/media';
+import UserAvatar from './UserAvatar';
+import ConfirmationModal from './ConfirmationModal';
 
 interface PostDetailsModalProps {
   post: Post;
@@ -19,6 +22,8 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -37,6 +42,41 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
 
     return () => unsubscribe();
   }, [post.id]);
+
+  const handleDelete = async () => {
+    if (!auth.currentUser || auth.currentUser.uid !== post.authorId || isDeleting) return;
+    
+    setIsDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete post
+      batch.delete(doc(db, 'posts', post.id));
+      
+      // Delete notifications related to this post
+      const notificationsQuery = query(
+        collection(db, 'notifications'), 
+        where('postId', '==', post.id),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const notificationsSnap = await getDocs(notificationsQuery);
+      notificationsSnap.forEach(doc => batch.delete(doc.ref));
+
+      await batch.commit();
+
+      // Delete from Cloudinary
+      if (post.imageUrl) {
+        await deleteFromCloudinary(post.imageUrl);
+      }
+      
+      setShowDeleteConfirm(false);
+      onClose();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `posts/${post.id}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,20 +152,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                   onUserClick?.(post.authorId);
                   onClose();
                 }}
-                className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden hover:opacity-80 transition-opacity"
+                className="hover:opacity-80 transition-opacity"
               >
-                {post.authorPhoto ? (
-                  <img 
-                    src={getOptimizedImageUrl(post.authorPhoto, 64, 64)} 
-                    alt={post.authorName} 
-                    className="w-full h-full object-cover" 
-                    referrerPolicy="no-referrer" 
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
-                    {post.authorName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <UserAvatar 
+                  userId={post.authorId} 
+                  size={32} 
+                  fallbackPhoto={post.authorPhoto} 
+                  fallbackName={post.authorName} 
+                />
               </button>
               <button 
                 onClick={() => {
@@ -137,13 +171,34 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                 {post.authorName}
               </button>
             </div>
-            <button 
-              onClick={onClose}
-              className="p-1 text-zinc-500 hover:text-zinc-900 transition-colors rounded-full hover:bg-zinc-100"
-            >
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              {auth.currentUser?.uid === post.authorId && (
+                <button 
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isDeleting}
+                  className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+              <button 
+                onClick={onClose}
+                className="p-1 text-zinc-500 hover:text-zinc-900 transition-colors rounded-full hover:bg-zinc-100"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
+
+          <ConfirmationModal
+            isOpen={showDeleteConfirm}
+            onClose={() => setShowDeleteConfirm(false)}
+            onConfirm={handleDelete}
+            isLoading={isDeleting}
+            title="Delete Post?"
+            message="Are you sure you want to delete this post? This action cannot be undone."
+            confirmText="Delete"
+          />
           
           {/* Mobile Image (only visible on small screens) */}
           <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center">
@@ -165,20 +220,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                     onUserClick?.(post.authorId);
                     onClose();
                   }}
-                  className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
+                  className="hover:opacity-80 transition-opacity"
                 >
-                  {post.authorPhoto ? (
-                    <img 
-                      src={getOptimizedImageUrl(post.authorPhoto, 64, 64)} 
-                      alt={post.authorName} 
-                      className="w-full h-full object-cover" 
-                      referrerPolicy="no-referrer" 
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
-                      {post.authorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <UserAvatar 
+                    userId={post.authorId} 
+                    size={32} 
+                    fallbackPhoto={post.authorPhoto} 
+                    fallbackName={post.authorName} 
+                  />
                 </button>
                 <div>
                   <button 
@@ -206,20 +255,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                     onUserClick?.(comment.authorId);
                     onClose();
                   }}
-                  className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
+                  className="hover:opacity-80 transition-opacity"
                 >
-                  {comment.authorPhoto ? (
-                    <img 
-                      src={getOptimizedImageUrl(comment.authorPhoto, 64, 64)} 
-                      alt={comment.authorName} 
-                      className="w-full h-full object-cover" 
-                      referrerPolicy="no-referrer" 
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
-                      {comment.authorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <UserAvatar 
+                    userId={comment.authorId} 
+                    size={32} 
+                    fallbackPhoto={comment.authorPhoto} 
+                    fallbackName={comment.authorName} 
+                  />
                 </button>
                 <div>
                   <button 

@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Share2 } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post } from '../types';
 import { cn } from '../utils';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
+import { deleteFromCloudinary } from '../utils/media';
+import { motion, AnimatePresence } from 'motion/react';
+import UserAvatar from './UserAvatar';
+import ConfirmationModal from './ConfirmationModal';
 
 interface PostCardProps {
   key?: string | number;
@@ -22,6 +26,10 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [isLiking, setIsLiking] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  const [lastTap, setLastTap] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const checkInteractions = async () => {
@@ -45,6 +53,11 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const handleLike = async () => {
     if (!auth.currentUser || isLiking) return;
     setIsLiking(true);
+    
+    // Optimistic UI
+    const newIsLiked = !isLiked;
+    setIsLiked(newIsLiked);
+    setLikeCount((prev) => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
 
     const likeId = `${post.id}_${auth.currentUser.uid}`;
     const likeRef = doc(db, 'likes', likeId);
@@ -52,15 +65,13 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     const batch = writeBatch(db);
 
     try {
-      if (isLiked) {
+      if (!newIsLiked) {
         // Unlike
         batch.delete(likeRef);
         batch.update(postRef, {
           likesCount: increment(-1),
         });
         await batch.commit();
-        setIsLiked(false);
-        setLikeCount((prev) => Math.max(0, prev - 1));
       } else {
         // Like
         batch.set(likeRef, {
@@ -88,14 +99,63 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         }
         
         await batch.commit();
-        setIsLiked(true);
-        setLikeCount((prev) => prev + 1);
       }
       onLikeToggle?.();
     } catch (err) {
+      // Rollback on error
+      setIsLiked(!newIsLiked);
+      setLikeCount((prev) => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
       handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}/likes`);
     } finally {
       setIsLiking(false);
+    }
+  };
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    if (now - lastTap < DOUBLE_TAP_DELAY) {
+      if (!isLiked) {
+        handleLike();
+      }
+      setShowHeartAnimation(true);
+      setTimeout(() => setShowHeartAnimation(false), 1000);
+    }
+    setLastTap(now);
+  };
+
+  const handleDelete = async () => {
+    if (!auth.currentUser || auth.currentUser.uid !== post.authorId || isDeleting) return;
+    
+    setIsDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete post
+      batch.delete(doc(db, 'posts', post.id));
+      
+      // Delete notifications related to this post
+      const notificationsQuery = query(
+        collection(db, 'notifications'), 
+        where('postId', '==', post.id),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const notificationsSnap = await getDocs(notificationsQuery);
+      notificationsSnap.forEach(doc => batch.delete(doc.ref));
+
+      await batch.commit();
+
+      // Delete from Cloudinary
+      if (post.imageUrl) {
+        await deleteFromCloudinary(post.imageUrl);
+      }
+      
+      setShowDeleteConfirm(false);
+      // The parent component (Feed) should handle the removal from UI via onSnapshot or a refresh
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `posts/${post.id}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -156,34 +216,53 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   return (
     <div className="bg-white border-b border-zinc-200 sm:border sm:rounded-xl sm:mb-6 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center p-3 gap-3">
-        <button 
-          onClick={() => onUserClick?.(post.authorId)}
-          className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden hover:opacity-80 transition-opacity"
-        >
-          {post.authorPhoto ? (
-            <img 
-              src={getOptimizedImageUrl(post.authorPhoto, 64, 64)} 
-              alt={post.authorName} 
-              className="w-full h-full object-cover" 
-              referrerPolicy="no-referrer" 
+      <div className="flex items-center justify-between p-3">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => onUserClick?.(post.authorId)}
+            className="hover:opacity-80 transition-opacity"
+          >
+            <UserAvatar 
+              userId={post.authorId} 
+              size={32} 
+              fallbackPhoto={post.authorPhoto} 
+              fallbackName={post.authorName} 
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
-              {post.authorName.charAt(0).toUpperCase()}
-            </div>
-          )}
-        </button>
-        <button 
-          onClick={() => onUserClick?.(post.authorId)}
-          className="font-semibold text-sm text-zinc-900 hover:underline"
-        >
-          {post.authorName}
-        </button>
+          </button>
+          <button 
+            onClick={() => onUserClick?.(post.authorId)}
+            className="font-semibold text-sm text-zinc-900 hover:underline"
+          >
+            {post.authorName}
+          </button>
+        </div>
+        
+        {auth.currentUser?.uid === post.authorId && (
+          <button 
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={isDeleting}
+            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        isLoading={isDeleting}
+        title="Delete Post?"
+        message="Are you sure you want to delete this post? This action cannot be undone."
+        confirmText="Delete"
+      />
+
       {/* Image */}
-      <div className="w-full aspect-square bg-zinc-100 relative">
+      <div 
+        className="w-full aspect-square bg-zinc-100 relative cursor-pointer overflow-hidden"
+        onClick={handleDoubleTap}
+      >
         <img 
           src={getOptimizedImageUrl(post.imageUrl, 800)} 
           alt="Post content" 
@@ -191,6 +270,30 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           referrerPolicy="no-referrer"
           loading="lazy"
         />
+        
+        <AnimatePresence>
+          {showHeartAnimation && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1.2, opacity: 1 }}
+              exit={{ scale: 1.5, opacity: 0 }}
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            >
+              <svg width="0" height="0" className="absolute">
+                <defs>
+                  <linearGradient id="heartGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop stopColor="#fca5a5" offset="0%" /> {/* red-300 */}
+                    <stop stopColor="#ef4444" offset="100%" /> {/* red-500 */}
+                  </linearGradient>
+                </defs>
+              </svg>
+              <Heart 
+                className="w-24 h-24 drop-shadow-2xl" 
+                style={{ fill: 'url(#heartGradient)', color: 'url(#heartGradient)' }} 
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Actions */}

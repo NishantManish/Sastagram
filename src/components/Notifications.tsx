@@ -4,12 +4,12 @@ import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Notification } from '../types';
 import { formatDistanceToNow } from 'date-fns';
-import { Bell, Heart, MessageCircle, UserPlus } from 'lucide-react';
+import { Bell, Heart, MessageCircle, UserPlus, ArrowLeft } from 'lucide-react';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 
 import { useBlocks } from '../services/blockService';
 
-export default function Notifications() {
+export default function Notifications({ onBack }: { onBack?: () => void }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
@@ -62,7 +62,15 @@ export default function Notifications() {
 
   return (
     <div className="max-w-md mx-auto pb-20 bg-white min-h-screen">
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 py-3">
+      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 py-3 flex items-center gap-2">
+        {onBack && (
+          <button 
+            onClick={onBack}
+            className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        )}
         <h1 className="text-xl font-bold text-zinc-900">Notifications</h1>
       </div>
 

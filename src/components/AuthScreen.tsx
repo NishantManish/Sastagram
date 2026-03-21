@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Camera, Mail, Lock, User as UserIcon, AtSign } from 'lucide-react';
@@ -15,6 +15,8 @@ export default function AuthScreen() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [showReset, setShowReset] = useState(false);
 
   const checkUsernameUnique = async (usernameToCheck: string) => {
     console.log('Checking username uniqueness:', usernameToCheck);
@@ -77,6 +79,10 @@ export default function AuthScreen() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (showReset) {
+      handleResetPassword();
+      return;
+    }
     console.log('Starting Email Auth. Mode:', isLogin ? 'Login' : 'Signup');
     setLoading(true);
     setError(null);
@@ -153,6 +159,25 @@ export default function AuthScreen() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setShowReset(false);
+    } catch (err: any) {
+      console.error('Reset error:', err);
+      setError(err.message || 'Failed to send reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
       <div className="w-full max-w-sm bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-white/20 flex flex-col items-center">
@@ -161,23 +186,38 @@ export default function AuthScreen() {
         </div>
         <h1 className="text-3xl font-bold text-zinc-900 mb-6 font-serif italic">InstaClone</h1>
 
+        {resetSent && (
+          <div className="w-full p-4 mb-6 bg-green-50 text-green-700 text-sm rounded-xl border border-green-100 text-center">
+            Password reset email sent! Please check your inbox.
+          </div>
+        )}
+
         {/* Tabs */}
-        <div className="flex w-full bg-zinc-100 rounded-xl p-1 mb-6">
-          <button
-            type="button"
-            onClick={() => { setIsLogin(true); setError(null); }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${isLogin ? 'bg-white text-purple-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-          >
-            Log In
-          </button>
-          <button
-            type="button"
-            onClick={() => { setIsLogin(false); setError(null); }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${!isLogin ? 'bg-white text-purple-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-          >
-            Sign Up
-          </button>
-        </div>
+        {!showReset && (
+          <div className="flex w-full bg-zinc-100 rounded-xl p-1 mb-6">
+            <button
+              type="button"
+              onClick={() => { setIsLogin(true); setError(null); setResetSent(false); }}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${isLogin ? 'bg-white text-purple-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+            >
+              Log In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsLogin(false); setError(null); setResetSent(false); }}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${!isLogin ? 'bg-white text-purple-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+            >
+              Sign Up
+            </button>
+          </div>
+        )}
+
+        {showReset && (
+          <div className="w-full mb-6">
+            <h2 className="text-xl font-bold text-zinc-900 mb-2">Reset Password</h2>
+            <p className="text-sm text-zinc-500">Enter your email and we'll send you a link to reset your password.</p>
+          </div>
+        )}
 
         {error && (
           <div className="w-full p-3 mb-4 bg-red-50/80 text-red-600 text-sm rounded-xl text-center border border-red-100">
@@ -227,18 +267,44 @@ export default function AuthScreen() {
             />
           </div>
 
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
-            />
-          </div>
+          {!showReset && (
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+              />
+            </div>
+          )}
+
+          {isLogin && !showReset && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => { setShowReset(true); setError(null); }}
+                className="text-xs font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+              >
+                Forgot Password?
+              </button>
+            </div>
+          )}
+
+          {showReset && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowReset(false)}
+                className="text-xs font-semibold text-zinc-500 hover:text-zinc-700 transition-colors"
+              >
+                Back to Login
+              </button>
+            </div>
+          )}
 
           {!isLogin && (
             <div className="flex items-start gap-2 mt-2">
@@ -263,7 +329,7 @@ export default function AuthScreen() {
             {loading ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
-              isLogin ? 'Log In' : 'Create Account'
+              showReset ? 'Send Reset Link' : (isLogin ? 'Log In' : 'Create Account')
             )}
           </button>
         </form>

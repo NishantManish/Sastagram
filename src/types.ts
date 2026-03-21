@@ -72,6 +72,7 @@ export interface Chat {
   lastMessage?: string;
   lastMessageTime?: any; // Firestore Timestamp
   updatedAt: any; // Firestore Timestamp
+  readStatus?: Record<string, boolean>;
 }
 
 export interface Message {

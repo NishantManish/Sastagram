@@ -15,9 +15,6 @@ export const getOptimizedImageUrl = (url: string, width?: number, height?: numbe
     return url;
   }
 
-  // Cloudinary Fetch API: https://cloudinary.com/documentation/fetch_remote_images
-  const baseUrl = `https://res.cloudinary.com/${cloudName}/image/fetch/`;
-  
   const transformations = [
     'f_auto',
     'q_auto',
@@ -26,5 +23,14 @@ export const getOptimizedImageUrl = (url: string, width?: number, height?: numbe
     (width || height) ? 'c_fill' : '',
   ].filter(Boolean).join(',');
 
+  // If it's already a Cloudinary upload URL, insert transformations
+  if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+    const parts = url.split('/upload/');
+    return `${parts[0]}/upload/${transformations}/${parts[1]}`;
+  }
+
+  // Fallback for non-Cloudinary URLs (e.g., Google profile pictures, old Firebase storage URLs)
+  // Cloudinary Fetch API: https://cloudinary.com/documentation/fetch_remote_images
+  const baseUrl = `https://res.cloudinary.com/${cloudName}/image/fetch/`;
   return `${baseUrl}${transformations}/${encodeURIComponent(url)}`;
 };

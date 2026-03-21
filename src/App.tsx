@@ -50,7 +50,7 @@ export default function App() {
             <MessageSquare className="w-6 h-6" />
           </button>
         </header>
-      ) : (activeTab !== 'profile' && activeTab !== 'messages') ? (
+      ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications') ? (
         <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 h-14 flex items-center max-w-md mx-auto">
           <button 
             onClick={() => setActiveTab('feed')}
@@ -66,7 +66,7 @@ export default function App() {
         {activeTab === 'feed' && <Feed onNavigate={setActiveTab} />}
         {activeTab === 'search' && <Search onNavigate={setActiveTab} />}
         {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}
-        {activeTab === 'notifications' && <Notifications />}
+        {activeTab === 'notifications' && <Notifications onBack={() => setActiveTab('feed')} />}
         {activeTab === 'profile' && <Profile onNavigate={setActiveTab} />}
         {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} onNavigate={setActiveTab} />}
       </main>

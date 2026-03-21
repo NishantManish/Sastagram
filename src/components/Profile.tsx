@@ -4,13 +4,16 @@ import { signOut } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, User } from '../types';
-import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut } from 'lucide-react';
+import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2 } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import EditProfileModal from './EditProfileModal';
 import FollowListModal from './FollowListModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { blockUser, unblockUser, useBlocks } from '../services/blockService';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
+import { deleteFromCloudinary } from '../utils/media';
+import UserAvatar from './UserAvatar';
+import ConfirmationModal from './ConfirmationModal';
 
 interface ProfileProps {
   userId?: string;
@@ -32,6 +35,8 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [viewedUserId, setViewedUserId] = useState<string | null>(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+  const [isDeletingPost, setIsDeletingPost] = useState(false);
 
   const currentUser = auth.currentUser;
   const targetUserId = viewedUserId || userId || currentUser?.uid;
@@ -289,20 +294,13 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
 
       {/* Profile Info */}
       <div className="p-4 flex items-center gap-6">
-        <div className="w-20 h-20 rounded-full bg-zinc-200 overflow-hidden shrink-0 border border-zinc-200">
-          {userProfile.photoURL ? (
-            <img 
-              src={getOptimizedImageUrl(userProfile.photoURL, 160, 160)} 
-              alt={userProfile.displayName || ''} 
-              className="w-full h-full object-cover" 
-              referrerPolicy="no-referrer" 
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-2xl">
-              {userProfile.displayName?.charAt(0).toUpperCase()}
-            </div>
-          )}
-        </div>
+        <UserAvatar 
+          userId={targetUserId} 
+          size={80} 
+          className="border border-zinc-200"
+          fallbackPhoto={userProfile.photoURL} 
+          fallbackName={userProfile.displayName} 
+        />
         <div className="flex-1 flex justify-around text-center">
           <div>
             <div className="font-semibold text-lg text-zinc-900">{posts.length}</div>
@@ -442,17 +440,31 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
             <div 
               key={post.id} 
               className="aspect-square bg-zinc-100 relative group cursor-pointer"
-              onClick={() => setSelectedPost(post)}
             >
               <img 
                 src={getOptimizedImageUrl(post.imageUrl, 400, 400)} 
                 alt="Post" 
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
+                onClick={() => setSelectedPost(post)}
               />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-medium">
+              <div 
+                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-medium"
+                onClick={() => setSelectedPost(post)}
+              >
                 ❤️ {post.likesCount}
               </div>
+              {isOwnProfile && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPostToDelete(post);
+                  }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -488,6 +500,46 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
           />
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        isOpen={!!postToDelete}
+        onClose={() => setPostToDelete(null)}
+        onConfirm={async () => {
+          if (!postToDelete || !auth.currentUser) return;
+          setIsDeletingPost(true);
+          try {
+            const batch = writeBatch(db);
+            
+            // Delete post
+            batch.delete(doc(db, 'posts', postToDelete.id));
+            
+            // Delete notifications related to this post
+            const notificationsQuery = query(
+              collection(db, 'notifications'), 
+              where('postId', '==', postToDelete.id),
+              where('userId', '==', auth.currentUser.uid)
+            );
+            const notificationsSnap = await getDocs(notificationsQuery);
+            notificationsSnap.forEach(doc => batch.delete(doc.ref));
+
+            await batch.commit();
+
+            // Delete from Cloudinary
+            if (postToDelete.imageUrl) {
+              await deleteFromCloudinary(postToDelete.imageUrl);
+            }
+            setPostToDelete(null);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, `posts/${postToDelete.id}`);
+          } finally {
+            setIsDeletingPost(false);
+          }
+        }}
+        isLoading={isDeletingPost}
+        title="Delete Post?"
+        message="Are you sure you want to delete this post? This action cannot be undone."
+        confirmText="Delete"
+      />
     </div>
   );
 }

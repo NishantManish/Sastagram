@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
+import UserAvatar from './UserAvatar';
 
 export default function Stories() {
   const [groupedStories, setGroupedStories] = useState<Record<string, Story[]>>({});
@@ -203,18 +204,10 @@ export default function Stories() {
           <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-zinc-200 to-zinc-300">
             <div className="w-full h-full rounded-full bg-white p-[2px]">
               <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden relative">
-                {auth.currentUser?.photoURL ? (
-                  <img 
-                    src={getOptimizedImageUrl(auth.currentUser.photoURL, 128, 128)} 
-                    alt="You" 
-                    className="w-full h-full object-cover" 
-                    referrerPolicy="no-referrer" 
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
-                    {auth.currentUser?.displayName?.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <UserAvatar 
+                  userId={auth.currentUser?.uid || ''} 
+                  className="w-full h-full"
+                />
                 <label className="absolute inset-0 bg-black/20 flex items-center justify-center cursor-pointer hover:bg-black/30 transition-colors">
                   <Plus className="w-6 h-6 text-white" />
                   <input 
@@ -250,18 +243,10 @@ export default function Stories() {
               <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600">
                 <div className="w-full h-full rounded-full bg-white p-[2px]">
                   <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden">
-                    {firstStory.authorPhoto ? (
-                      <img 
-                        src={getOptimizedImageUrl(firstStory.authorPhoto, 128, 128)} 
-                        alt={firstStory.authorName} 
-                        className="w-full h-full object-cover" 
-                        referrerPolicy="no-referrer" 
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
-                        {firstStory.authorName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <UserAvatar 
+                      userId={firstStory.authorId} 
+                      className="w-full h-full"
+                    />
                   </div>
                 </div>
               </div>
@@ -345,20 +330,10 @@ export default function Stories() {
             {/* Header */}
             <div className="absolute top-4 left-0 right-0 p-4 pt-8 flex items-center justify-between z-10 bg-gradient-to-b from-black/50 to-transparent">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800">
-                  {activeStory.authorPhoto ? (
-                    <img 
-                      src={getOptimizedImageUrl(activeStory.authorPhoto, 64, 64)} 
-                      alt={activeStory.authorName} 
-                      className="w-full h-full object-cover" 
-                      referrerPolicy="no-referrer" 
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-white font-medium">
-                      {activeStory.authorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
+                <UserAvatar 
+                  userId={activeStory.authorId} 
+                  size={32}
+                />
                 <div>
                   <div className="text-white font-medium text-sm drop-shadow-md">{activeStory.authorName}</div>
                   <div className="text-white/80 text-xs drop-shadow-md">

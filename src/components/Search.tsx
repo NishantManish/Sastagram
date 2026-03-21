@@ -3,9 +3,10 @@ import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { User } from '../types';
-import { Search as SearchIcon, User as UserIcon } from 'lucide-react';
+import { Search as SearchIcon, User as UserIcon, ArrowLeft } from 'lucide-react';
 import Profile from './Profile';
 import { useBlocks } from '../services/blockService';
+import UserAvatar from './UserAvatar';
 
 export default function Search({ onNavigate }: { onNavigate?: (tab: any) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,15 +24,12 @@ export default function Search({ onNavigate }: { onNavigate?: (tab: any) => void
 
       setLoading(true);
       try {
-        // Note: Firestore doesn't support native full-text search or case-insensitive starts-with easily without extra setup.
-        // For this clone, we'll do a simple exact match or prefix match if possible, or just fetch all and filter client-side if small.
-        // A better approach for production is Algolia or Typesense.
-        // Here we'll do a simple query where displayName >= searchQuery and < searchQuery + '\uf8ff'
+        // Since Firestore doesn't support case-insensitive prefix search well,
+        // we'll fetch a larger batch of users and filter client-side.
+        // In a real app, we'd use a search index like Algolia.
         const q = query(
           collection(db, 'users'),
-          where('displayName', '>=', searchQuery),
-          where('displayName', '<=', searchQuery + '\uf8ff'),
-          limit(20)
+          limit(100)
         );
 
         const snapshot = await getDocs(q);
@@ -40,8 +38,16 @@ export default function Search({ onNavigate }: { onNavigate?: (tab: any) => void
           ...doc.data()
         })) as User[];
         
-        // Filter out current user
-        setResults(users.filter(u => u.uid !== auth.currentUser?.uid));
+        const searchLower = searchQuery.toLowerCase();
+        const matchedUsers = users.filter(u => 
+          u.uid !== auth.currentUser?.uid && 
+          (
+            u.displayName?.toLowerCase().includes(searchLower) || 
+            u.username?.toLowerCase().includes(searchLower)
+          )
+        );
+        
+        setResults(matchedUsers);
       } catch (error) {
         handleFirestoreError(error, OperationType.GET, 'users');
       } finally {
@@ -97,18 +103,15 @@ export default function Search({ onNavigate }: { onNavigate?: (tab: any) => void
                 className="flex items-center gap-3 cursor-pointer hover:bg-zinc-50 p-2 rounded-xl transition-colors"
                 onClick={() => setSelectedUserId(user.uid)}
               >
-                <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0">
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt={user.displayName || ''} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
-                      {user.displayName?.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
+                <UserAvatar 
+                  userId={user.uid} 
+                  size={48} 
+                  fallbackPhoto={user.photoURL} 
+                  fallbackName={user.displayName} 
+                />
                 <div>
                   <div className="font-semibold text-zinc-900">{user.displayName}</div>
-                  {user.bio && <div className="text-sm text-zinc-500 line-clamp-1">{user.bio}</div>}
+                  <div className="text-sm text-zinc-500">@{user.username}</div>
                 </div>
               </div>
             ))}

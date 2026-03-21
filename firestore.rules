@@ -71,8 +71,9 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin' ||
-          (request.auth.token.email == "nishantmanish4@gmail.com" && request.auth.token.email_verified == true));
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin') ||
+         (request.auth.token.get('email', '') == "nishantmanish4@gmail.com" && request.auth.token.get('email_verified', false) == true));
     }
     
     function isOwner(userId) {
@@ -207,12 +208,13 @@ service cloud.firestore {
     }
 
     function isValidChat() {
-      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt', 'readStatus']) &&
              hasRequiredFields(['participants', 'updatedAt']) &&
              request.resource.data.participants is list &&
              request.resource.data.participants.size() == 2 &&
              isValidOptionalString('lastMessage', 0, 1000) &&
              (request.resource.data.lastMessageTime is timestamp || !('lastMessageTime' in request.resource.data)) &&
+             (request.resource.data.readStatus is map || !('readStatus' in request.resource.data)) &&
              request.resource.data.updatedAt is timestamp;
     }
 
@@ -351,7 +353,7 @@ service cloud.firestore {
                       isAdmin()
                     );
                     
-      allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid || isAdmin());
     }
 
     match /likes/{likeId} {
@@ -362,7 +364,7 @@ service cloud.firestore {
                     request.resource.data.userId == request.auth.uid &&
                     likeId == request.resource.data.postId + '_' + request.auth.uid;
                     
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /follows/{followId} {
@@ -373,7 +375,7 @@ service cloud.firestore {
                     request.resource.data.followerId == request.auth.uid &&
                     followId == request.auth.uid + '_' + request.resource.data.followingId;
                     
-      allow delete: if isAuthenticated() && resource.data.followerId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.followerId == request.auth.uid);
     }
 
     match /comments/{commentId} {
@@ -383,7 +385,7 @@ service cloud.firestore {
                     isValidComment() &&
                     request.resource.data.authorId == request.auth.uid;
                     
-      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid || isAdmin());
     }
 
     match /notifications/{notificationId} {
@@ -398,7 +400,12 @@ service cloud.firestore {
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) &&
                     request.resource.data.read == true;
                     
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+                      resource == null ||
+                      resource.data.userId == request.auth.uid ||
+                      resource.data.senderId == request.auth.uid ||
+                      isAdmin()
+                    );
     }
 
     match /savedPosts/{savedPostId} {
@@ -409,7 +416,7 @@ service cloud.firestore {
                     request.resource.data.userId == request.auth.uid &&
                     savedPostId == request.auth.uid + '_' + request.resource.data.postId;
                     
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
     }
 
     match /stories/{storyId} {
@@ -419,7 +426,7 @@ service cloud.firestore {
                     isValidStory() &&
                     request.resource.data.authorId == request.auth.uid;
                     
-      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid);
     }
 
     match /chats/{chatId} {
@@ -435,7 +442,7 @@ service cloud.firestore {
                     isValidChat() &&
                     request.resource.data.participants == resource.data.participants;
                     
-      allow delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow delete: if isAuthenticated() && (resource == null || request.auth.uid in resource.data.participants);
                     
       match /messages/{messageId} {
         allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
@@ -447,14 +454,14 @@ service cloud.firestore {
                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
                       !isEitherBlocked(get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0], get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]);
 
-        allow delete: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow delete: if isAuthenticated() && (resource == null || request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
       }
     }
 
     match /blocks/{blockId} {
       allow read: if isAuthenticated() && (resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
       allow create: if isAuthenticated() && isValidBlock() && request.resource.data.blockerId == request.auth.uid && blockId == request.auth.uid + '_' + request.resource.data.blockedId;
-      allow delete: if isAuthenticated() && resource.data.blockerId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.blockerId == request.auth.uid);
     }
   }
 }

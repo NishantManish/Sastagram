@@ -10,6 +10,7 @@ import { useBlocks } from '../services/blockService';
 import { motion, AnimatePresence } from 'motion/react';
 import { deleteDoc } from 'firebase/firestore';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
+import { deleteFromCloudinary } from '../utils/media';
 
 export default function Messages({ onBack, onNavigate }: { onBack?: () => void, onNavigate?: (tab: any) => void }) {
   const [chats, setChats] = useState<Chat[]>([]);
@@ -72,6 +73,7 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
     return () => unsubscribe();
   }, []);
 
+  // Handle messages subscription
   useEffect(() => {
     if (!selectedChat) return;
 
@@ -91,6 +93,24 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
 
     return () => unsubscribe();
   }, [selectedChat]);
+
+  // Handle marking chat as read
+  useEffect(() => {
+    if (!selectedChat || !auth.currentUser) return;
+
+    // Find the latest version of the selected chat from the chats array
+    const currentChat = chats.find(c => c.id === selectedChat.id);
+    
+    // Mark chat as read if it's currently selected and unread
+    if (currentChat && currentChat.readStatus?.[auth.currentUser.uid] === false) {
+      setDoc(doc(db, 'chats', currentChat.id), {
+        readStatus: {
+          ...currentChat.readStatus,
+          [auth.currentUser.uid]: true
+        }
+      }, { merge: true }).catch(console.error);
+    }
+  }, [selectedChat, chats]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,9 +143,14 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
         createdAt: serverTimestamp()
       });
 
+      const otherUserId = selectedChat.participants.find(id => id !== auth.currentUser?.uid);
       await setDoc(doc(db, 'chats', selectedChat.id), {
         lastMessage: messageText || 'Attachment',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        readStatus: {
+          [auth.currentUser.uid]: true,
+          ...(otherUserId ? { [otherUserId]: false } : {})
+        }
       }, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `chats/${selectedChat.id}`);
@@ -150,6 +175,17 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       // Delete all messages first
       const messagesRef = collection(db, `chats/${chatToDelete.id}/messages`);
       const messagesSnap = await getDocs(messagesRef);
+      
+      // Delete attachments from Cloudinary
+      const attachmentDeletionPromises = messagesSnap.docs.map(m => {
+        const data = m.data();
+        if (data.attachmentUrl) {
+          return deleteFromCloudinary(data.attachmentUrl);
+        }
+        return Promise.resolve(true);
+      });
+      await Promise.all(attachmentDeletionPromises);
+
       const deletePromises = messagesSnap.docs.map(m => deleteDoc(m.ref));
       await Promise.all(deletePromises);
       
@@ -340,6 +376,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           {filteredChats.map((chat) => {
             const otherUser = getOtherUser(chat);
             if (!otherUser) return null;
+            
+            const isUnread = auth.currentUser && chat.readStatus?.[auth.currentUser.uid] === false;
 
             return (
               <div 
@@ -350,9 +388,9 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                 onMouseDown={() => handleTouchStart(chat)}
                 onMouseUp={handleTouchEnd}
                 onMouseLeave={handleTouchEnd}
-                className="p-4 flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-colors relative active:bg-zinc-100"
+                className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-colors relative active:bg-zinc-100 ${isUnread ? 'bg-indigo-50/50' : ''}`}
               >
-                <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0">
+                <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0 relative">
                   {otherUser.photoURL ? (
                     <img 
                       src={getOptimizedImageUrl(otherUser.photoURL, 96, 96)} 
@@ -368,16 +406,21 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline">
-                    <h3 className="font-semibold text-zinc-900 truncate">{otherUser.displayName}</h3>
+                    <h3 className={`truncate ${isUnread ? 'font-bold text-zinc-900' : 'font-semibold text-zinc-900'}`}>{otherUser.displayName}</h3>
                     {chat.updatedAt && (
-                      <span className="text-xs text-zinc-400 shrink-0 ml-2">
+                      <span className={`text-xs shrink-0 ml-2 ${isUnread ? 'text-indigo-600 font-medium' : 'text-zinc-400'}`}>
                         {formatDistanceToNow(chat.updatedAt.toDate(), { addSuffix: false }).replace('about ', '')}
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-zinc-500 truncate mt-0.5">
-                    {chat.lastMessage || 'Started a chat'}
-                  </p>
+                  <div className="flex justify-between items-center mt-0.5">
+                    <p className={`text-sm truncate pr-4 ${isUnread ? 'font-medium text-zinc-900' : 'text-zinc-500'}`}>
+                      {chat.lastMessage || 'Started a chat'}
+                    </p>
+                    {isUnread && (
+                      <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full shrink-0" />
+                    )}
+                  </div>
                 </div>
               </div>
             );
