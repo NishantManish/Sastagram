@@ -1,0 +1,378 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, Timestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db, auth, storage } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { Story } from '../types';
+import { Plus, X, Trash2, Send } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { motion, AnimatePresence } from 'motion/react';
+
+export default function Stories() {
+  const [groupedStories, setGroupedStories] = useState<Record<string, Story[]>>({});
+  const [activeUserStories, setActiveUserStories] = useState<Story[] | null>(null);
+  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const q = query(
+      collection(db, 'stories'),
+      where('createdAt', '>=', yesterday),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedStories = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      })) as Story[];
+      
+      const now = new Date();
+      const validStories = fetchedStories.filter(story => {
+        if (story.expiresAt && story.expiresAt.toDate() < now) {
+          // Only the author should delete their own expired stories to avoid permission errors
+          if (auth.currentUser && story.authorId === auth.currentUser.uid) {
+            deleteDoc(doc(db, 'stories', story.id)).catch((err) => {
+              handleFirestoreError(err, OperationType.DELETE, `stories/${story.id}`);
+            });
+            if (story.imageUrl) {
+              const imageRef = ref(storage, story.imageUrl);
+              deleteObject(imageRef).catch(console.error);
+            }
+          }
+          return false;
+        }
+        return true;
+      });
+
+      const grouped = validStories.reduce((acc, story) => {
+        if (!acc[story.authorId]) acc[story.authorId] = [];
+        acc[story.authorId].push(story);
+        return acc;
+      }, {} as Record<string, Story[]>);
+      
+      Object.keys(grouped).forEach(key => {
+        grouped[key].sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
+      });
+
+      setGroupedStories(grouped);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreviewFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleUpload = async () => {
+    if (!previewFile || !auth.currentUser) return;
+
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `stories/${auth.currentUser.uid}/${Date.now()}_${previewFile.name}`);
+      const snapshot = await uploadBytes(storageRef, previewFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      const expiresAtDate = new Date();
+      expiresAtDate.setHours(expiresAtDate.getHours() + 24);
+
+      await addDoc(collection(db, 'stories'), {
+        authorId: auth.currentUser.uid,
+        authorName: auth.currentUser.displayName || 'Anonymous',
+        authorPhoto: auth.currentUser.photoURL || '',
+        imageUrl: downloadURL,
+        createdAt: serverTimestamp(),
+        expiresAt: Timestamp.fromDate(expiresAtDate)
+      });
+      
+      setPreviewFile(null);
+      setPreviewUrl(null);
+      setIsUploading(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'stories');
+      setIsUploading(false);
+    }
+  };
+
+  const holdTimer = useRef<number | null>(null);
+
+  const handleNextStory = () => {
+    if (!activeUserStories) return;
+    if (currentStoryIndex < activeUserStories.length - 1) {
+      setCurrentStoryIndex(prev => prev + 1);
+      setProgress(0);
+    } else {
+      setActiveUserStories(null);
+      setCurrentStoryIndex(0);
+      setProgress(0);
+    }
+  };
+
+  const handlePrevStory = () => {
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex(prev => prev - 1);
+      setProgress(0);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeUserStories || isPaused) return;
+
+    const STORY_DURATION = 5000; // 5 seconds
+    const intervalTime = 50; // Update every 50ms
+    const step = (intervalTime / STORY_DURATION) * 100;
+
+    const timer = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          handleNextStory();
+          return 0;
+        }
+        return prev + step;
+      });
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [activeUserStories, isPaused, currentStoryIndex]);
+
+  const handlePointerDown = () => {
+    holdTimer.current = Date.now();
+    setIsPaused(true);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    const duration = Date.now() - (holdTimer.current || 0);
+    setIsPaused(false);
+    
+    // If it was a quick tap (less than 200ms), handle navigation
+    if (duration < 200) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      
+      if (x > rect.width / 2) {
+        handleNextStory();
+      } else {
+        handlePrevStory();
+      }
+    }
+  };
+
+  const handleDeleteStory = async (storyId: string, imageUrl: string) => {
+    try {
+      await deleteDoc(doc(db, 'stories', storyId));
+      try {
+        const imageRef = ref(storage, imageUrl);
+        await deleteObject(imageRef);
+      } catch (storageError) {
+        console.error('Error deleting story image from storage:', storageError);
+      }
+      handleNextStory();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `stories/${storyId}`);
+    }
+  };
+
+  const activeStory = activeUserStories ? activeUserStories[currentStoryIndex] : null;
+
+  return (
+    <div className="bg-transparent border-b border-zinc-200/50 py-4 px-2 overflow-x-auto no-scrollbar">
+      <div className="flex gap-4 items-center">
+        {/* Add Story Button */}
+        <div className="flex flex-col items-center gap-1 shrink-0">
+          <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-zinc-200 to-zinc-300">
+            <div className="w-full h-full rounded-full bg-white p-[2px]">
+              <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden relative">
+                {auth.currentUser?.photoURL ? (
+                  <img src={auth.currentUser.photoURL} alt="You" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
+                    {auth.currentUser?.displayName?.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <label className="absolute inset-0 bg-black/20 flex items-center justify-center cursor-pointer hover:bg-black/30 transition-colors">
+                  <Plus className="w-6 h-6 text-white" />
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleFileSelect}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+          <span className="text-xs text-zinc-600 font-medium">Your Story</span>
+        </div>
+
+        {/* Stories List */}
+        {Object.values(groupedStories).map(userStories => {
+          const firstStory = userStories[0];
+          return (
+            <div 
+              key={firstStory.authorId} 
+              className="flex flex-col items-center gap-1 shrink-0 cursor-pointer"
+              onClick={() => {
+                setActiveUserStories(userStories);
+                setCurrentStoryIndex(0);
+              }}
+            >
+              <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600">
+                <div className="w-full h-full rounded-full bg-white p-[2px]">
+                  <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden">
+                    {firstStory.authorPhoto ? (
+                      <img src={firstStory.authorPhoto} alt={firstStory.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
+                        {firstStory.authorName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <span className="text-xs text-zinc-600 font-medium truncate w-16 text-center">
+                {firstStory.authorName}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Preview Modal */}
+      <AnimatePresence>
+        {previewUrl && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed inset-0 z-50 bg-black flex flex-col"
+          >
+            <div className="absolute top-4 left-0 right-0 p-4 flex items-center justify-between z-10">
+              <button 
+                onClick={() => {
+                  setPreviewFile(null);
+                  setPreviewUrl(null);
+                }}
+                className="p-2 text-white bg-black/50 rounded-full hover:bg-black/70 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center bg-zinc-900">
+              <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
+            </div>
+            <div className="p-4 bg-black flex justify-end">
+              <button
+                onClick={handleUpload}
+                disabled={isUploading}
+                className="py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-full flex items-center gap-2 disabled:opacity-70"
+              >
+                {isUploading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    Share Story <Send className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Story Viewer Modal */}
+      <AnimatePresence>
+        {activeStory && activeUserStories && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black flex flex-col"
+          >
+            {/* Progress Bars */}
+            <div className="absolute top-0 left-0 right-0 p-2 flex gap-1 z-20 pt-safe">
+              {activeUserStories.map((s, idx) => (
+                <div key={s.id} className="h-1 bg-white/30 rounded-full flex-1 overflow-hidden">
+                  {idx === currentStoryIndex ? (
+                    <div 
+                      className="h-full bg-white transition-all duration-75 ease-linear"
+                      style={{ width: `${progress}%` }}
+                    />
+                  ) : idx < currentStoryIndex ? (
+                    <div className="h-full w-full bg-white" />
+                  ) : (
+                    <div className="h-full w-0 bg-white" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Header */}
+            <div className="absolute top-4 left-0 right-0 p-4 pt-8 flex items-center justify-between z-10 bg-gradient-to-b from-black/50 to-transparent">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800">
+                  {activeStory.authorPhoto ? (
+                    <img src={activeStory.authorPhoto} alt={activeStory.authorName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-white font-medium">
+                      {activeStory.authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-white font-medium text-sm drop-shadow-md">{activeStory.authorName}</div>
+                  <div className="text-white/80 text-xs drop-shadow-md">
+                    {activeStory.createdAt ? formatDistanceToNow(activeStory.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {activeStory.authorId === auth.currentUser?.uid && (
+                  <button 
+                    onClick={() => handleDeleteStory(activeStory.id, activeStory.imageUrl)}
+                    className="p-2 text-white/80 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 className="w-6 h-6" />
+                  </button>
+                )}
+                <button 
+                  onClick={() => {
+                    setActiveUserStories(null);
+                    setCurrentStoryIndex(0);
+                  }}
+                  className="p-2 text-white/80 hover:text-white transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Image and Navigation */}
+            <div 
+              className="flex-1 flex items-center justify-center relative touch-none"
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+            >
+              <img 
+                src={activeStory.imageUrl} 
+                alt="Story" 
+                className="max-w-full max-h-full object-contain pointer-events-none"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

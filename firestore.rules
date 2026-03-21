@@ -1,0 +1,415 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId}
+// Fields:
+//   - uid: string (required, immutable) - Firebase Auth UID
+//   - displayName: string (required, max 50 chars) - User's display name
+//   - photoURL: string (optional, max 1000 chars) - Profile picture URL
+//   - bio: string (optional, max 150 chars) - User's biography
+//   - followersCount: number (required) - Number of followers
+//   - followingCount: number (required) - Number of users followed
+//   - createdAt: timestamp (required, immutable) - Creation time
+//
+// Collection: posts
+// Document ID: {postId}
+// Fields:
+//   - authorId: string (required, immutable) - Author's UID
+//   - authorName: string (required, max 50 chars) - Author's display name
+//   - authorPhoto: string (optional, max 1000 chars) - Author's profile picture URL
+//   - imageUrl: string (required, max 1000 chars) - Image URL
+//   - caption: string (optional, max 2200 chars) - Post caption
+//   - likesCount: number (required) - Number of likes
+//   - createdAt: timestamp (required, immutable) - Creation time
+//
+// Collection: likes
+// Document ID: {postId}_{userId}
+// Fields:
+//   - postId: string (required, immutable) - Liked post ID
+//   - userId: string (required, immutable) - Liking user ID
+//   - createdAt: timestamp (required, immutable) - Creation time
+//
+// Collection: follows
+// Document ID: {followerId}_{followingId}
+// Fields:
+//   - followerId: string (required, immutable) - Follower user ID
+//   - followingId: string (required, immutable) - Followed user ID
+//   - createdAt: timestamp (required, immutable) - Creation time
+//
+// Collection: chats
+// Document ID: {chatId}
+// Fields:
+//   - participants: list (required, size 2) - UIDs of participants
+//   - lastMessage: string (optional, max 1000 chars) - Last message text
+//   - lastMessageTime: timestamp (optional) - Last message time
+//   - updatedAt: timestamp (required) - Last update time
+//
+// Collection: messages (subcollection of chats)
+// Document ID: {messageId}
+// Fields:
+//   - chatId: string (required, immutable) - Chat ID
+//   - senderId: string (required, immutable) - Sender UID
+//   - text: string (required, max 1000 chars) - Message text
+//   - attachmentUrl: string (optional, max 1000 chars) - Media attachment URL
+//   - createdAt: timestamp (required, immutable) - Creation time
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+    
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isUnchanged(field) {
+      return request.resource.data.get(field, null) == resource.data.get(field, null);
+    }
+
+    function isValidOptionalNumber(field) {
+      return !(field in request.resource.data) || (request.resource.data[field] is number && request.resource.data[field] >= 0);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt']) &&
+             hasRequiredFields(['uid', 'displayName', 'createdAt']) &&
+             validStringLength('uid', 1, 128) &&
+             isValidOptionalString('username', 3, 30) &&
+             validStringLength('displayName', 1, 50) &&
+             isValidOptionalString('photoURL', 0, 2000) &&
+             isValidOptionalString('bio', 0, 150) &&
+             isValidOptionalNumber('followersCount') &&
+             isValidOptionalNumber('followingCount') &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidPost() {
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'caption', 'likesCount', 'commentsCount', 'createdAt']) &&
+             hasRequiredFields(['authorId', 'authorName', 'imageUrl', 'createdAt']) &&
+             validStringLength('authorId', 1, 128) &&
+             validStringLength('authorName', 1, 100) &&
+             isValidOptionalString('authorPhoto', 0, 2000) &&
+             validStringLength('imageUrl', 1, 2000) &&
+             isValidOptionalString('caption', 0, 2200) &&
+             isValidOptionalNumber('likesCount') &&
+             isValidOptionalNumber('commentsCount') &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidLike() {
+      return hasOnlyAllowedFields(['postId', 'userId', 'createdAt']) &&
+             hasRequiredFields(['postId', 'userId', 'createdAt']) &&
+             validStringLength('postId', 1, 128) &&
+             validStringLength('userId', 1, 128) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidFollow() {
+      return hasOnlyAllowedFields(['followerId', 'followingId', 'createdAt']) &&
+             hasRequiredFields(['followerId', 'followingId', 'createdAt']) &&
+             validStringLength('followerId', 1, 128) &&
+             validStringLength('followingId', 1, 128) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidComment() {
+      return hasOnlyAllowedFields(['postId', 'authorId', 'authorName', 'authorPhoto', 'text', 'createdAt']) &&
+             hasRequiredFields(['postId', 'authorId', 'authorName', 'text', 'createdAt']) &&
+             validStringLength('postId', 1, 128) &&
+             validStringLength('authorId', 1, 128) &&
+             validStringLength('authorName', 1, 100) &&
+             isValidOptionalString('authorPhoto', 0, 2000) &&
+             validStringLength('text', 1, 500) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidNotification() {
+      return hasOnlyAllowedFields(['userId', 'type', 'senderId', 'senderName', 'senderPhoto', 'postId', 'read', 'createdAt']) &&
+             hasRequiredFields(['userId', 'type', 'senderId', 'senderName', 'read', 'createdAt']) &&
+             validStringLength('userId', 1, 128) &&
+             validStringLength('type', 1, 20) &&
+             validStringLength('senderId', 1, 128) &&
+             validStringLength('senderName', 1, 100) &&
+             isValidOptionalString('senderPhoto', 0, 2000) &&
+             isValidOptionalString('postId', 0, 128) &&
+             request.resource.data.read is bool &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidSavedPost() {
+      return hasOnlyAllowedFields(['userId', 'postId', 'createdAt']) &&
+             hasRequiredFields(['userId', 'postId', 'createdAt']) &&
+             validStringLength('userId', 1, 128) &&
+             validStringLength('postId', 1, 128) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidStory() {
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'createdAt', 'expiresAt']) &&
+             hasRequiredFields(['authorId', 'authorName', 'imageUrl', 'createdAt', 'expiresAt']) &&
+             validStringLength('authorId', 1, 128) &&
+             validStringLength('authorName', 1, 100) &&
+             isValidOptionalString('authorPhoto', 0, 2000) &&
+             validStringLength('imageUrl', 1, 2000) &&
+             request.resource.data.createdAt is timestamp &&
+             request.resource.data.expiresAt is timestamp;
+    }
+
+    function isValidChat() {
+      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt']) &&
+             hasRequiredFields(['participants', 'updatedAt']) &&
+             request.resource.data.participants is list &&
+             request.resource.data.participants.size() == 2 &&
+             isValidOptionalString('lastMessage', 0, 1000) &&
+             (request.resource.data.lastMessageTime is timestamp || !('lastMessageTime' in request.resource.data)) &&
+             request.resource.data.updatedAt is timestamp;
+    }
+
+    function isValidMessage() {
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'createdAt']) &&
+             hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
+             validStringLength('chatId', 1, 128) &&
+             validStringLength('senderId', 1, 128) &&
+             request.resource.data.text is string &&
+             request.resource.data.text.size() <= 1000 &&
+             (request.resource.data.text.size() > 0 || ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0)) &&
+             isValidOptionalString('attachmentUrl', 0, 2000) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser() && uidUnchanged() && 
+                    request.resource.data.followersCount == 0 && request.resource.data.followingCount == 0;
+      allow update: if isAuthenticated() && isValidUser() && (
+                      // Owner updating profile
+                      (isOwner(userId) && uidNotModified() && 
+                       isUnchanged('createdAt') &&
+                       isUnchanged('followersCount') &&
+                       isUnchanged('followingCount'))
+                      ||
+                      // Anyone updating followersCount
+                      (uidNotModified() &&
+                       isUnchanged('displayName') &&
+                       isUnchanged('username') &&
+                       isUnchanged('photoURL') &&
+                       isUnchanged('bio') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('followingCount') &&
+                       math.abs(request.resource.data.get('followersCount', 0) - resource.data.get('followersCount', 0)) == 1 &&
+                       (
+                         (request.resource.data.get('followersCount', 0) > resource.data.get('followersCount', 0) &&
+                          !exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) &&
+                          getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) != null) ||
+                         (request.resource.data.get('followersCount', 0) < resource.data.get('followersCount', 0) &&
+                          exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) &&
+                          getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) == null)
+                       )
+                      )
+                      ||
+                      // Owner updating followingCount
+                      (isOwner(userId) && uidNotModified() &&
+                       isUnchanged('displayName') &&
+                       isUnchanged('username') &&
+                       isUnchanged('photoURL') &&
+                       isUnchanged('bio') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('followersCount') &&
+                       math.abs(request.resource.data.get('followingCount', 0) - resource.data.get('followingCount', 0)) == 1
+                      )
+                    );
+    }
+
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidPost() && 
+                    request.resource.data.authorId == request.auth.uid &&
+                    request.resource.data.likesCount == 0;
+                    
+      allow update: if isAuthenticated() && isValidPost() && (
+                      // Owner updating caption
+                      (request.resource.data.authorId == request.auth.uid &&
+                       isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('imageUrl') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('likesCount') &&
+                       isUnchanged('commentsCount'))
+                      ||
+                      // Anyone updating likesCount
+                      (isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('imageUrl') &&
+                       isUnchanged('caption') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('commentsCount') &&
+                       math.abs(request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0)) == 1 &&
+                       (
+                         (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
+                          !exists(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) != null) ||
+                         (request.resource.data.get('likesCount', 0) < resource.data.get('likesCount', 0) &&
+                          exists(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) == null)
+                       )
+                      )
+                      ||
+                      // Anyone updating commentsCount
+                      (isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('imageUrl') &&
+                       isUnchanged('caption') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('likesCount') &&
+                       math.abs(request.resource.data.get('commentsCount', 0) - resource.data.get('commentsCount', 0)) == 1
+                      )
+                    );
+                    
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+    }
+
+    match /likes/{likeId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidLike() &&
+                    request.resource.data.userId == request.auth.uid &&
+                    likeId == request.resource.data.postId + '_' + request.auth.uid;
+                    
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /follows/{followId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidFollow() &&
+                    request.resource.data.followerId == request.auth.uid &&
+                    followId == request.auth.uid + '_' + request.resource.data.followingId;
+                    
+      allow delete: if isAuthenticated() && resource.data.followerId == request.auth.uid;
+    }
+
+    match /comments/{commentId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidComment() &&
+                    request.resource.data.authorId == request.auth.uid;
+                    
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isAuthenticated() && 
+                    isValidNotification() &&
+                    request.resource.data.senderId == request.auth.uid;
+                    
+      allow update: if isAuthenticated() && 
+                    resource.data.userId == request.auth.uid &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) &&
+                    request.resource.data.read == true;
+                    
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /savedPosts/{savedPostId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isAuthenticated() && 
+                    isValidSavedPost() &&
+                    request.resource.data.userId == request.auth.uid &&
+                    savedPostId == request.auth.uid + '_' + request.resource.data.postId;
+                    
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /stories/{storyId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidStory() &&
+                    request.resource.data.authorId == request.auth.uid;
+                    
+      allow delete: if isAuthenticated() && resource.data.authorId == request.auth.uid;
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      
+      allow create: if isAuthenticated() && 
+                    isValidChat() &&
+                    request.auth.uid in request.resource.data.participants;
+                    
+      allow update: if isAuthenticated() && 
+                    request.auth.uid in resource.data.participants &&
+                    isValidChat() &&
+                    request.resource.data.participants == resource.data.participants;
+                    
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        
+        allow create: if isAuthenticated() && 
+                      isValidMessage() &&
+                      request.resource.data.senderId == request.auth.uid &&
+                      request.resource.data.chatId == chatId &&
+                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      }
+    }
+  }
+}

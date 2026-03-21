@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile in the app.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user ID from Firebase Auth." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "photoURL": { "type": "string", "description": "The user's profile picture URL." },
+        "bio": { "type": "string", "description": "The user's biography." },
+        "followersCount": { "type": "number", "description": "Number of followers." },
+        "followingCount": { "type": "number", "description": "Number of users followed." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user profile was created." }
+      },
+      "required": ["uid", "displayName", "followersCount", "followingCount", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "An image post created by a user.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "description": "The UID of the user who created the post." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "authorPhoto": { "type": "string", "description": "The profile picture URL of the author." },
+        "imageUrl": { "type": "string", "description": "The URL of the posted image." },
+        "caption": { "type": "string", "description": "The caption for the post." },
+        "likesCount": { "type": "number", "description": "The number of likes the post has received." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the post was created." }
+      },
+      "required": ["authorId", "authorName", "imageUrl", "likesCount", "createdAt"]
+    },
+    "Like": {
+      "title": "Like",
+      "description": "A record of a user liking a post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "description": "The ID of the liked post." },
+        "userId": { "type": "string", "description": "The ID of the user who liked the post." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the like was created." }
+      },
+      "required": ["postId", "userId", "createdAt"]
+    },
+    "Follow": {
+      "title": "Follow",
+      "description": "A record of a user following another user.",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string", "description": "The ID of the user who is following." },
+        "followingId": { "type": "string", "description": "The ID of the user being followed." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the follow was created." }
+      },
+      "required": ["followerId", "followingId", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "description": "The ID of the post being commented on." },
+        "authorId": { "type": "string", "description": "The ID of the user who wrote the comment." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "authorPhoto": { "type": "string", "description": "The profile picture URL of the author." },
+        "text": { "type": "string", "description": "The text content of the comment." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the comment was created." }
+      },
+      "required": ["postId", "authorId", "authorName", "text", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "A notification for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user receiving the notification." },
+        "type": { "type": "string", "description": "The type of notification (like, comment, follow, message)." },
+        "senderId": { "type": "string", "description": "The ID of the user who triggered the notification." },
+        "senderName": { "type": "string", "description": "The name of the user who triggered the notification." },
+        "senderPhoto": { "type": "string", "description": "The photo URL of the user who triggered the notification." },
+        "postId": { "type": "string", "description": "The ID of the related post, if any." },
+        "read": { "type": "boolean", "description": "Whether the notification has been read." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the notification was created." }
+      },
+      "required": ["userId", "type", "senderId", "senderName", "read", "createdAt"]
+    },
+    "SavedPost": {
+      "title": "SavedPost",
+      "description": "A record of a user saving a post.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who saved the post." },
+        "postId": { "type": "string", "description": "The ID of the saved post." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the post was saved." }
+      },
+      "required": ["userId", "postId", "createdAt"]
+    },
+    "Story": {
+      "title": "Story",
+      "description": "A temporary photo or video story.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "description": "The ID of the user who created the story." },
+        "authorName": { "type": "string", "description": "The name of the author." },
+        "authorPhoto": { "type": "string", "description": "The photo URL of the author." },
+        "imageUrl": { "type": "string", "description": "The URL of the story image." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the story was created." },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "When the story expires (24h after creation)." }
+      },
+      "required": ["authorId", "authorName", "imageUrl", "createdAt", "expiresAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A direct messaging chat between users.",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "The IDs of the users in the chat." },
+        "lastMessage": { "type": "string", "description": "The text of the last message sent." },
+        "lastMessageTime": { "type": "string", "format": "date-time", "description": "When the last message was sent." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the chat was last updated." }
+      },
+      "required": ["participants", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message within a chat.",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string", "description": "The ID of the chat this message belongs to." },
+        "senderId": { "type": "string", "description": "The ID of the user who sent the message." },
+        "text": { "type": "string", "description": "The text content of the message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
+      },
+      "required": ["chatId", "senderId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles."
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Stores image posts."
+    },
+    "/likes/{likeId}": {
+      "schema": { "$ref": "#/entities/Like" },
+      "description": "Stores like records to prevent duplicate likes."
+    },
+    "/follows/{followId}": {
+      "schema": { "$ref": "#/entities/Follow" },
+      "description": "Stores follow records."
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Stores comments on posts."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Stores user notifications."
+    },
+    "/savedPosts/{savedPostId}": {
+      "schema": { "$ref": "#/entities/SavedPost" },
+      "description": "Stores saved post records."
+    },
+    "/stories/{storyId}": {
+      "schema": { "$ref": "#/entities/Story" },
+      "description": "Stores temporary stories."
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/Chat" },
+      "description": "Stores direct messaging chats."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Stores messages within a chat."
+    }
+  }
+}
