@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, User } from '../types';
-import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2 } from 'lucide-react';
+import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2 } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import EditProfileModal from './EditProfileModal';
 import FollowListModal from './FollowListModal';
@@ -23,6 +23,7 @@ interface ProfileProps {
 
 export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
@@ -40,6 +41,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  const [activeGridTab, setActiveGridTab] = useState<'posts' | 'saved' | 'tagged'>('posts');
 
   const currentUser = auth.currentUser;
   const targetUserId = viewedUserId || userId || currentUser?.uid;
@@ -75,7 +77,6 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       setPosts(newPosts);
       setLoading(false);
     }, (error) => {
-      // If we get a permission error, it might be because we are blocked
       if (error.message.includes('permission')) {
         setPosts([]);
       }
@@ -83,11 +84,36 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       setLoading(false);
     });
 
+    // Fetch saved posts if own profile
+    let unsubscribeSaved = () => {};
+    if (isOwnProfile && currentUser) {
+      const savedQ = query(
+        collection(db, 'savedPosts'),
+        where('userId', '==', currentUser.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      unsubscribeSaved = onSnapshot(savedQ, async (snapshot) => {
+        const savedDocs = snapshot.docs;
+        const postPromises = savedDocs.map(async (saveDoc) => {
+          const postRef = doc(db, 'posts', saveDoc.data().postId);
+          const postSnap = await getDoc(postRef);
+          if (postSnap.exists()) {
+            return { id: postSnap.id, ...postSnap.data() } as Post;
+          }
+          return null;
+        });
+        const resolvedPosts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
+        setSavedPosts(resolvedPosts);
+      });
+    }
+
     return () => {
       unsubscribeUser();
       unsubscribePosts();
+      unsubscribeSaved();
     };
-  }, [targetUserId]);
+  }, [targetUserId, isOwnProfile, currentUser?.uid]);
 
   useEffect(() => {
     // Check follow status with real-time listeners
@@ -194,289 +220,375 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   }
 
   return (
-    <div className="max-w-md mx-auto pb-20 bg-white min-h-screen">
+    <div className="max-w-md mx-auto pb-24 bg-white min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-200">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-2xl border-b border-zinc-100/50 px-6 h-20 flex items-center justify-between">
+        <div className="flex items-center gap-4">
           {(viewedUserId || onBack) && (
             <button 
               onClick={() => viewedUserId ? setViewedUserId(null) : onBack?.()}
-              className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors"
+              className="p-2 -ml-2 text-zinc-900 hover:bg-zinc-50 rounded-full transition-all active:scale-90"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-6 h-6" />
             </button>
           )}
-          <h1 className="text-xl font-semibold text-zinc-900">{userProfile.displayName}</h1>
-        </div>
-        <div className="flex items-center gap-1">
-          {!isOwnProfile && (
-            <div className="relative">
-              <button 
-                onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-                className="p-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors"
-              >
-                <MoreVertical className="w-5 h-5" />
-              </button>
-              
-              <AnimatePresence>
-                {showOptionsMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-20" 
-                      onClick={() => setShowOptionsMenu(false)} 
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                      className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-zinc-200 z-30 overflow-hidden"
-                    >
-                      <button
-                        onClick={async () => {
-                          setShowOptionsMenu(false);
-                          if (isBlockedByMe) {
-                            await unblockUser(targetUserId);
-                          } else {
-                            setShowBlockConfirm(true);
-                          }
-                        }}
-                        className={`w-full px-4 py-3 text-left text-sm font-medium flex items-center gap-2 hover:bg-zinc-50 transition-colors ${
-                          isBlockedByMe ? 'text-indigo-600' : 'text-red-600'
-                        }`}
-                      >
-                        {isBlockedByMe ? (
-                          <>
-                            <ShieldCheck className="w-4 h-4" />
-                            Unblock User
-                          </>
-                        ) : (
-                          <>
-                            <ShieldAlert className="w-4 h-4" />
-                            Block User
-                          </>
-                        )}
-                      </button>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
+          <div className="flex flex-col">
+            <h1 className="text-lg font-black text-zinc-900 tracking-tight leading-none">
+              {userProfile.username || userProfile.displayName}
+            </h1>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black">
+                {isOwnProfile ? 'Your Space' : 'Creator'}
+              </span>
             </div>
-          )}
-          {isOwnProfile && (
-            <div className="relative">
-              <button 
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="p-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-              
-              <AnimatePresence>
-                {showProfileMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-20" 
-                      onClick={() => setShowProfileMenu(false)} 
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                      className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-zinc-200 z-30 overflow-hidden"
-                    >
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          handleSignOut();
-                        }}
-                        className="w-full px-4 py-3 text-left text-sm font-medium flex items-center gap-2 hover:bg-zinc-50 transition-colors text-red-600"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </button>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Profile Info */}
-      <div className="p-4 flex items-center gap-6">
-        <UserAvatar 
-          userId={targetUserId} 
-          size={80} 
-          className="border border-zinc-200"
-          fallbackPhoto={userProfile.photoURL} 
-          fallbackName={userProfile.displayName} 
-        />
-        <div className="flex-1 flex justify-around text-center">
-          <div>
-            <div className="font-semibold text-lg text-zinc-900">{posts.length}</div>
-            <div className="text-sm text-zinc-500">Posts</div>
-          </div>
-          <div 
-            className={`cursor-pointer hover:opacity-80 transition-opacity ${isBlockedByMe ? 'pointer-events-none opacity-50' : ''}`} 
-            onClick={() => !isBlockedByMe && setFollowModalType('followers')}
-          >
-            <div className="font-semibold text-lg text-zinc-900">{isBlockedByMe ? '-' : (userProfile.followersCount || 0)}</div>
-            <div className="text-sm text-zinc-500">Followers</div>
-          </div>
-          <div 
-            className={`cursor-pointer hover:opacity-80 transition-opacity ${isBlockedByMe ? 'pointer-events-none opacity-50' : ''}`} 
-            onClick={() => !isBlockedByMe && setFollowModalType('following')}
-          >
-            <div className="font-semibold text-lg text-zinc-900">{isBlockedByMe ? '-' : (userProfile.followingCount || 0)}</div>
-            <div className="text-sm text-zinc-500">Following</div>
           </div>
         </div>
-      </div>
-
-      <div className="px-4 pb-4">
-        <div className="font-semibold text-sm text-zinc-900">{userProfile.displayName}</div>
-        {userProfile.username && <div className="text-sm text-zinc-500 mt-0.5">@{userProfile.username}</div>}
-        {userProfile.bio && <div className="text-sm text-zinc-600 mt-1 whitespace-pre-wrap">{userProfile.bio}</div>}
         
-        <div className="mt-4 flex gap-2">
+        <div className="flex items-center gap-2">
           {isOwnProfile ? (
             <button 
-              onClick={() => setIsEditingProfile(true)}
-              className="w-full py-1.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="p-2.5 text-zinc-900 hover:bg-zinc-50 rounded-2xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
             >
-              <Edit2 className="w-4 h-4" />
-              Edit Profile
+              <Settings className="w-5 h-5" />
             </button>
           ) : (
-            <>
-              {isFollowing === false && !isBlockedByMe && (
-                <button 
-                  onClick={handleFollowToggle}
-                  disabled={isFollowLoading}
-                  className="flex-1 py-1.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-70"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  {isFollowedBy ? 'Follow Back' : 'Follow'}
-                </button>
-              )}
-              {isFollowing === true && !isBlockedByMe && (
-                <button 
-                  onClick={handleFollowToggle}
-                  disabled={isFollowLoading}
-                  className="flex-1 py-1.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-70"
-                >
-                  <UserMinus className="w-4 h-4" />
-                  Following
-                </button>
-              )}
-              {!isBlockedByMe && (
-                <button 
-                  onClick={async () => {
-                  if (!currentUser || !targetUserId || isMessagingLoading) return;
-                  setIsMessagingLoading(true);
-                  try {
-                    // Check if chat exists
-                    const chatsRef = collection(db, 'chats');
-                    const q = query(chatsRef, where('participants', 'array-contains', currentUser.uid));
-                    const snapshot = await getDocs(q);
-                    
-                    let existingChatId = null;
-                    snapshot.forEach(doc => {
-                      const data = doc.data();
-                      if (data.participants.includes(targetUserId)) {
-                        existingChatId = doc.id;
-                      }
-                    });
-
-                    if (!existingChatId) {
-                      // Create new chat
-                      await addDoc(collection(db, 'chats'), {
-                        participants: [currentUser.uid, targetUserId],
-                        updatedAt: serverTimestamp()
-                      });
-                    }
-                    
-                    if (onNavigate) {
-                      onNavigate('messages');
-                    } else {
-                      alert('Chat created! Go to the Messages tab to start chatting.');
-                    }
-                  } catch (err) {
-                    handleFirestoreError(err, OperationType.CREATE, 'chats');
-                  } finally {
-                    setIsMessagingLoading(false);
-                  }
-                }}
-                disabled={isMessagingLoading}
-                className="flex-1 py-1.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-              >
-                {isMessagingLoading ? 'Loading...' : 'Message'}
-              </button>
-              )}
-            </>
+            <button 
+              onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+              className="p-2.5 text-zinc-900 hover:bg-zinc-50 rounded-2xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
           )}
         </div>
+
+        {/* Dropdowns */}
+        <AnimatePresence>
+          {showOptionsMenu && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setShowOptionsMenu(false)} />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="absolute right-6 top-20 w-56 bg-white rounded-3xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-2"
+              >
+                <button
+                  onClick={async () => {
+                    setShowOptionsMenu(false);
+                    if (isBlockedByMe) {
+                      await unblockUser(targetUserId);
+                    } else {
+                      setShowBlockConfirm(true);
+                    }
+                  }}
+                  className={`w-full px-4 py-3 text-left text-sm font-bold flex items-center gap-3 rounded-2xl transition-colors ${
+                    isBlockedByMe ? 'text-indigo-600 hover:bg-indigo-50' : 'text-red-500 hover:bg-red-50'
+                  }`}
+                >
+                  {isBlockedByMe ? (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      Unblock User
+                    </>
+                  ) : (
+                    <>
+                      <ShieldAlert className="w-4 h-4" />
+                      Block User
+                    </>
+                  )}
+                </button>
+                <button className="w-full px-4 py-3 text-left text-sm font-bold flex items-center gap-3 rounded-2xl hover:bg-zinc-50 text-zinc-900">
+                  <Share2 className="w-4 h-4" />
+                  Share Profile
+                </button>
+              </motion.div>
+            </>
+          )}
+          {showProfileMenu && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setShowProfileMenu(false)} />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="absolute right-6 top-20 w-56 bg-white rounded-3xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-2"
+              >
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    handleSignOut();
+                  }}
+                  className="w-full px-4 py-4 text-left text-sm font-bold flex items-center gap-3 rounded-2xl hover:bg-red-50 transition-colors text-red-500"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </header>
+
+      {/* Profile Content */}
+      <div className="px-8 pt-10 pb-6">
+        <div className="flex flex-col items-center text-center mb-10">
+          <div className="relative mb-6">
+            <div className="absolute -inset-2 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-[2.5rem] blur-xl opacity-20 animate-pulse"></div>
+            <div className="relative p-1 bg-white rounded-[2.5rem] shadow-xl">
+              <UserAvatar 
+                userId={targetUserId} 
+                size={120} 
+                className="rounded-[2.2rem] border-4 border-white object-cover"
+                fallbackPhoto={userProfile.photoURL} 
+                fallbackName={userProfile.displayName} 
+              />
+            </div>
+          </div>
+          
+          <h2 className="text-3xl font-black text-zinc-900 tracking-tight mb-1">
+            {userProfile.displayName}
+          </h2>
+          {userProfile.username && (
+            <p className="text-indigo-600 font-black text-sm tracking-wide mb-4">
+              @{userProfile.username.toUpperCase()}
+            </p>
+          )}
+          
+          {userProfile.bio && (
+            <p className="text-zinc-500 text-sm leading-relaxed font-medium max-w-[280px] mb-8">
+              {userProfile.bio}
+            </p>
+          )}
+
+          <div className="flex items-center gap-12 mb-8">
+            <div className="flex flex-col items-center">
+              <span className="text-xl font-black text-zinc-900 leading-none">{posts.length}</span>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black mt-2">Posts</span>
+            </div>
+            <button 
+              onClick={() => !isBlockedByMe && setFollowModalType('followers')}
+              className={`flex flex-col items-center transition-all active:scale-95 ${isBlockedByMe ? 'opacity-30' : ''}`}
+            >
+              <span className="text-xl font-black text-zinc-900 leading-none">{isBlockedByMe ? '-' : (userProfile.followersCount || 0)}</span>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black mt-2">Followers</span>
+            </button>
+            <button 
+              onClick={() => !isBlockedByMe && setFollowModalType('following')}
+              className={`flex flex-col items-center transition-all active:scale-95 ${isBlockedByMe ? 'opacity-30' : ''}`}
+            >
+              <span className="text-xl font-black text-zinc-900 leading-none">{isBlockedByMe ? '-' : (userProfile.followingCount || 0)}</span>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black mt-2">Following</span>
+            </button>
+          </div>
+
+          <div className="flex gap-3 w-full">
+            {isOwnProfile ? (
+              <button 
+                onClick={() => setIsEditingProfile(true)}
+                className="flex-1 h-14 bg-zinc-900 hover:bg-zinc-800 text-white font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm shadow-2xl shadow-zinc-200"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit Profile
+              </button>
+            ) : (
+              <>
+                {isFollowing === false && !isBlockedByMe && (
+                  <button 
+                    onClick={handleFollowToggle}
+                    disabled={isFollowLoading}
+                    className="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm shadow-2xl shadow-indigo-100 disabled:opacity-70"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    {isFollowedBy ? 'Follow Back' : 'Follow'}
+                  </button>
+                )}
+                {isFollowing === true && !isBlockedByMe && (
+                  <button 
+                    onClick={handleFollowToggle}
+                    disabled={isFollowLoading}
+                    className="flex-1 h-14 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm disabled:opacity-70"
+                  >
+                    <UserMinus className="w-4 h-4" />
+                    Following
+                  </button>
+                )}
+                {!isBlockedByMe && (
+                  <button 
+                    onClick={async () => {
+                      if (!currentUser || !targetUserId || isMessagingLoading) return;
+                      setIsMessagingLoading(true);
+                      try {
+                        const chatsRef = collection(db, 'chats');
+                        const q = query(chatsRef, where('participants', 'array-contains', currentUser.uid));
+                        const snapshot = await getDocs(q);
+                        
+                        let existingChatId = null;
+                        snapshot.forEach(doc => {
+                          const data = doc.data();
+                          if (data.participants.includes(targetUserId)) {
+                            existingChatId = doc.id;
+                          }
+                        });
+
+                        if (!existingChatId) {
+                          await addDoc(collection(db, 'chats'), {
+                            participants: [currentUser.uid, targetUserId],
+                            updatedAt: serverTimestamp()
+                          });
+                        }
+                        
+                        if (onNavigate) {
+                          onNavigate('messages');
+                        }
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.CREATE, 'chats');
+                      } finally {
+                        setIsMessagingLoading(false);
+                      }
+                    }}
+                    disabled={isMessagingLoading}
+                    className="flex-1 h-14 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm disabled:opacity-50"
+                  >
+                    {isMessagingLoading ? 'Loading...' : 'Message'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Highlights Section */}
+        {!isBlockedByMe && (
+          <div className="mb-10 overflow-x-auto no-scrollbar flex gap-6 px-2">
+            {[
+              { label: 'Travel', color: 'from-orange-400 to-pink-500' },
+              { label: 'Food', color: 'from-green-400 to-emerald-500' },
+              { label: 'Life', color: 'from-blue-400 to-indigo-500' },
+              { label: 'Art', color: 'from-purple-400 to-violet-500' },
+            ].map((highlight, i) => (
+              <div key={i} className="flex flex-col items-center gap-3 flex-shrink-0 group cursor-pointer">
+                <div className={`w-16 h-16 rounded-[1.8rem] bg-gradient-to-tr ${highlight.color} p-0.5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                  <div className="w-full h-full rounded-[1.7rem] bg-white p-1">
+                    <div className={`w-full h-full rounded-[1.5rem] bg-gradient-to-tr ${highlight.color} opacity-80 flex items-center justify-center text-white`}>
+                      <Camera className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{highlight.label}</span>
+              </div>
+            ))}
+            {isOwnProfile && (
+              <div className="flex flex-col items-center gap-3 flex-shrink-0 group cursor-pointer">
+                <div className="w-16 h-16 rounded-[1.8rem] border-2 border-dashed border-zinc-200 flex items-center justify-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50">
+                  <span className="text-2xl text-zinc-300 group-hover:text-indigo-400">+</span>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">New</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-t border-zinc-200">
-        <button className="flex-1 py-3 flex justify-center items-center border-t-2 border-zinc-900 text-zinc-900">
-          <Grid3X3 className="w-6 h-6" />
+      {/* Grid Tabs */}
+      <div className="flex border-t border-zinc-100 sticky top-20 bg-white/90 backdrop-blur-xl z-20">
+        <button 
+          onClick={() => setActiveGridTab('posts')}
+          className={`flex-1 py-5 flex flex-col items-center gap-2 transition-all ${activeGridTab === 'posts' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+        >
+          <Grid3X3 className="w-5 h-5" />
+          <span className={`text-[8px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'posts' ? 'opacity-100' : 'opacity-0'}`}>Feed</span>
+          {activeGridTab === 'posts' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-12 h-1 bg-zinc-900 rounded-full" />}
+        </button>
+        
+        {isOwnProfile && (
+          <button 
+            onClick={() => setActiveGridTab('saved')}
+            className={`flex-1 py-5 flex flex-col items-center gap-2 transition-all ${activeGridTab === 'saved' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+          >
+            <Bookmark className="w-5 h-5" />
+            <span className={`text-[8px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'saved' ? 'opacity-100' : 'opacity-0'}`}>Saved</span>
+            {activeGridTab === 'saved' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-12 h-1 bg-zinc-900 rounded-full" />}
+          </button>
+        )}
+
+        <button 
+          onClick={() => setActiveGridTab('tagged')}
+          className={`flex-1 py-5 flex flex-col items-center gap-2 transition-all ${activeGridTab === 'tagged' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+        >
+          <Camera className="w-5 h-5" />
+          <span className={`text-[8px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'tagged' ? 'opacity-100' : 'opacity-0'}`}>Tagged</span>
+          {activeGridTab === 'tagged' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-12 h-1 bg-zinc-900 rounded-full" />}
         </button>
       </div>
 
-      {/* Grid */}
-      {isBlockedByMe ? (
-        <div className="flex flex-col items-center justify-center h-64 text-zinc-500 px-8 text-center">
-          <ShieldAlert className="w-12 h-12 mb-4 text-zinc-300" />
-          <p className="text-lg font-medium text-zinc-900">You have blocked this user</p>
-          <p className="text-sm">Unblock them to see their posts.</p>
-        </div>
-      ) : loading ? (
-        <div className="flex justify-center items-center h-40">
-          <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-        </div>
-      ) : posts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
-          <Camera className="w-12 h-12 mb-4 text-zinc-300" />
-          <p className="text-lg font-medium text-zinc-900">No posts yet</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-1">
-          {posts.map((post) => (
-            <div 
-              key={post.id} 
-              className="aspect-square bg-zinc-100 relative group cursor-pointer"
-            >
-              <img 
-                src={getOptimizedImageUrl(post.imageUrl, 400, 400)} 
-                alt="Post" 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-                onClick={() => setSelectedPost(post)}
-              />
-              <div 
-                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-medium"
-                onClick={() => setSelectedPost(post)}
-              >
-                ❤️ {post.likesCount}
-              </div>
-              {isOwnProfile && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPostToDelete(post);
-                  }}
-                  className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
+      {/* Grid Content */}
+      <div className="px-1 pt-1">
+        {isBlockedByMe ? (
+          <div className="flex flex-col items-center justify-center py-24 text-zinc-500 px-10 text-center">
+            <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
+              <ShieldAlert className="w-10 h-10 text-zinc-300" />
             </div>
-          ))}
-        </div>
-      )}
+            <p className="text-xl font-black text-zinc-900 mb-2">Account Restricted</p>
+            <p className="text-sm text-zinc-400 font-medium leading-relaxed">Unblock this creator to view their editorial feed and interactions.</p>
+          </div>
+        ) : loading ? (
+          <div className="flex justify-center items-center py-24">
+            <div className="w-8 h-8 border-4 border-zinc-100 border-t-zinc-900 rounded-full animate-spin" />
+          </div>
+        ) : (activeGridTab === 'posts' ? posts : activeGridTab === 'saved' ? savedPosts : []).length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
+            <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
+              {activeGridTab === 'posts' ? <Camera className="w-10 h-10 text-zinc-300" /> : <Bookmark className="w-10 h-10 text-zinc-300" />}
+            </div>
+            <p className="text-xl font-black text-zinc-900 mb-2">
+              {activeGridTab === 'posts' ? 'No Posts Yet' : activeGridTab === 'saved' ? 'No Saved Posts' : 'No Tags Yet'}
+            </p>
+            <p className="text-sm text-zinc-400 font-medium">Capture and share your first moment.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-1">
+            {(activeGridTab === 'posts' ? posts : activeGridTab === 'saved' ? savedPosts : []).map((post, index) => (
+              <motion.div 
+                key={post.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.03 }}
+                className="aspect-square bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl"
+              >
+                <img 
+                  src={getOptimizedImageUrl(post.imageUrl, 400, 400)} 
+                  alt="Post" 
+                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                  referrerPolicy="no-referrer"
+                  onClick={() => setSelectedPost(post)}
+                />
+                <div 
+                  className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center text-white backdrop-blur-[2px]"
+                  onClick={() => setSelectedPost(post)}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <Heart className="w-6 h-6 fill-white" />
+                    <span className="font-black text-xs">{post.likesCount}</span>
+                  </div>
+                </div>
+                {isOwnProfile && activeGridTab === 'posts' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPostToDelete(post);
+                    }}
+                    className="absolute top-3 right-3 p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-2xl shadow-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white active:scale-90"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Modals */}
       <AnimatePresence>
