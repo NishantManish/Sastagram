@@ -11,6 +11,7 @@ import { deleteFromCloudinary } from '../utils/media';
 import { motion, AnimatePresence } from 'motion/react';
 import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
+import ShareModal from './ShareModal';
 
 interface PostCardProps {
   key?: string | number;
@@ -30,6 +31,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [lastTap, setLastTap] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   useEffect(() => {
     const checkInteractions = async () => {
@@ -185,28 +187,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     }
   };
 
-  const handleShare = async () => {
-    const url = `${window.location.origin}/post/${post.id}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Post by ${post.authorName}`,
-          text: post.caption,
-          url: url,
-        });
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
-          console.error('Error sharing:', err);
-        }
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(url);
-        alert('Link copied to clipboard!');
-      } catch (err) {
-        console.error('Error copying to clipboard:', err);
-      }
-    }
+  const handleShare = () => {
+    setShowShareModal(true);
   };
 
   const formattedDate = post.createdAt?.toDate 
@@ -258,6 +240,12 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         confirmText="Delete"
       />
 
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        post={post}
+      />
+
       {/* Image */}
       <div 
         className="w-full aspect-square bg-zinc-100 relative cursor-pointer overflow-hidden"
@@ -279,17 +267,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               exit={{ scale: 1.5, opacity: 0 }}
               className="absolute inset-0 flex items-center justify-center pointer-events-none"
             >
-              <svg width="0" height="0" className="absolute">
-                <defs>
-                  <linearGradient id="heartGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop stopColor="#fca5a5" offset="0%" /> {/* red-300 */}
-                    <stop stopColor="#ef4444" offset="100%" /> {/* red-500 */}
-                  </linearGradient>
-                </defs>
-              </svg>
               <Heart 
-                className="w-24 h-24 drop-shadow-2xl" 
-                style={{ fill: 'url(#heartGradient)', color: 'url(#heartGradient)' }} 
+                className="w-24 h-24 drop-shadow-2xl fill-red-500 text-red-500" 
               />
             </motion.div>
           )}

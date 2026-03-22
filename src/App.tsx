@@ -38,31 +38,37 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+    <div className="min-h-screen bg-zinc-50">
       {/* Header */}
       {activeTab === 'feed' ? (
-        <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 h-14 flex items-center justify-between max-w-md mx-auto">
-          <h1 className="text-xl font-semibold text-zinc-900 font-serif italic">InstaClone</h1>
-          <button 
-            onClick={() => setActiveTab('messages')}
-            className="p-2 text-zinc-900 hover:bg-zinc-100 rounded-full transition-colors"
-          >
-            <MessageSquare className="w-6 h-6" />
-          </button>
+        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-6 h-16 flex items-center justify-between max-w-md mx-auto">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent tracking-tight">
+            Sastagram
+          </h1>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setActiveTab('messages')}
+              className="relative p-2.5 text-zinc-700 hover:bg-zinc-100/80 rounded-2xl transition-all active:scale-95"
+            >
+              <MessageSquare className="w-6 h-6" />
+              <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-indigo-500 border-2 border-white rounded-full" />
+            </button>
+          </div>
         </header>
       ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications') ? (
-        <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 h-14 flex items-center max-w-md mx-auto">
+        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-4 h-16 flex items-center max-w-md mx-auto">
           <button 
             onClick={() => setActiveTab('feed')}
-            className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors"
+            className="p-2.5 -ml-2 text-zinc-500 hover:bg-zinc-100/80 rounded-2xl transition-all active:scale-95"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
+          <h2 className="ml-2 font-bold text-zinc-900 capitalize">{activeTab}</h2>
         </header>
       ) : null}
 
       {/* Main Content */}
-      <main className="min-h-[calc(100vh-3.5rem)]">
+      <main className="max-w-md mx-auto min-h-[calc(100vh-4rem)]">
         {activeTab === 'feed' && <Feed onNavigate={setActiveTab} />}
         {activeTab === 'search' && <Search onNavigate={setActiveTab} />}
         {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}

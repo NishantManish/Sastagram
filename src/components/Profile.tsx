@@ -26,6 +26,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowedBy, setIsFollowedBy] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [isMessagingLoading, setIsMessagingLoading] = useState(false);
   
@@ -94,6 +95,11 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       const followRef = doc(db, 'follows', followId);
       const followSnap = await getDoc(followRef);
       setIsFollowing(followSnap.exists());
+
+      const followedById = `${targetUserId}_${currentUser.uid}`;
+      const followedByRef = doc(db, 'follows', followedById);
+      const followedBySnap = await getDoc(followedByRef);
+      setIsFollowedBy(followedBySnap.exists());
     };
     checkFollow();
   }, [currentUser, targetUserId, isOwnProfile]);
@@ -357,7 +363,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                   ) : (
                     <>
                       <UserPlus className="w-4 h-4" />
-                      Follow
+                      {isFollowedBy ? 'Follow Back' : 'Follow'}
                     </>
                   )}
                 </button>

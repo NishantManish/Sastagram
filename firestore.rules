@@ -197,24 +197,27 @@ service cloud.firestore {
     }
 
     function isValidStory() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'createdAt', 'expiresAt']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'createdAt', 'expiresAt', 'viewsCount', 'viewers']) &&
              hasRequiredFields(['authorId', 'authorName', 'imageUrl', 'createdAt', 'expiresAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
              validStringLength('imageUrl', 1, 2000) &&
              request.resource.data.createdAt is timestamp &&
-             request.resource.data.expiresAt is timestamp;
+             request.resource.data.expiresAt is timestamp &&
+             isValidOptionalNumber('viewsCount') &&
+             (!('viewers' in request.resource.data) || request.resource.data.viewers is list);
     }
 
     function isValidChat() {
-      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt', 'readStatus']) &&
+      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt', 'readStatus', 'typingStatus']) &&
              hasRequiredFields(['participants', 'updatedAt']) &&
              request.resource.data.participants is list &&
              request.resource.data.participants.size() == 2 &&
              isValidOptionalString('lastMessage', 0, 1000) &&
              (request.resource.data.lastMessageTime is timestamp || !('lastMessageTime' in request.resource.data)) &&
              (request.resource.data.readStatus is map || !('readStatus' in request.resource.data)) &&
+             (request.resource.data.typingStatus is map || !('typingStatus' in request.resource.data)) &&
              request.resource.data.updatedAt is timestamp;
     }
 
@@ -425,6 +428,22 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                     isValidStory() &&
                     request.resource.data.authorId == request.auth.uid;
+                    
+      allow update: if isAuthenticated() && isValidStory() && (
+                      (isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('imageUrl') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('expiresAt') &&
+                       request.resource.data.viewsCount == resource.data.get('viewsCount', 0) + 1 &&
+                       request.resource.data.viewers.hasAll(resource.data.get('viewers', [])) &&
+                       request.resource.data.viewers.hasAll([request.auth.uid]) &&
+                       request.resource.data.viewers.size() == resource.data.get('viewers', []).size() + 1
+                      )
+                      ||
+                      isAdmin()
+                    );
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid);
     }

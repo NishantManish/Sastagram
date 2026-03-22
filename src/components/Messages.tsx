@@ -112,6 +112,50 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
     }
   }, [selectedChat, chats]);
 
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (selectedChat && auth.currentUser) {
+        setDoc(doc(db, 'chats', selectedChat.id), {
+          typingStatus: {
+            [auth.currentUser.uid]: false
+          }
+        }, { merge: true }).catch(console.error);
+      }
+    };
+  }, [selectedChat]);
+
+  const handleTyping = () => {
+    if (!selectedChat || !auth.currentUser) return;
+
+    // Set typing to true
+    setDoc(doc(db, 'chats', selectedChat.id), {
+      typingStatus: {
+        [auth.currentUser.uid]: true
+      }
+    }, { merge: true }).catch(console.error);
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set timeout to set typing to false after 2 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      if (auth.currentUser && selectedChat) {
+        setDoc(doc(db, 'chats', selectedChat.id), {
+          typingStatus: {
+            [auth.currentUser.uid]: false
+          }
+        }, { merge: true }).catch(console.error);
+      }
+    }, 2000);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!newMessage.trim() && !attachment) || !selectedChat || !auth.currentUser) return;
@@ -150,8 +194,15 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
         readStatus: {
           [auth.currentUser.uid]: true,
           ...(otherUserId ? { [otherUserId]: false } : {})
+        },
+        typingStatus: {
+          [auth.currentUser.uid]: false
         }
       }, { merge: true });
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `chats/${selectedChat.id}`);
     }
@@ -220,19 +271,20 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
   }
 
   if (selectedChat) {
-    const otherUser = getOtherUser(selectedChat);
+    const currentChat = chats.find(c => c.id === selectedChat.id) || selectedChat;
+    const otherUser = getOtherUser(currentChat);
     const isBlocked = otherUser ? (blockedIds.includes(otherUser.uid) || blockedByIds.includes(otherUser.uid)) : false;
     
     return (
       <div className="max-w-md mx-auto bg-white min-h-screen flex flex-col">
-        <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 py-3 flex items-center gap-3">
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
           <button onClick={() => setSelectedChat(null)} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3">
             <button 
               onClick={() => otherUser && setSelectedUserId(otherUser.uid)}
-              className="w-8 h-8 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
+              className="w-9 h-9 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity border border-zinc-200"
             >
               {otherUser?.photoURL ? (
                 <img 
@@ -256,44 +308,89 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 bg-zinc-50/50">
           {messages.map((msg, index) => {
             const isMine = msg.senderId === auth.currentUser?.uid;
+            const isLastMessage = index === messages.length - 1;
+            const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
+            const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
+
             const showTime = index === 0 || 
               (msg.createdAt && messages[index - 1]?.createdAt && 
                msg.createdAt.toMillis() - messages[index - 1].createdAt.toMillis() > 5 * 60 * 1000);
 
             return (
-              <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+              <motion.div 
+                key={msg.id} 
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+              >
                 {showTime && msg.createdAt && (
-                  <span className="text-[10px] text-zinc-400 mb-2 px-2">
+                  <span className="text-[10px] font-medium text-zinc-400 mb-2 px-2 uppercase tracking-wider">
                     {formatDistanceToNow(msg.createdAt.toDate(), { addSuffix: true })}
                   </span>
                 )}
                 <div 
-                  className={`max-w-[75%] px-4 py-2 rounded-2xl ${
+                  className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm ${
                     isMine 
-                      ? 'bg-indigo-600 text-white rounded-br-sm' 
-                      : 'bg-zinc-100 text-zinc-900 rounded-bl-sm'
+                      ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
+                      : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
                   }`}
                 >
                   {msg.attachmentUrl && (
                     <img 
                       src={getOptimizedImageUrl(msg.attachmentUrl, 600)} 
                       alt="Attachment" 
-                      className="rounded-lg mb-2 max-w-full" 
+                      className="rounded-xl mb-2 max-w-full border border-black/5" 
                       referrerPolicy="no-referrer" 
                     />
                   )}
-                  {msg.text && <p className="text-sm">{msg.text}</p>}
+                  {msg.text && <p className="text-[15px] leading-relaxed">{msg.text}</p>}
                 </div>
-              </div>
+                {isRead && (
+                  <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
+                )}
+              </motion.div>
             );
+          })}
+          {Object.entries(currentChat.typingStatus || {}).map(([userId, isTyping]) => {
+            if (isTyping && userId !== auth.currentUser?.uid) {
+              return (
+                <motion.div
+                  key={`typing-${userId}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="flex justify-start mb-4"
+                >
+                  <div className="bg-white border border-zinc-100 text-zinc-500 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1">
+                    <motion.div
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full"
+                    />
+                    <motion.div
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full"
+                    />
+                    <motion.div
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
+                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full"
+                    />
+                  </div>
+                </motion.div>
+              );
+            }
+            return null;
           })}
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200 p-4 max-w-md mx-auto pb-safe">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-zinc-200 p-3 max-w-md mx-auto pb-safe shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.05)]">
           {isBlocked ? (
             <div className="flex items-center justify-center gap-2 text-zinc-500 text-sm py-2">
               <ShieldAlert className="w-4 h-4" />
@@ -331,17 +428,21 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                 <input
                   type="text"
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
+                  onChange={(e) => {
+                    setNewMessage(e.target.value);
+                    handleTyping();
+                  }}
                   placeholder="Message..."
-                  className="flex-1 bg-zinc-100 border-none rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-shadow"
+                  className="flex-1 bg-zinc-100/80 border border-zinc-200/50 rounded-full px-4 py-2.5 text-[15px] focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition-all"
                 />
-                <button 
+                <motion.button 
+                  whileTap={{ scale: 0.9 }}
                   type="submit"
                   disabled={(!newMessage.trim() && !attachment)}
-                  className="p-2 bg-indigo-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
+                  className="p-2.5 bg-indigo-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors shadow-sm"
                 >
-                  <Send className="w-4 h-4" />
-                </button>
+                  <Send className="w-4 h-4 ml-0.5" />
+                </motion.button>
               </form>
             </>
           )}
@@ -352,13 +453,13 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
 
   return (
     <div className="max-w-md mx-auto pb-20 bg-white min-h-screen">
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-zinc-200 px-4 py-3 flex items-center gap-3">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
         {onBack && (
           <button onClick={onBack} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
         )}
-        <h1 className="text-xl font-bold text-zinc-900">Messages</h1>
+        <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Messages</h1>
       </div>
 
       {loading ? (
@@ -366,21 +467,30 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
         </div>
       ) : filteredChats.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-[60vh] text-zinc-500">
-          <MessageSquare className="w-12 h-12 mb-4 text-zinc-300" />
-          <p className="text-lg font-medium text-zinc-900">No messages yet</p>
-          <p className="text-sm">Start a conversation with someone.</p>
-        </div>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center justify-center h-[60vh] text-zinc-500"
+        >
+          <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border border-indigo-100/50 shadow-sm">
+            <MessageSquare className="w-8 h-8 text-indigo-400" />
+          </div>
+          <p className="text-lg font-bold text-zinc-900 mb-1">No messages yet</p>
+          <p className="text-[15px] text-zinc-500">Start a conversation with someone.</p>
+        </motion.div>
       ) : (
-        <div className="divide-y divide-zinc-100">
-          {filteredChats.map((chat) => {
+        <div className="divide-y divide-zinc-100/50 px-2">
+          {filteredChats.map((chat, index) => {
             const otherUser = getOtherUser(chat);
             if (!otherUser) return null;
             
             const isUnread = auth.currentUser && chat.readStatus?.[auth.currentUser.uid] === false;
 
             return (
-              <div 
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: index * 0.05 }}
                 key={chat.id} 
                 onClick={() => !chatToDelete && setSelectedChat(chat)}
                 onTouchStart={() => handleTouchStart(chat)}
@@ -388,9 +498,9 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                 onMouseDown={() => handleTouchStart(chat)}
                 onMouseUp={handleTouchEnd}
                 onMouseLeave={handleTouchEnd}
-                className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-colors relative active:bg-zinc-100 ${isUnread ? 'bg-indigo-50/50' : ''}`}
+                className={`p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all relative active:scale-[0.98] ${isUnread ? 'bg-indigo-50/40' : ''}`}
               >
-                <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0 relative">
+                <div className="w-14 h-14 rounded-full bg-zinc-200 overflow-hidden shrink-0 relative border border-zinc-200 shadow-sm">
                   {otherUser.photoURL ? (
                     <img 
                       src={getOptimizedImageUrl(otherUser.photoURL, 96, 96)} 
@@ -405,24 +515,24 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline">
-                    <h3 className={`truncate ${isUnread ? 'font-bold text-zinc-900' : 'font-semibold text-zinc-900'}`}>{otherUser.displayName}</h3>
+                  <div className="flex justify-between items-baseline mb-0.5">
+                    <h3 className={`truncate text-[15px] ${isUnread ? 'font-bold text-zinc-900' : 'font-semibold text-zinc-800'}`}>{otherUser.displayName}</h3>
                     {chat.updatedAt && (
-                      <span className={`text-xs shrink-0 ml-2 ${isUnread ? 'text-indigo-600 font-medium' : 'text-zinc-400'}`}>
+                      <span className={`text-[11px] shrink-0 ml-2 ${isUnread ? 'text-indigo-600 font-bold' : 'text-zinc-400 font-medium'}`}>
                         {formatDistanceToNow(chat.updatedAt.toDate(), { addSuffix: false }).replace('about ', '')}
                       </span>
                     )}
                   </div>
-                  <div className="flex justify-between items-center mt-0.5">
-                    <p className={`text-sm truncate pr-4 ${isUnread ? 'font-medium text-zinc-900' : 'text-zinc-500'}`}>
+                  <div className="flex justify-between items-center">
+                    <p className={`text-[14px] truncate pr-4 ${isUnread ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
                       {chat.lastMessage || 'Started a chat'}
                     </p>
                     {isUnread && (
-                      <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full shrink-0" />
+                      <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full shrink-0 shadow-sm" />
                     )}
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -431,40 +541,46 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {chatToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="bg-white rounded-[24px] w-full max-w-xs overflow-hidden shadow-2xl border border-zinc-100"
             >
               <div className="p-6 text-center">
-                <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trash2 className="w-8 h-8" />
+                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100/50 shadow-sm">
+                  <Trash2 className="w-7 h-7" />
                 </div>
-                <h3 className="text-lg font-bold text-zinc-900 mb-2">Delete Chat?</h3>
-                <p className="text-zinc-500 text-sm mb-6">
+                <h3 className="text-[19px] font-bold text-zinc-900 mb-2 tracking-tight">Delete Chat?</h3>
+                <p className="text-zinc-500 text-[15px] mb-6 leading-relaxed">
                   Are you sure you want to delete this conversation? This action cannot be undone.
                 </p>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2.5">
                   <button
                     onClick={handleDeleteChat}
                     disabled={isDeleting}
-                    className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
+                    className="w-full py-3.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm"
                   >
                     {isDeleting ? 'Deleting...' : 'Delete'}
                   </button>
                   <button
                     onClick={() => setChatToDelete(null)}
                     disabled={isDeleting}
-                    className="w-full py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold rounded-xl transition-colors disabled:opacity-50"
+                    className="w-full py-3.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-semibold rounded-xl transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

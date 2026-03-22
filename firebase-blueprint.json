@@ -105,7 +105,9 @@
         "authorPhoto": { "type": "string", "description": "The photo URL of the author." },
         "imageUrl": { "type": "string", "description": "The URL of the story image." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the story was created." },
-        "expiresAt": { "type": "string", "format": "date-time", "description": "When the story expires (24h after creation)." }
+        "expiresAt": { "type": "string", "format": "date-time", "description": "When the story expires (24h after creation)." },
+        "viewsCount": { "type": "number", "description": "Number of views the story has received." },
+        "viewers": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have viewed the story." }
       },
       "required": ["authorId", "authorName", "imageUrl", "createdAt", "expiresAt"]
     },
@@ -117,7 +119,9 @@
         "participants": { "type": "array", "items": { "type": "string" }, "description": "The IDs of the users in the chat." },
         "lastMessage": { "type": "string", "description": "The text of the last message sent." },
         "lastMessageTime": { "type": "string", "format": "date-time", "description": "When the last message was sent." },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "When the chat was last updated." }
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the chat was last updated." },
+        "readStatus": { "type": "object", "description": "Map of user IDs to boolean indicating if they have read the last message." },
+        "typingStatus": { "type": "object", "description": "Map of user IDs to boolean indicating if they are currently typing." }
       },
       "required": ["participants", "updatedAt"]
     },
@@ -129,6 +133,7 @@
         "chatId": { "type": "string", "description": "The ID of the chat this message belongs to." },
         "senderId": { "type": "string", "description": "The ID of the user who sent the message." },
         "text": { "type": "string", "description": "The text content of the message." },
+        "attachmentUrl": { "type": "string", "description": "The URL of an attached image." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
       },
       "required": ["chatId", "senderId", "text", "createdAt"]

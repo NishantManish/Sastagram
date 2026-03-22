@@ -64,6 +64,8 @@ export interface Story {
   imageUrl: string;
   createdAt: any; // Firestore Timestamp
   expiresAt: any; // Firestore Timestamp
+  viewsCount?: number;
+  viewers?: string[];
 }
 
 export interface Chat {
@@ -73,6 +75,7 @@ export interface Chat {
   lastMessageTime?: any; // Firestore Timestamp
   updatedAt: any; // Firestore Timestamp
   readStatus?: Record<string, boolean>;
+  typingStatus?: Record<string, boolean>;
 }
 
 export interface Message {

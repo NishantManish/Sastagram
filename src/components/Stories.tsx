@@ -1,15 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, Timestamp, updateDoc, arrayUnion, increment } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Story } from '../types';
-import { Plus, X, Trash2, Send } from 'lucide-react';
+import { Plus, X, Trash2, Send, Eye } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import UserAvatar from './UserAvatar';
+import { getDoc } from 'firebase/firestore';
+
+function ViewerItem({ userId }: { userId: string }) {
+  const [name, setName] = useState('User');
+  
+  useEffect(() => {
+    getDoc(doc(db, 'users', userId)).then(snap => {
+      if (snap.exists()) {
+        setName(snap.data().displayName || 'User');
+      }
+    });
+  }, [userId]);
+
+  return (
+    <div className="flex items-center gap-3">
+      <UserAvatar userId={userId} size={40} />
+      <span className="font-medium text-zinc-900">{name}</span>
+    </div>
+  );
+}
 
 export default function Stories() {
   const [groupedStories, setGroupedStories] = useState<Record<string, Story[]>>({});
@@ -17,6 +37,7 @@ export default function Stories() {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [showViewers, setShowViewers] = useState(false);
   
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -196,6 +217,21 @@ export default function Stories() {
 
   const activeStory = activeUserStories ? activeUserStories[currentStoryIndex] : null;
 
+  useEffect(() => {
+    if (activeStory && auth.currentUser && activeStory.authorId !== auth.currentUser.uid) {
+      const hasViewed = activeStory.viewers?.includes(auth.currentUser.uid);
+      if (!hasViewed) {
+        const storyRef = doc(db, 'stories', activeStory.id);
+        updateDoc(storyRef, {
+          viewers: arrayUnion(auth.currentUser.uid),
+          viewsCount: increment(1)
+        }).catch(err => {
+          console.error('Failed to update story views:', err);
+        });
+      }
+    }
+  }, [activeStory]);
+
   return (
     <div className="bg-transparent border-b border-zinc-200/50 py-4 px-2 overflow-x-auto no-scrollbar">
       <div className="flex gap-4 items-center">
@@ -374,6 +410,64 @@ export default function Stories() {
                 className="max-w-full max-h-full object-contain pointer-events-none"
               />
             </div>
+
+            {/* Viewers Button (Only for author) */}
+            {activeStory.authorId === auth.currentUser?.uid && (
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20">
+                <button
+                  onClick={() => {
+                    setIsPaused(true);
+                    setShowViewers(true);
+                  }}
+                  className="flex items-center gap-2 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-md transition-colors"
+                >
+                  <Eye className="w-5 h-5" />
+                  <span className="font-medium">{activeStory.viewsCount || 0} Views</span>
+                </button>
+              </div>
+            )}
+
+            {/* Viewers Modal */}
+            <AnimatePresence>
+              {showViewers && (
+                <motion.div
+                  initial={{ opacity: 0, y: '100%' }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                  className="absolute inset-x-0 bottom-0 top-1/3 bg-white rounded-t-3xl z-30 flex flex-col overflow-hidden shadow-2xl"
+                >
+                  <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                    <h3 className="font-bold text-lg">Viewers</h3>
+                    <button 
+                      onClick={() => {
+                        setShowViewers(false);
+                        setIsPaused(false);
+                      }}
+                      className="p-2 bg-zinc-100 rounded-full hover:bg-zinc-200 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {(!activeStory.viewers || activeStory.viewers.length === 0) ? (
+                      <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                        <Eye className="w-12 h-12 mb-2 opacity-20" />
+                        <p>No views yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {activeStory.viewers.map(viewerId => (
+                          <div key={viewerId}>
+                            <ViewerItem userId={viewerId} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

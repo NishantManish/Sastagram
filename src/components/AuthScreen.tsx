@@ -184,7 +184,7 @@ export default function AuthScreen() {
         <div className="w-16 h-16 bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 rounded-full flex items-center justify-center mb-6 shadow-lg">
           <Camera className="w-8 h-8 text-white" />
         </div>
-        <h1 className="text-3xl font-bold text-zinc-900 mb-6 font-serif italic">InstaClone</h1>
+        <h1 className="text-3xl font-bold text-zinc-900 mb-6 font-serif italic">Sastagram</h1>
 
         {resetSent && (
           <div className="w-full p-4 mb-6 bg-green-50 text-green-700 text-sm rounded-xl border border-green-100 text-center">
