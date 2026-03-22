@@ -38,6 +38,8 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
 
   const currentUser = auth.currentUser;
   const targetUserId = viewedUserId || userId || currentUser?.uid;
@@ -88,21 +90,26 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   }, [targetUserId]);
 
   useEffect(() => {
-    // Check follow status
-    const checkFollow = async () => {
-      if (!currentUser || isOwnProfile || !targetUserId) return;
-      const followId = `${currentUser.uid}_${targetUserId}`;
-      const followRef = doc(db, 'follows', followId);
-      const followSnap = await getDoc(followRef);
-      setIsFollowing(followSnap.exists());
+    // Check follow status with real-time listeners
+    if (!currentUser || isOwnProfile || !targetUserId) return;
 
-      const followedById = `${targetUserId}_${currentUser.uid}`;
-      const followedByRef = doc(db, 'follows', followedById);
-      const followedBySnap = await getDoc(followedByRef);
-      setIsFollowedBy(followedBySnap.exists());
+    const followId = `${currentUser.uid}_${targetUserId}`;
+    const followRef = doc(db, 'follows', followId);
+    const unsubscribeFollow = onSnapshot(followRef, (docSnap) => {
+      setIsFollowing(docSnap.exists());
+    });
+
+    const followedById = `${targetUserId}_${currentUser.uid}`;
+    const followedByRef = doc(db, 'follows', followedById);
+    const unsubscribeFollowedBy = onSnapshot(followedByRef, (docSnap) => {
+      setIsFollowedBy(docSnap.exists());
+    });
+
+    return () => {
+      unsubscribeFollow();
+      unsubscribeFollowedBy();
     };
-    checkFollow();
-  }, [currentUser, targetUserId, isOwnProfile]);
+  }, [currentUser?.uid, targetUserId, isOwnProfile]);
 
   const handleSignOut = async () => {
     try {
@@ -230,9 +237,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                           if (isBlockedByMe) {
                             await unblockUser(targetUserId);
                           } else {
-                            if (window.confirm(`Are you sure you want to block ${userProfile.displayName}? They won't be able to see your posts or message you.`)) {
-                              await blockUser(targetUserId);
-                            }
+                            setShowBlockConfirm(true);
                           }
                         }}
                         className={`w-full px-4 py-3 text-left text-sm font-medium flex items-center gap-2 hover:bg-zinc-50 transition-colors ${
@@ -506,6 +511,25 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
           />
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        isOpen={showBlockConfirm}
+        onClose={() => setShowBlockConfirm(false)}
+        onConfirm={async () => {
+          if (!targetUserId) return;
+          setIsBlocking(true);
+          try {
+            await blockUser(targetUserId);
+            setShowBlockConfirm(false);
+          } finally {
+            setIsBlocking(false);
+          }
+        }}
+        isLoading={isBlocking}
+        title={`Block ${userProfile.displayName}?`}
+        message={`Are you sure you want to block ${userProfile.displayName}? They won't be able to see your posts or message you.`}
+        confirmText="Block"
+      />
 
       <ConfirmationModal
         isOpen={!!postToDelete}

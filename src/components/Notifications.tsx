@@ -8,11 +8,14 @@ import { Bell, Heart, MessageCircle, UserPlus, ArrowLeft, MoreHorizontal } from 
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
+import Profile from './Profile';
 
 export default function Notifications({ onBack }: { onBack?: () => void }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
+
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -75,6 +78,15 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
     return Object.entries(groups).filter(([_, items]) => items.length > 0);
   }, [filteredNotifications]);
 
+  if (selectedUserId) {
+    return (
+      <Profile 
+        userId={selectedUserId} 
+        onBack={() => setSelectedUserId(null)} 
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-white">
@@ -128,7 +140,8 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                     key={notification.id} 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className={`group relative p-3 flex items-center gap-4 rounded-2xl transition-all hover:bg-zinc-50 ${!notification.read ? 'bg-indigo-50/30' : ''}`}
+                    onClick={() => setSelectedUserId(notification.senderId)}
+                    className={`group relative p-3 flex items-center gap-4 rounded-2xl transition-all hover:bg-zinc-50 cursor-pointer ${!notification.read ? 'bg-indigo-50/30' : ''}`}
                   >
                     <div className="relative shrink-0">
                       <div className="w-12 h-12 rounded-2xl bg-zinc-100 overflow-hidden ring-2 ring-white shadow-sm">
@@ -172,12 +185,6 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
 
                     {!notification.read && (
                       <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-                    )}
-
-                    {notification.type === 'follow' && (
-                      <button className="px-4 py-1.5 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-colors shrink-0">
-                        Follow
-                      </button>
                     )}
                   </motion.div>
                 ))}

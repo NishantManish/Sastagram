@@ -14,7 +14,7 @@ interface ShareModalProps {
 }
 
 export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
-  const [following, setFollowing] = useState<User[]>([]);
+  const [followers, setFollowers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [sharingToStory, setSharingToStory] = useState(false);
   const [sharingToUser, setSharingToUser] = useState<string | null>(null);
@@ -22,33 +22,33 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
 
-    const fetchFollowing = async () => {
+    const fetchData = async () => {
       try {
-        const followsQuery = query(
+        // Fetch followers
+        const followersQuery = query(
           collection(db, 'follows'),
-          where('followerId', '==', auth.currentUser?.uid)
+          where('followingId', '==', auth.currentUser?.uid)
         );
-        const followsSnap = await getDocs(followsQuery);
-        
-        const followingIds = followsSnap.docs.map(doc => doc.data().followingId);
-        
-        if (followingIds.length > 0) {
+        const followersSnap = await getDocs(followersQuery);
+        const followerIds = followersSnap.docs.map(doc => doc.data().followerId);
+
+        if (followerIds.length > 0) {
           const usersQuery = query(
             collection(db, 'users'),
-            where('__name__', 'in', followingIds.slice(0, 10)) // Limit to 10 for simplicity
+            where('__name__', 'in', followerIds.slice(0, 10))
           );
           const usersSnap = await getDocs(usersQuery);
           const usersData = usersSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as User));
-          setFollowing(usersData);
+          setFollowers(usersData);
         }
       } catch (err) {
-        console.error('Error fetching following:', err);
+        console.error('Error fetching share data:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchFollowing();
+    fetchData();
   }, [isOpen]);
 
   const handleShareToStory = async () => {
@@ -151,7 +151,7 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center p-4 bg-black/60 backdrop-blur-sm"
         >
           <motion.div 
             initial={{ opacity: 0, y: '100%' }}
@@ -192,25 +192,28 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
               </div>
 
               <div className="mt-2">
-                <h4 className="text-sm font-semibold text-zinc-900 mb-3">Send to</h4>
+                <h4 className="text-sm font-semibold text-zinc-900 mb-3 uppercase tracking-wider text-[10px]">Send to Followers</h4>
                 {loading ? (
                   <div className="flex justify-center py-4">
                     <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
                   </div>
-                ) : following.length === 0 ? (
-                  <p className="text-sm text-zinc-500 text-center py-4">Follow people to share posts with them.</p>
+                ) : followers.length === 0 ? (
+                  <p className="text-sm text-zinc-500 text-center py-4">No followers yet to share with.</p>
                 ) : (
-                  <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {following.map(user => (
-                      <div key={user.uid} className="flex items-center justify-between">
+                  <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                    {followers.map(user => (
+                      <div key={user.uid} className="flex items-center justify-between group">
                         <div className="flex items-center gap-3">
-                          <UserAvatar userId={user.uid} size={40} />
-                          <span className="font-medium text-zinc-900 text-sm">{user.displayName}</span>
+                          <UserAvatar userId={user.uid} size={40} className="border border-zinc-100" />
+                          <div className="flex flex-col">
+                            <span className="font-bold text-zinc-900 text-sm">{user.displayName}</span>
+                            <span className="text-[10px] text-zinc-400 font-medium">@{user.username || 'user'}</span>
+                          </div>
                         </div>
                         <button
                           onClick={() => handleShareToUser(user)}
                           disabled={sharingToUser === user.uid}
-                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-full transition-colors disabled:opacity-50"
+                          className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-full transition-all active:scale-95 disabled:opacity-50 shadow-sm shadow-indigo-200"
                         >
                           {sharingToUser === user.uid ? 'Sending...' : 'Send'}
                         </button>

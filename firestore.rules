@@ -122,16 +122,16 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser() {
-      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role']) &&
-             hasRequiredFields(['uid', 'username', 'displayName', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'email']) &&
+             hasRequiredFields(['uid', 'username', 'displayName']) &&
              validStringLength('uid', 1, 128) &&
              validStringLength('username', 3, 30) &&
-             validStringLength('displayName', 1, 50) &&
+             validStringLength('displayName', 1, 100) &&
              isValidOptionalString('photoURL', 0, 2000) &&
-             isValidOptionalString('bio', 0, 150) &&
+             isValidOptionalString('bio', 0, 500) &&
              isValidOptionalNumber('followersCount') &&
              isValidOptionalNumber('followingCount') &&
-             request.resource.data.createdAt is timestamp &&
+             (request.resource.data.get('createdAt', null) == null || request.resource.data.createdAt is timestamp) &&
              (request.resource.data.get('role', 'user') in ['user', 'admin']);
     }
 
@@ -246,44 +246,36 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidUser() && uidUnchanged() && 
                     request.resource.data.followersCount == 0 && request.resource.data.followingCount == 0 &&
                     request.resource.data.get('role', 'user') == 'user';
-      allow update: if isAuthenticated() && isValidUser() && (
+      allow update: if isAuthenticated() && (
                       // Owner updating profile
-                      (isOwner(userId) && uidNotModified() && 
+                      (isOwner(userId) && isValidUser() && uidNotModified() && 
                        isUnchanged('createdAt') &&
                        isUnchanged('followersCount') &&
                        isUnchanged('followingCount') &&
                        isUnchanged('role'))
                       ||
-                      // Anyone updating followersCount (follow/unfollow)
-                      (uidNotModified() &&
-                       isUnchanged('displayName') &&
-                       isUnchanged('username') &&
-                       isUnchanged('photoURL') &&
-                       isUnchanged('bio') &&
-                       isUnchanged('createdAt') &&
-                       isUnchanged('followingCount') &&
-                       isUnchanged('role') &&
-                       (request.resource.data.followersCount - resource.data.followersCount == 1 || resource.data.followersCount - request.resource.data.followersCount == 1) &&
+                      // System/Users updating counts (Follow/Unfollow)
+                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'email']) &&
+                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role', 'email']) &&
                        (
-                         (request.resource.data.followersCount > resource.data.followersCount &&
-                          !exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) &&
-                          getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) != null) ||
-                         (request.resource.data.followersCount < resource.data.followersCount &&
-                          exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) &&
-                          getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) == null)
+                         // Update followersCount
+                         (request.resource.data.get('followersCount', 0) != resource.data.get('followersCount', 0) &&
+                          math.abs(request.resource.data.get('followersCount', 0) - resource.data.get('followersCount', 0)) == 1 &&
+                          (
+                            // Follow: count increased, follow doc must be created in this batch
+                            (request.resource.data.get('followersCount', 0) > resource.data.get('followersCount', 0) &&
+                             getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) != null) ||
+                            // Unfollow: count decreased, follow doc must be deleted in this batch
+                            (request.resource.data.get('followersCount', 0) < resource.data.get('followersCount', 0) &&
+                             getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) == null)
+                          )
+                         ) ||
+                         // Update followingCount (Owner only)
+                         (isOwner(userId) && 
+                          request.resource.data.get('followingCount', 0) != resource.data.get('followingCount', 0) &&
+                          math.abs(request.resource.data.get('followingCount', 0) - resource.data.get('followingCount', 0)) == 1
+                         )
                        )
-                      )
-                      ||
-                      // Owner updating followingCount
-                      (isOwner(userId) && uidNotModified() &&
-                       isUnchanged('displayName') &&
-                       isUnchanged('username') &&
-                       isUnchanged('photoURL') &&
-                       isUnchanged('bio') &&
-                       isUnchanged('createdAt') &&
-                       isUnchanged('followersCount') &&
-                       isUnchanged('role') &&
-                       (request.resource.data.followingCount - resource.data.followingCount == 1 || resource.data.followingCount - request.resource.data.followingCount == 1)
                       )
                       ||
                       // Admin can update anything

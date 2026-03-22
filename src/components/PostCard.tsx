@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post } from '../types';
@@ -32,8 +32,12 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
 
   useEffect(() => {
+    let unsubscribeFollow: (() => void) | undefined;
+
     const checkInteractions = async () => {
       if (!auth.currentUser) return;
       
@@ -48,9 +52,67 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       const saveRef = doc(db, 'savedPosts', saveId);
       const saveSnap = await getDoc(saveRef);
       setIsSaved(saveSnap.exists());
+
+      // Check follow with real-time listener
+      if (post.authorId !== auth.currentUser.uid) {
+        const followId = `${auth.currentUser.uid}_${post.authorId}`;
+        const followRef = doc(db, 'follows', followId);
+        unsubscribeFollow = onSnapshot(followRef, (docSnap) => {
+          setIsFollowing(docSnap.exists());
+        });
+      }
     };
     checkInteractions();
-  }, [post.id]);
+
+    return () => {
+      if (unsubscribeFollow) unsubscribeFollow();
+    };
+  }, [post.id, post.authorId, auth.currentUser?.uid]);
+
+  const handleFollow = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!auth.currentUser || isFollowLoading || isFollowing) return;
+    
+    setIsFollowLoading(true);
+    const followId = `${auth.currentUser.uid}_${post.authorId}`;
+    const followRef = doc(db, 'follows', followId);
+    const batch = writeBatch(db);
+
+    try {
+      batch.set(followRef, {
+        followerId: auth.currentUser.uid,
+        followingId: post.authorId,
+        createdAt: serverTimestamp(),
+      });
+
+      batch.update(doc(db, 'users', auth.currentUser.uid), {
+        followingCount: increment(1),
+      });
+
+      batch.update(doc(db, 'users', post.authorId), {
+        followersCount: increment(1),
+      });
+
+      // Create notification for follow
+      const notificationRef = doc(collection(db, 'notifications'));
+      batch.set(notificationRef, {
+        userId: post.authorId,
+        type: 'follow',
+        senderId: auth.currentUser.uid,
+        senderName: auth.currentUser.displayName || 'Someone',
+        senderPhoto: auth.currentUser.photoURL || '',
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      await batch.commit();
+      setIsFollowing(true);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `follows/${auth.currentUser.uid}_${post.authorId}`);
+    } finally {
+      setIsFollowLoading(false);
+    }
+  };
 
   const handleLike = async () => {
     if (!auth.currentUser || isLiking) return;
@@ -196,36 +258,50 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     : 'Just now';
 
   return (
-    <div className="bg-white border-b border-zinc-200 sm:border sm:rounded-xl sm:mb-6 overflow-hidden">
+    <div className="bg-white border-b border-zinc-100 sm:border sm:rounded-xl sm:mb-4 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-3">
+      <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <button 
             onClick={() => onUserClick?.(post.authorId)}
-            className="hover:opacity-80 transition-opacity"
+            className="hover:opacity-90 transition-opacity active:scale-95"
           >
             <UserAvatar 
               userId={post.authorId} 
-              size={32} 
+              size={36} 
               fallbackPhoto={post.authorPhoto} 
               fallbackName={post.authorName} 
             />
           </button>
-          <button 
-            onClick={() => onUserClick?.(post.authorId)}
-            className="font-semibold text-sm text-zinc-900 hover:underline"
-          >
-            {post.authorName}
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => onUserClick?.(post.authorId)}
+              className="font-bold text-[14px] text-zinc-900 hover:text-zinc-600 transition-colors"
+            >
+              {post.authorName}
+            </button>
+            {auth.currentUser?.uid !== post.authorId && !isFollowing && (
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-300 text-[10px] font-bold">•</span>
+                <button 
+                  onClick={handleFollow}
+                  disabled={isFollowLoading}
+                  className="text-indigo-600 text-[14px] font-bold hover:text-indigo-700 transition-colors disabled:opacity-50 active:scale-95"
+                >
+                  {isFollowLoading ? '...' : 'Follow'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         
         {auth.currentUser?.uid === post.authorId && (
           <button 
             onClick={() => setShowDeleteConfirm(true)}
             disabled={isDeleting}
-            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50"
+            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50 active:scale-90"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-5 h-5" />
           </button>
         )}
       </div>
@@ -268,7 +344,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               className="absolute inset-0 flex items-center justify-center pointer-events-none"
             >
               <Heart 
-                className="w-24 h-24 drop-shadow-2xl fill-red-500 text-red-500" 
+                className="w-24 h-24 drop-shadow-2xl fill-white text-white" 
               />
             </motion.div>
           )}
@@ -276,53 +352,53 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       </div>
 
       {/* Actions */}
-      <div className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-4">
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-5">
             <button 
               onClick={handleLike}
               disabled={isLiking}
-              className="text-zinc-900 hover:opacity-70 transition-opacity"
+              className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
             >
-              <Heart className={cn('w-6 h-6', isLiked && 'fill-red-500 text-red-500')} />
+              <Heart className={cn('w-[26px] h-[26px]', isLiked && 'fill-red-500 text-red-500')} />
             </button>
             <button 
               onClick={onCommentClick}
-              className="text-zinc-900 hover:opacity-70 transition-opacity"
+              className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
             >
-              <MessageCircle className="w-6 h-6" />
+              <MessageCircle className="w-[26px] h-[26px]" />
             </button>
             <button 
               onClick={handleShare}
-              className="text-zinc-900 hover:opacity-70 transition-opacity"
+              className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
             >
-              <Share2 className="w-6 h-6" />
+              <Send className="w-[26px] h-[26px]" />
             </button>
           </div>
           <button 
             onClick={handleSave}
             disabled={isSaving}
-            className="text-zinc-900 hover:opacity-70 transition-opacity"
+            className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
           >
-            <Bookmark className={cn('w-6 h-6', isSaved && 'fill-zinc-900')} />
+            <Bookmark className={cn('w-[26px] h-[26px]', isSaved && 'fill-zinc-900')} />
           </button>
         </div>
 
-        <div className="font-semibold text-sm text-zinc-900 mb-1">
-          {likeCount} {likeCount === 1 ? 'like' : 'likes'}
+        <div className="font-bold text-[14px] text-zinc-900 mb-1.5">
+          {likeCount.toLocaleString()} {likeCount === 1 ? 'like' : 'likes'}
         </div>
 
-        <div className="text-sm text-zinc-900">
+        <div className="text-[14px] text-zinc-900 leading-relaxed">
           <button 
             onClick={() => onUserClick?.(post.authorId)}
-            className="font-semibold mr-2 hover:underline"
+            className="font-bold mr-2 hover:text-zinc-600 transition-colors"
           >
             {post.authorName}
           </button>
-          <span>{post.caption}</span>
+          <span className="text-zinc-800">{post.caption}</span>
         </div>
 
-        <div className="text-xs text-zinc-500 mt-2 uppercase tracking-wide">
+        <div className="text-[11px] text-zinc-400 font-bold uppercase tracking-widest mt-2.5">
           {formattedDate}
         </div>
       </div>

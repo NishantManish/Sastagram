@@ -97,8 +97,12 @@ export default function Feed({ onNavigate }: { onNavigate?: (tab: any) => void }
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-[50vh]">
-        <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
+        <div className="relative">
+          <div className="w-12 h-12 border-4 border-indigo-100 rounded-full" />
+          <div className="absolute top-0 left-0 w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+        <p className="text-zinc-400 text-sm font-bold uppercase tracking-widest animate-pulse">Loading Feed</p>
       </div>
     );
   }
@@ -109,59 +113,62 @@ export default function Feed({ onNavigate }: { onNavigate?: (tab: any) => void }
 
   return (
     <div 
-      className="max-w-md mx-auto pb-20 pt-4 relative min-h-screen"
+      className="max-w-md mx-auto pb-24 relative min-h-screen"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       <motion.div 
-        className="absolute top-0 left-0 right-0 flex justify-center items-center overflow-hidden"
-        animate={{ height: pullDistance > 0 || refreshing ? 60 : 0 }}
+        className="absolute top-0 left-0 right-0 flex justify-center items-center overflow-hidden z-20"
+        animate={{ height: pullDistance > 0 || refreshing ? 80 : 0 }}
         style={{ height: 0 }}
       >
-        <motion.div
-          animate={{ rotate: refreshing ? 360 : pullDistance * 2 }}
-          transition={refreshing ? { repeat: Infinity, duration: 1, ease: "linear" } : { type: "spring", bounce: 0 }}
-        >
-          <RefreshCw className="w-6 h-6 text-zinc-500" />
-        </motion.div>
+        <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-zinc-100">
+          <motion.div
+            animate={{ rotate: refreshing ? 360 : pullDistance * 2 }}
+            transition={refreshing ? { repeat: Infinity, duration: 1, ease: "linear" } : { type: "spring", bounce: 0 }}
+          >
+            <RefreshCw className="w-6 h-6 text-indigo-600" />
+          </motion.div>
+        </div>
       </motion.div>
 
       <motion.div
         animate={{ y: pullDistance }}
-        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
       >
         <Stories />
         
-        {filteredPosts.length === 0 ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center h-[50vh] text-zinc-500"
-          >
-            <Camera className="w-12 h-12 mb-4 text-zinc-300" />
-            <p className="text-lg font-medium text-zinc-900">No posts yet</p>
-            <p className="text-sm">Be the first to share a photo!</p>
-          </motion.div>
-        ) : (
-          <AnimatePresence>
-            {filteredPosts.map((post) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-              >
-                <PostCard 
-                  post={post} 
-                  onCommentClick={() => setSelectedPost(post)}
-                  onUserClick={setSelectedUserId}
-                />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        )}
+        <div className="mt-2">
+          {filteredPosts.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center h-[50vh] text-zinc-500 text-center px-12"
+            >
+              <Camera className="w-12 h-12 text-zinc-200 mb-4" />
+              <h3 className="text-lg font-semibold text-zinc-900">No posts yet</h3>
+              <p className="text-sm">Follow some creators to see their posts here.</p>
+            </motion.div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {filteredPosts.map((post) => (
+                <motion.div
+                  key={post.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <PostCard 
+                    post={post} 
+                    onCommentClick={() => setSelectedPost(post)}
+                    onUserClick={setSelectedUserId}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+        </div>
       </motion.div>
 
       <AnimatePresence>

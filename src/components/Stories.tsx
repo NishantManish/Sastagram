@@ -233,19 +233,19 @@ export default function Stories() {
   }, [activeStory]);
 
   return (
-    <div className="bg-transparent border-b border-zinc-200/50 py-4 px-2 overflow-x-auto no-scrollbar">
+    <div className="bg-white border-b border-zinc-100 py-4 px-4 overflow-x-auto no-scrollbar">
       <div className="flex gap-4 items-center">
         {/* Add Story Button */}
-        <div className="flex flex-col items-center gap-1 shrink-0">
-          <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-zinc-200 to-zinc-300">
+        <div className="flex flex-col items-center gap-1.5 shrink-0 group">
+          <div className="relative w-16 h-16 rounded-full p-[2px] bg-zinc-200 group-hover:bg-gradient-to-tr group-hover:from-indigo-600 group-hover:to-purple-600 transition-all duration-300">
             <div className="w-full h-full rounded-full bg-white p-[2px]">
               <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden relative">
                 <UserAvatar 
                   userId={auth.currentUser?.uid || ''} 
                   className="w-full h-full"
                 />
-                <label className="absolute inset-0 bg-black/20 flex items-center justify-center cursor-pointer hover:bg-black/30 transition-colors">
-                  <Plus className="w-6 h-6 text-white" />
+                <label className="absolute inset-0 bg-black/10 flex items-center justify-center cursor-pointer hover:bg-black/20 transition-colors">
+                  <Plus className="w-5 h-5 text-white" />
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -256,7 +256,7 @@ export default function Stories() {
               </div>
             </div>
           </div>
-          <span className="text-xs text-zinc-600 font-medium">Your Story</span>
+          <span className="text-[11px] text-zinc-500 font-medium">Your Story</span>
         </div>
 
         {/* Stories List */}
@@ -270,13 +270,13 @@ export default function Stories() {
           return (
             <div 
               key={firstStory.authorId} 
-              className="flex flex-col items-center gap-1 shrink-0 cursor-pointer"
+              className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group"
               onClick={() => {
                 setActiveUserStories(userStories);
                 setCurrentStoryIndex(0);
               }}
             >
-              <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600">
+              <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-indigo-600 to-purple-600 active:scale-95 transition-transform">
                 <div className="w-full h-full rounded-full bg-white p-[2px]">
                   <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden">
                     <UserAvatar 
@@ -286,8 +286,8 @@ export default function Stories() {
                   </div>
                 </div>
               </div>
-              <span className="text-xs text-zinc-600 font-medium truncate w-16 text-center">
-                {firstStory.authorName}
+              <span className="text-[11px] text-zinc-500 font-medium truncate w-16 text-center">
+                {firstStory.authorName.split(' ')[0]}
               </span>
             </div>
           );

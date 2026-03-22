@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import AuthScreen from './components/AuthScreen';
@@ -10,11 +10,14 @@ import Notifications from './components/Notifications';
 import Search from './components/Search';
 import Messages from './components/Messages';
 import { MessageSquare, ArrowLeft } from 'lucide-react';
+import { cn } from './utils';
 
 export default function App() {
   const [user, setUser] = useState(auth.currentUser);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
+  const [showHeader, setShowHeader] = useState(true);
+  const lastScrollY = useRef(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -24,6 +27,28 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'feed') {
+      setShowHeader(true);
+      return;
+    }
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      if (currentScrollY < lastScrollY.current || currentScrollY < 10) {
+        setShowHeader(true);
+      } else if (currentScrollY > lastScrollY.current && currentScrollY > 70) {
+        setShowHeader(false);
+      }
+      
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [activeTab]);
 
   if (loading) {
     return (
@@ -41,7 +66,10 @@ export default function App() {
     <div className="min-h-screen bg-zinc-50">
       {/* Header */}
       {activeTab === 'feed' ? (
-        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-6 h-16 flex items-center justify-between max-w-md mx-auto">
+        <header className={cn(
+          "fixed top-0 left-0 right-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-6 h-16 flex items-center justify-between max-w-md mx-auto transition-transform duration-300 ease-in-out",
+          !showHeader && "-translate-y-full"
+        )}>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent tracking-tight">
             Sastagram
           </h1>
@@ -68,7 +96,10 @@ export default function App() {
       ) : null}
 
       {/* Main Content */}
-      <main className="max-w-md mx-auto min-h-[calc(100vh-4rem)]">
+      <main className={cn(
+        "max-w-md mx-auto min-h-[calc(100vh-4rem)] transition-all duration-300",
+        activeTab === 'feed' && "pt-16"
+      )}>
         {activeTab === 'feed' && <Feed onNavigate={setActiveTab} />}
         {activeTab === 'search' && <Search onNavigate={setActiveTab} />}
         {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}
