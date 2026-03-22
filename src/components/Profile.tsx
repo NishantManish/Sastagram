@@ -25,7 +25,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowedBy, setIsFollowedBy] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [isMessagingLoading, setIsMessagingLoading] = useState(false);
@@ -350,27 +350,24 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
             </button>
           ) : (
             <>
-              {!isBlockedByMe && (
+              {isFollowing === false && !isBlockedByMe && (
                 <button 
                   onClick={handleFollowToggle}
                   disabled={isFollowLoading}
-                  className={`flex-1 py-1.5 px-4 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-70 ${
-                    isFollowing 
-                      ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900' 
-                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  }`}
+                  className="flex-1 py-1.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-70"
                 >
-                  {isFollowing ? (
-                    <>
-                      <UserMinus className="w-4 h-4" />
-                      Following
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4" />
-                      {isFollowedBy ? 'Follow Back' : 'Follow'}
-                    </>
-                  )}
+                  <UserPlus className="w-4 h-4" />
+                  {isFollowedBy ? 'Follow Back' : 'Follow'}
+                </button>
+              )}
+              {isFollowing === true && !isBlockedByMe && (
+                <button 
+                  onClick={handleFollowToggle}
+                  disabled={isFollowLoading}
+                  className="flex-1 py-1.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-70"
+                >
+                  <UserMinus className="w-4 h-4" />
+                  Following
                 </button>
               )}
               {!isBlockedByMe && (

@@ -9,6 +9,7 @@ import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 import Profile from './Profile';
+import UserAvatar from './UserAvatar';
 
 export default function Notifications({ onBack }: { onBack?: () => void }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -144,20 +145,13 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                     className={`group relative p-3 flex items-center gap-4 rounded-2xl transition-all hover:bg-zinc-50 cursor-pointer ${!notification.read ? 'bg-indigo-50/30' : ''}`}
                   >
                     <div className="relative shrink-0">
-                      <div className="w-12 h-12 rounded-2xl bg-zinc-100 overflow-hidden ring-2 ring-white shadow-sm">
-                        {notification.senderPhoto ? (
-                          <img 
-                            src={getOptimizedImageUrl(notification.senderPhoto, 96, 96)} 
-                            alt={notification.senderName} 
-                            className="w-full h-full object-cover" 
-                            referrerPolicy="no-referrer" 
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold text-lg">
-                            {notification.senderName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
+                      <UserAvatar 
+                        userId={notification.senderId} 
+                        size={48} 
+                        className="ring-2 ring-white shadow-sm rounded-2xl" 
+                        fallbackPhoto={notification.senderPhoto} 
+                        fallbackName={notification.senderName} 
+                      />
                       <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-xl flex items-center justify-center shadow-md ring-2 ring-white
                         ${notification.type === 'like' ? 'bg-red-500' : ''}
                         ${notification.type === 'comment' ? 'bg-blue-500' : ''}

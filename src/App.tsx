@@ -9,6 +9,7 @@ import BottomNav, { TabType } from './components/BottomNav';
 import Notifications from './components/Notifications';
 import Search from './components/Search';
 import Messages from './components/Messages';
+import MessageNotification from './components/MessageNotification';
 import { MessageSquare, ArrowLeft } from 'lucide-react';
 import { cn } from './utils';
 
@@ -64,6 +65,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
+      <MessageNotification onNavigate={setActiveTab} activeTab={activeTab} />
       {/* Header */}
       {activeTab === 'feed' ? (
         <header className={cn(
@@ -83,7 +85,7 @@ export default function App() {
             </button>
           </div>
         </header>
-      ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications') ? (
+      ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications' && activeTab !== 'create') ? (
         <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-4 h-16 flex items-center max-w-md mx-auto">
           <button 
             onClick={() => setActiveTab('feed')}

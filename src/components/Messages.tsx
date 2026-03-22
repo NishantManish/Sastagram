@@ -468,15 +468,28 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
         </div>
       ) : filteredChats.length === 0 ? (
         <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center justify-center h-[60vh] text-zinc-500"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center h-[70vh] px-8 text-center"
         >
-          <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border border-indigo-100/50 shadow-sm">
-            <MessageSquare className="w-8 h-8 text-indigo-400" />
+          <div className="relative mb-8">
+            <div className="w-24 h-24 bg-indigo-50 rounded-[32px] flex items-center justify-center border border-indigo-100/50 shadow-sm rotate-3">
+              <MessageSquare className="w-10 h-10 text-indigo-500" />
+            </div>
+            <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center border border-purple-100/50 shadow-sm -rotate-6">
+              <Send className="w-5 h-5 text-purple-500" />
+            </div>
           </div>
-          <p className="text-lg font-bold text-zinc-900 mb-1">No messages yet</p>
-          <p className="text-[15px] text-zinc-500">Start a conversation with someone.</p>
+          <h2 className="text-2xl font-bold text-zinc-900 mb-3 tracking-tight">Your inbox is waiting</h2>
+          <p className="text-zinc-500 text-[15px] leading-relaxed max-w-[260px]">
+            Connect with friends and start a conversation. Your messages will appear here.
+          </p>
+          <button 
+            onClick={() => onNavigate?.('search')}
+            className="mt-8 px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all text-sm"
+          >
+            Find someone to chat
+          </button>
         </motion.div>
       ) : (
         <div className="divide-y divide-zinc-100/50 px-2">

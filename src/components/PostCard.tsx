@@ -32,40 +32,56 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
   useEffect(() => {
-    let unsubscribeFollow: (() => void) | undefined;
+    let mounted = true;
 
     const checkInteractions = async () => {
       if (!auth.currentUser) return;
       
-      // Check like
-      const likeId = `${post.id}_${auth.currentUser.uid}`;
-      const likeRef = doc(db, 'likes', likeId);
-      const likeSnap = await getDoc(likeRef);
-      setIsLiked(likeSnap.exists());
+      try {
+        const likeId = `${post.id}_${auth.currentUser.uid}`;
+        const saveId = `${auth.currentUser.uid}_${post.id}`;
+        
+        const promises: Promise<any>[] = [
+          getDoc(doc(db, 'likes', likeId)),
+          getDoc(doc(db, 'savedPosts', saveId))
+        ];
 
-      // Check save
-      const saveId = `${auth.currentUser.uid}_${post.id}`;
-      const saveRef = doc(db, 'savedPosts', saveId);
-      const saveSnap = await getDoc(saveRef);
-      setIsSaved(saveSnap.exists());
+        if (post.authorId !== auth.currentUser.uid) {
+          const followId = `${auth.currentUser.uid}_${post.authorId}`;
+          promises.push(getDoc(doc(db, 'follows', followId)));
+        }
 
-      // Check follow with real-time listener
-      if (post.authorId !== auth.currentUser.uid) {
-        const followId = `${auth.currentUser.uid}_${post.authorId}`;
-        const followRef = doc(db, 'follows', followId);
-        unsubscribeFollow = onSnapshot(followRef, (docSnap) => {
-          setIsFollowing(docSnap.exists());
-        });
+        const results = await Promise.allSettled(promises);
+        
+        if (mounted) {
+          if (results[0].status === 'fulfilled') setIsLiked(results[0].value.exists());
+          if (results[1].status === 'fulfilled') setIsSaved(results[1].value.exists());
+          
+          if (results.length > 2) {
+            const followRes = results[2];
+            if (followRes.status === 'fulfilled') {
+              setIsFollowing(followRes.value.exists());
+            } else {
+              setIsFollowing(null); // Hide button on error
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching post interactions:", error);
+        if (mounted && post.authorId !== auth.currentUser.uid) {
+          setIsFollowing(null); // Hide button on error
+        }
       }
     };
+    
     checkInteractions();
 
     return () => {
-      if (unsubscribeFollow) unsubscribeFollow();
+      mounted = false;
     };
   }, [post.id, post.authorId, auth.currentUser?.uid]);
 
@@ -280,30 +296,30 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
             >
               {post.authorName}
             </button>
-            {auth.currentUser?.uid !== post.authorId && !isFollowing && (
-              <div className="flex items-center gap-2">
-                <span className="text-zinc-300 text-[10px] font-bold">•</span>
-                <button 
-                  onClick={handleFollow}
-                  disabled={isFollowLoading}
-                  className="text-indigo-600 text-[14px] font-bold hover:text-indigo-700 transition-colors disabled:opacity-50 active:scale-95"
-                >
-                  {isFollowLoading ? '...' : 'Follow'}
-                </button>
-              </div>
-            )}
           </div>
         </div>
         
-        {auth.currentUser?.uid === post.authorId && (
-          <button 
-            onClick={() => setShowDeleteConfirm(true)}
-            disabled={isDeleting}
-            className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50 active:scale-90"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {auth.currentUser?.uid !== post.authorId && isFollowing === false && (
+            <button 
+              onClick={handleFollow}
+              disabled={isFollowLoading}
+              className="px-4 py-1.5 bg-indigo-600 text-white text-[13px] font-bold rounded-full hover:bg-indigo-700 transition-all disabled:opacity-50 active:scale-95 shadow-sm shadow-indigo-100"
+            >
+              {isFollowLoading ? '...' : 'Follow'}
+            </button>
+          )}
+
+          {auth.currentUser?.uid === post.authorId && (
+            <button 
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+              className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50 active:scale-90"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <ConfirmationModal
@@ -344,7 +360,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               className="absolute inset-0 flex items-center justify-center pointer-events-none"
             >
               <Heart 
-                className="w-24 h-24 drop-shadow-2xl fill-white text-white" 
+                className="w-24 h-24 drop-shadow-2xl fill-red-500 text-red-500" 
               />
             </motion.div>
           )}
@@ -354,33 +370,37 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       {/* Actions */}
       <div className="px-4 py-3">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-4">
             <button 
               onClick={handleLike}
               disabled={isLiking}
-              className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
+              className="group relative p-1.5 -ml-1.5 text-zinc-900 hover:text-red-500 transition-all active:scale-90"
             >
-              <Heart className={cn('w-[26px] h-[26px]', isLiked && 'fill-red-500 text-red-500')} />
+              <div className="absolute inset-0 bg-red-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-200" />
+              <Heart className={cn('relative w-[28px] h-[28px] transition-colors', isLiked && 'fill-red-500 text-red-500')} />
             </button>
             <button 
               onClick={onCommentClick}
-              className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
+              className="group relative p-1.5 text-zinc-900 hover:text-indigo-500 transition-all active:scale-90"
             >
-              <MessageCircle className="w-[26px] h-[26px]" />
+              <div className="absolute inset-0 bg-indigo-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-200" />
+              <MessageCircle className="relative w-[28px] h-[28px] transition-colors" />
             </button>
             <button 
               onClick={handleShare}
-              className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
+              className="group relative p-1.5 text-zinc-900 hover:text-purple-500 transition-all active:scale-90"
             >
-              <Send className="w-[26px] h-[26px]" />
+              <div className="absolute inset-0 bg-purple-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-200" />
+              <Send className="relative w-[28px] h-[28px] transition-colors" />
             </button>
           </div>
           <button 
             onClick={handleSave}
             disabled={isSaving}
-            className="text-zinc-900 hover:text-zinc-500 transition-all active:scale-90"
+            className="group relative p-1.5 -mr-1.5 text-zinc-900 hover:text-zinc-600 transition-all active:scale-90"
           >
-            <Bookmark className={cn('w-[26px] h-[26px]', isSaved && 'fill-zinc-900')} />
+            <div className="absolute inset-0 bg-zinc-100 rounded-full scale-0 group-hover:scale-100 transition-transform duration-200" />
+            <Bookmark className={cn('relative w-[28px] h-[28px] transition-colors', isSaved && 'fill-zinc-900')} />
           </button>
         </div>
 
