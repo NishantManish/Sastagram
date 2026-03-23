@@ -19,7 +19,7 @@ const tabs = [
 
 export default function BottomNav({ activeTab, onChange }: BottomNavProps) {
   return (
-    <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 px-4 pointer-events-none">
+    <div className="fixed bottom-6 left-0 right-0 flex justify-center z-40 px-4 pointer-events-none">
       <motion.div 
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}

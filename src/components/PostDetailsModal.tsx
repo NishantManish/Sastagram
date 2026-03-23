@@ -123,7 +123,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -133,11 +133,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
       >
         
         {/* Left side: Post Image (hidden on small screens, shown on md+) */}
-        <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center">
+        <div className="hidden md:flex md:w-3/5 bg-black items-start justify-center overflow-y-auto custom-scrollbar">
           <img 
             src={getOptimizedImageUrl(post.imageUrl, 1200)} 
             alt="Post content" 
-            className="max-w-full max-h-full object-contain"
+            className="w-full h-auto block"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -201,11 +201,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
           />
           
           {/* Mobile Image (only visible on small screens) */}
-          <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center">
+          <div className="md:hidden w-full max-h-[400px] overflow-y-auto custom-scrollbar bg-black flex items-start justify-center">
              <img 
               src={getOptimizedImageUrl(post.imageUrl, 800)} 
               alt="Post content" 
-              className="max-w-full max-h-full object-contain"
+              className="w-full h-auto block"
               referrerPolicy="no-referrer"
             />
           </div>

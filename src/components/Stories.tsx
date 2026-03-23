@@ -301,7 +301,7 @@ export default function Stories() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col"
+            className="fixed inset-0 z-[100] bg-black flex flex-col"
           >
             <div className="absolute top-4 left-0 right-0 p-4 flex items-center justify-between z-10">
               <button 
@@ -343,7 +343,7 @@ export default function Stories() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col"
+            className="fixed inset-0 z-[100] bg-black flex flex-col"
           >
             {/* Progress Bars */}
             <div className="absolute top-0 left-0 right-0 p-2 flex gap-1 z-20 pt-safe">

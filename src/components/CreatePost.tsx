@@ -204,7 +204,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
                 image={imagePreview}
                 crop={crop}
                 zoom={zoom}
-                aspect={uploadType === 'story' ? 9 / 16 : 1}
+                aspect={uploadType === 'story' ? 9 / 16 : undefined}
                 onCropChange={setCrop}
                 onCropComplete={onCropComplete}
                 onZoomChange={setZoom}
@@ -242,11 +242,11 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
               />
               
               {imagePreview ? (
-                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'aspect-square'} bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200/50 shadow-sm group`}>
+                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'min-h-[300px] max-h-[500px] overflow-y-auto custom-scrollbar'} bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200/50 shadow-sm group`}>
                   <img 
                     src={imagePreview} 
                     alt="Preview" 
-                    className="w-full h-full object-cover"
+                    className="w-full h-auto block"
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm">
                     <button 

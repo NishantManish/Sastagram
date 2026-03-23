@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, User } from '../types';
-import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2 } from 'lucide-react';
+import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import EditProfileModal from './EditProfileModal';
 import FollowListModal from './FollowListModal';
@@ -222,23 +222,23 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   return (
     <div className="max-w-md mx-auto pb-24 bg-white min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-2xl border-b border-zinc-100/50 px-6 h-20 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-2xl border-b border-zinc-100/50 px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-3">
           {(viewedUserId || onBack) && (
             <button 
               onClick={() => viewedUserId ? setViewedUserId(null) : onBack?.()}
               className="p-2 -ml-2 text-zinc-900 hover:bg-zinc-50 rounded-full transition-all active:scale-90"
             >
-              <ArrowLeft className="w-6 h-6" />
+              <ArrowLeft className="w-5 h-5" />
             </button>
           )}
           <div className="flex flex-col">
-            <h1 className="text-lg font-black text-zinc-900 tracking-tight leading-none">
+            <h1 className="text-base font-black text-zinc-900 tracking-tight leading-none">
               {userProfile.username || userProfile.displayName}
             </h1>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
-              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black">
+              <span className="text-[8px] uppercase tracking-[0.2em] text-zinc-400 font-black">
                 {isOwnProfile ? 'Your Space' : 'Creator'}
               </span>
             </div>
@@ -249,16 +249,16 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
           {isOwnProfile ? (
             <button 
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="p-2.5 text-zinc-900 hover:bg-zinc-50 rounded-2xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
+              className="p-2 text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
             >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-4 h-4" />
             </button>
           ) : (
             <button 
               onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-              className="p-2.5 text-zinc-900 hover:bg-zinc-50 rounded-2xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
+              className="p-2 text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
             >
-              <MoreVertical className="w-5 h-5" />
+              <MoreVertical className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -272,7 +272,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 initial={{ opacity: 0, scale: 0.95, y: -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                className="absolute right-6 top-20 w-56 bg-white rounded-3xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-2"
+                className="absolute right-6 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
               >
                 <button
                   onClick={async () => {
@@ -283,24 +283,24 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                       setShowBlockConfirm(true);
                     }
                   }}
-                  className={`w-full px-4 py-3 text-left text-sm font-bold flex items-center gap-3 rounded-2xl transition-colors ${
+                  className={`w-full px-3 py-2.5 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl transition-colors ${
                     isBlockedByMe ? 'text-indigo-600 hover:bg-indigo-50' : 'text-red-500 hover:bg-red-50'
                   }`}
                 >
                   {isBlockedByMe ? (
                     <>
-                      <ShieldCheck className="w-4 h-4" />
+                      <ShieldCheck className="w-3.5 h-3.5" />
                       Unblock User
                     </>
                   ) : (
                     <>
-                      <ShieldAlert className="w-4 h-4" />
+                      <ShieldAlert className="w-3.5 h-3.5" />
                       Block User
                     </>
                   )}
                 </button>
-                <button className="w-full px-4 py-3 text-left text-sm font-bold flex items-center gap-3 rounded-2xl hover:bg-zinc-50 text-zinc-900">
-                  <Share2 className="w-4 h-4" />
+                <button className="w-full px-3 py-2.5 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-zinc-50 text-zinc-900">
+                  <Share2 className="w-3.5 h-3.5" />
                   Share Profile
                 </button>
               </motion.div>
@@ -313,16 +313,16 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 initial={{ opacity: 0, scale: 0.95, y: -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                className="absolute right-6 top-20 w-56 bg-white rounded-3xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-2"
+                className="absolute right-6 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
               >
                 <button
                   onClick={() => {
                     setShowProfileMenu(false);
                     handleSignOut();
                   }}
-                  className="w-full px-4 py-4 text-left text-sm font-bold flex items-center gap-3 rounded-2xl hover:bg-red-50 transition-colors text-red-500"
+                  className="w-full px-3 py-3 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-red-50 transition-colors text-red-500"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
                   Logout
                 </button>
               </motion.div>
@@ -332,64 +332,64 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       </header>
 
       {/* Profile Content */}
-      <div className="px-8 pt-10 pb-6">
-        <div className="flex flex-col items-center text-center mb-10">
-          <div className="relative mb-6">
-            <div className="absolute -inset-2 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-[2.5rem] blur-xl opacity-20 animate-pulse"></div>
-            <div className="relative p-1 bg-white rounded-[2.5rem] shadow-xl">
+      <div className="px-8 pt-6 pb-4">
+        <div className="flex flex-col items-center text-center mb-6">
+          <div className="relative mb-4">
+            <div className="absolute -inset-1.5 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur-lg opacity-20 animate-pulse"></div>
+            <div className="relative p-0.5 bg-white rounded-[2rem] shadow-lg">
               <UserAvatar 
                 userId={targetUserId} 
-                size={120} 
-                className="rounded-[2.2rem] border-4 border-white object-cover"
+                size={88} 
+                className="rounded-[1.8rem] border-2 border-white object-cover"
                 fallbackPhoto={userProfile.photoURL} 
                 fallbackName={userProfile.displayName} 
               />
             </div>
           </div>
           
-          <h2 className="text-3xl font-black text-zinc-900 tracking-tight mb-1">
+          <h2 className="text-xl font-black text-zinc-900 tracking-tight mb-0.5">
             {userProfile.displayName}
           </h2>
           {userProfile.username && (
-            <p className="text-indigo-600 font-black text-sm tracking-wide mb-4">
+            <p className="text-indigo-600 font-black text-[11px] tracking-widest mb-3">
               @{userProfile.username.toUpperCase()}
             </p>
           )}
           
           {userProfile.bio && (
-            <p className="text-zinc-500 text-sm leading-relaxed font-medium max-w-[280px] mb-8">
+            <p className="text-zinc-500 text-xs leading-relaxed font-medium max-w-[240px] mb-6">
               {userProfile.bio}
             </p>
           )}
 
-          <div className="flex items-center gap-12 mb-8">
+          <div className="flex items-center gap-8 mb-6">
             <div className="flex flex-col items-center">
-              <span className="text-xl font-black text-zinc-900 leading-none">{posts.length}</span>
-              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black mt-2">Posts</span>
+              <span className="text-base font-black text-zinc-900 leading-none">{posts.length}</span>
+              <span className="text-[8px] uppercase tracking-[0.15em] text-zinc-400 font-black mt-1.5">Posts</span>
             </div>
             <button 
               onClick={() => !isBlockedByMe && setFollowModalType('followers')}
               className={`flex flex-col items-center transition-all active:scale-95 ${isBlockedByMe ? 'opacity-30' : ''}`}
             >
-              <span className="text-xl font-black text-zinc-900 leading-none">{isBlockedByMe ? '-' : (userProfile.followersCount || 0)}</span>
-              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black mt-2">Followers</span>
+              <span className="text-base font-black text-zinc-900 leading-none">{isBlockedByMe ? '-' : (userProfile.followersCount || 0)}</span>
+              <span className="text-[8px] uppercase tracking-[0.15em] text-zinc-400 font-black mt-1.5">Followers</span>
             </button>
             <button 
               onClick={() => !isBlockedByMe && setFollowModalType('following')}
               className={`flex flex-col items-center transition-all active:scale-95 ${isBlockedByMe ? 'opacity-30' : ''}`}
             >
-              <span className="text-xl font-black text-zinc-900 leading-none">{isBlockedByMe ? '-' : (userProfile.followingCount || 0)}</span>
-              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-400 font-black mt-2">Following</span>
+              <span className="text-base font-black text-zinc-900 leading-none">{isBlockedByMe ? '-' : (userProfile.followingCount || 0)}</span>
+              <span className="text-[8px] uppercase tracking-[0.15em] text-zinc-400 font-black mt-1.5">Following</span>
             </button>
           </div>
 
-          <div className="flex gap-3 w-full">
+          <div className="flex gap-2 w-full">
             {isOwnProfile ? (
               <button 
                 onClick={() => setIsEditingProfile(true)}
-                className="flex-1 h-14 bg-zinc-900 hover:bg-zinc-800 text-white font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm shadow-2xl shadow-zinc-200"
+                className="flex-1 h-11 bg-zinc-900 hover:bg-zinc-800 text-white font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs shadow-xl shadow-zinc-100"
               >
-                <Edit2 className="w-4 h-4" />
+                <Edit2 className="w-3.5 h-3.5" />
                 Edit Profile
               </button>
             ) : (
@@ -398,9 +398,9 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                   <button 
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
-                    className="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm shadow-2xl shadow-indigo-100 disabled:opacity-70"
+                    className="flex-1 h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs shadow-xl shadow-indigo-50 disabled:opacity-70"
                   >
-                    <UserPlus className="w-4 h-4" />
+                    <UserPlus className="w-3.5 h-3.5" />
                     {isFollowedBy ? 'Follow Back' : 'Follow'}
                   </button>
                 )}
@@ -408,9 +408,9 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                   <button 
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
-                    className="flex-1 h-14 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm disabled:opacity-70"
+                    className="flex-1 h-11 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs disabled:opacity-70"
                   >
-                    <UserMinus className="w-4 h-4" />
+                    <UserMinus className="w-3.5 h-3.5" />
                     Following
                   </button>
                 )}
@@ -449,7 +449,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                       }
                     }}
                     disabled={isMessagingLoading}
-                    className="flex-1 h-14 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-3xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm disabled:opacity-50"
+                    className="flex-1 h-11 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs disabled:opacity-50"
                   >
                     {isMessagingLoading ? 'Loading...' : 'Message'}
                   </button>
@@ -461,30 +461,30 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
 
         {/* Highlights Section */}
         {!isBlockedByMe && (
-          <div className="mb-10 overflow-x-auto no-scrollbar flex gap-6 px-2">
+          <div className="mb-6 overflow-x-auto no-scrollbar flex gap-4 px-2">
             {[
               { label: 'Travel', color: 'from-orange-400 to-pink-500' },
               { label: 'Food', color: 'from-green-400 to-emerald-500' },
               { label: 'Life', color: 'from-blue-400 to-indigo-500' },
               { label: 'Art', color: 'from-purple-400 to-violet-500' },
             ].map((highlight, i) => (
-              <div key={i} className="flex flex-col items-center gap-3 flex-shrink-0 group cursor-pointer">
-                <div className={`w-16 h-16 rounded-[1.8rem] bg-gradient-to-tr ${highlight.color} p-0.5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
-                  <div className="w-full h-full rounded-[1.7rem] bg-white p-1">
-                    <div className={`w-full h-full rounded-[1.5rem] bg-gradient-to-tr ${highlight.color} opacity-80 flex items-center justify-center text-white`}>
-                      <Camera className="w-6 h-6" />
+              <div key={i} className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer">
+                <div className={`w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr ${highlight.color} p-0.5 transition-transform duration-300 group-hover:scale-105`}>
+                  <div className="w-full h-full rounded-[1.4rem] bg-white p-0.5">
+                    <div className={`w-full h-full rounded-[1.2rem] bg-gradient-to-tr ${highlight.color} opacity-80 flex items-center justify-center text-white`}>
+                      <Camera className="w-5 h-5" />
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{highlight.label}</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">{highlight.label}</span>
               </div>
             ))}
             {isOwnProfile && (
-              <div className="flex flex-col items-center gap-3 flex-shrink-0 group cursor-pointer">
-                <div className="w-16 h-16 rounded-[1.8rem] border-2 border-dashed border-zinc-200 flex items-center justify-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50">
-                  <span className="text-2xl text-zinc-300 group-hover:text-indigo-400">+</span>
+              <div className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer">
+                <div className="w-14 h-14 rounded-[1.5rem] border-2 border-dashed border-zinc-200 flex items-center justify-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50">
+                  <span className="text-xl text-zinc-300 group-hover:text-indigo-400">+</span>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">New</span>
+                <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">New</span>
               </div>
             )}
           </div>
@@ -492,39 +492,39 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       </div>
 
       {/* Grid Tabs */}
-      <div className="flex border-t border-zinc-100 sticky top-20 bg-white/90 backdrop-blur-xl z-20">
+      <div className="flex border-t border-zinc-100 sticky top-16 bg-white/90 backdrop-blur-xl z-20">
         <button 
           onClick={() => setActiveGridTab('posts')}
-          className={`flex-1 py-5 flex flex-col items-center gap-2 transition-all ${activeGridTab === 'posts' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+          className={`flex-1 py-3.5 flex flex-col items-center gap-1.5 transition-all ${activeGridTab === 'posts' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
         >
-          <Grid3X3 className="w-5 h-5" />
-          <span className={`text-[8px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'posts' ? 'opacity-100' : 'opacity-0'}`}>Feed</span>
-          {activeGridTab === 'posts' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-12 h-1 bg-zinc-900 rounded-full" />}
+          <Grid3X3 className="w-4 h-4" />
+          <span className={`text-[7px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'posts' ? 'opacity-100' : 'opacity-0'}`}>Feed</span>
+          {activeGridTab === 'posts' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
         </button>
         
         {isOwnProfile && (
           <button 
             onClick={() => setActiveGridTab('saved')}
-            className={`flex-1 py-5 flex flex-col items-center gap-2 transition-all ${activeGridTab === 'saved' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+            className={`flex-1 py-3.5 flex flex-col items-center gap-1.5 transition-all ${activeGridTab === 'saved' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
           >
-            <Bookmark className="w-5 h-5" />
-            <span className={`text-[8px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'saved' ? 'opacity-100' : 'opacity-0'}`}>Saved</span>
-            {activeGridTab === 'saved' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-12 h-1 bg-zinc-900 rounded-full" />}
+            <Bookmark className="w-4 h-4" />
+            <span className={`text-[7px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'saved' ? 'opacity-100' : 'opacity-0'}`}>Saved</span>
+            {activeGridTab === 'saved' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
           </button>
         )}
 
         <button 
           onClick={() => setActiveGridTab('tagged')}
-          className={`flex-1 py-5 flex flex-col items-center gap-2 transition-all ${activeGridTab === 'tagged' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+          className={`flex-1 py-3.5 flex flex-col items-center gap-1.5 transition-all ${activeGridTab === 'tagged' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
         >
-          <Camera className="w-5 h-5" />
-          <span className={`text-[8px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'tagged' ? 'opacity-100' : 'opacity-0'}`}>Tagged</span>
-          {activeGridTab === 'tagged' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-12 h-1 bg-zinc-900 rounded-full" />}
+          <Camera className="w-4 h-4" />
+          <span className={`text-[7px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'tagged' ? 'opacity-100' : 'opacity-0'}`}>Tagged</span>
+          {activeGridTab === 'tagged' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
         </button>
       </div>
 
       {/* Grid Content */}
-      <div className="px-1 pt-1">
+      <div className="px-2 pt-2 pb-24">
         {isBlockedByMe ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-500 px-10 text-center">
             <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
@@ -547,9 +547,46 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
             </p>
             <p className="text-sm text-zinc-400 font-medium">Capture and share your first moment.</p>
           </div>
+        ) : activeGridTab === 'saved' ? (
+          /* Editorial 2-Column Layout for Saved Posts */
+          <div className="grid grid-cols-2 gap-4">
+            {savedPosts.map((post, index) => (
+              <motion.div 
+                key={post.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="flex flex-col gap-3 group cursor-pointer"
+                onClick={() => setSelectedPost(post)}
+              >
+                <div className="aspect-[3/4] bg-zinc-100 rounded-[2rem] overflow-hidden relative shadow-sm group-hover:shadow-xl transition-all duration-500">
+                  <img 
+                    src={getOptimizedImageUrl(post.imageUrl, 600)} 
+                    alt="Saved post" 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-4 right-4 p-2 bg-white/20 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Bookmark className="w-4 h-4 fill-current" />
+                  </div>
+                </div>
+                <div className="px-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserAvatar userId={post.authorId} size={20} className="rounded-lg" />
+                    <span className="text-[10px] font-black text-zinc-900 uppercase tracking-tight">{post.authorName}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-zinc-400">
+                    <Heart className="w-3 h-3" />
+                    <span className="text-[9px] font-bold">{post.likesCount}</span>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         ) : (
-          <div className="grid grid-cols-3 gap-1">
-            {(activeGridTab === 'posts' ? posts : activeGridTab === 'saved' ? savedPosts : []).map((post, index) => (
+          /* Standard 3-Column Grid for Posts */
+          <div className="grid grid-cols-3 gap-1.5">
+            {posts.map((post, index) => (
               <motion.div 
                 key={post.id}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -565,15 +602,21 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                   onClick={() => setSelectedPost(post)}
                 />
                 <div 
-                  className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center text-white backdrop-blur-[2px]"
+                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center text-white backdrop-blur-[4px]"
                   onClick={() => setSelectedPost(post)}
                 >
-                  <div className="flex flex-col items-center gap-1">
-                    <Heart className="w-6 h-6 fill-white" />
-                    <span className="font-black text-xs">{post.likesCount}</span>
+                  <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Heart className="w-5 h-5 fill-white" />
+                      <span className="font-black text-[10px] tracking-widest uppercase">{(post.likesCount || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <MessageCircle className="w-5 h-5 fill-white" />
+                      <span className="font-black text-[10px] tracking-widest uppercase">{(post.commentsCount || 0).toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
-                {isOwnProfile && activeGridTab === 'posts' && (
+                {isOwnProfile && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

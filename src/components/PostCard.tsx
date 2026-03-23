@@ -340,13 +340,13 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
 
       {/* Image */}
       <div 
-        className="w-full aspect-square bg-zinc-100 relative cursor-pointer overflow-hidden"
+        className="w-full max-h-[500px] bg-zinc-50 relative cursor-pointer overflow-y-auto custom-scrollbar"
         onClick={handleDoubleTap}
       >
         <img 
           src={getOptimizedImageUrl(post.imageUrl, 800)} 
           alt="Post content" 
-          className="w-full h-full object-cover"
+          className="w-full h-auto block"
           referrerPolicy="no-referrer"
           loading="lazy"
         />
