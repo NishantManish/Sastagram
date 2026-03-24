@@ -338,18 +338,29 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         post={post}
       />
 
-      {/* Image */}
+      {/* Image/Video */}
       <div 
         className="w-full max-h-[500px] bg-zinc-50 relative cursor-pointer overflow-y-auto custom-scrollbar"
         onClick={handleDoubleTap}
       >
-        <img 
-          src={getOptimizedImageUrl(post.imageUrl, 800)} 
-          alt="Post content" 
-          className="w-full h-auto block"
-          referrerPolicy="no-referrer"
-          loading="lazy"
-        />
+        {post.imageUrl && (
+          post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/') ? (
+            <video 
+              src={post.imageUrl} 
+              controls 
+              playsInline
+              className="w-full h-auto block"
+            />
+          ) : (
+            <img 
+              src={getOptimizedImageUrl(post.imageUrl, 800)} 
+              alt="Post content" 
+              className="w-full h-auto block"
+              referrerPolicy="no-referrer"
+              loading="lazy"
+            />
+          )
+        )}
         
         <AnimatePresence>
           {showHeartAnimation && (

@@ -133,6 +133,10 @@ service cloud.firestore {
       return request.resource.data.get(field, null) == resource.data.get(field, null);
     }
 
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
     function isValidOptionalNumber(field) {
       return !(field in request.resource.data) || 
              request.resource.data[field] == null || 
@@ -412,6 +416,12 @@ service cloud.firestore {
                     isValidFollow() &&
                     request.resource.data.followerId == request.auth.uid &&
                     followId == request.auth.uid + '_' + request.resource.data.followingId;
+                    
+      allow update: if isAuthenticated() && 
+                    isValidFollow() &&
+                    request.resource.data.followerId == request.auth.uid &&
+                    followId == request.auth.uid + '_' + request.resource.data.followingId &&
+                    areImmutableFieldsUnchanged(['followerId', 'followingId']);
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.followerId == request.auth.uid);
     }

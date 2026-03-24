@@ -6,6 +6,8 @@ import Cropper from 'react-easy-crop';
 import getCroppedImg from '../utils/cropImage';
 import { Highlight } from '../types';
 import { updateHighlight, deleteHighlight } from '../services/highlightService';
+import { deleteFromCloudinary } from '../utils/media';
+import ConfirmationModal from './ConfirmationModal';
 
 interface EditHighlightModalProps {
   highlight: Highlight;
@@ -24,7 +26,10 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
       isExisting: true
     }))
   );
+  const [removedMediaUrls, setRemovedMediaUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -71,7 +76,9 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
 
   const removeMedia = (index: number) => {
     const previewToRemove = mediaPreviews[index];
-    if (!previewToRemove.isExisting) {
+    if (previewToRemove.isExisting) {
+      setRemovedMediaUrls(prev => [...prev, previewToRemove.url]);
+    } else {
       // Find the corresponding file in mediaFiles and remove it
       // This is a bit tricky because mediaFiles only contains NEW files
       // We need to count how many NEW files are before this index
@@ -169,6 +176,16 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
         mediaUrls: finalMediaUrls,
       });
 
+      // Delete removed media from Cloudinary
+      if (removedMediaUrls.length > 0) {
+        await Promise.all(removedMediaUrls.map(url => deleteFromCloudinary(url).catch(console.error)));
+      }
+
+      // Delete old cover if it was changed
+      if (imageFile && highlight.imageUrl) {
+        await deleteFromCloudinary(highlight.imageUrl).catch(console.error);
+      }
+
       onClose();
     } catch (err) {
       setError('Failed to update highlight. Please try again.');
@@ -178,15 +195,14 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
   };
 
   const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this highlight?')) {
-      setLoading(true);
-      try {
-        await deleteHighlight(highlight.id, highlight);
-        onClose();
-      } catch (err) {
-        setError('Failed to delete highlight.');
-        setLoading(false);
-      }
+    setIsDeleting(true);
+    try {
+      await deleteHighlight(highlight.id, highlight);
+      onClose();
+    } catch (err) {
+      setError('Failed to delete highlight.');
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -233,7 +249,7 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
             <div className="flex items-center gap-2">
               <button 
                 type="button"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="p-2 hover:bg-red-50 text-red-500 rounded-full transition-colors"
                 title="Delete highlight"
               >
@@ -333,13 +349,24 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isDeleting}
               className="w-full py-3.5 bg-zinc-900 text-white font-black uppercase tracking-widest text-xs rounded-xl hover:bg-zinc-800 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
             </button>
           </form>
         </motion.div>
+
+        <ConfirmationModal
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDelete}
+          isLoading={isDeleting}
+          title="Delete Highlight"
+          message="Are you sure you want to delete this highlight? This action cannot be undone."
+          confirmText="Delete"
+          isDanger={true}
+        />
       </div>
     </AnimatePresence>
   );

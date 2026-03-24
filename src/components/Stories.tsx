@@ -432,17 +432,27 @@ export default function Stories() {
               </div>
             </div>
 
-            {/* Image and Navigation */}
+            {/* Image/Video and Navigation */}
             <div 
               className="flex-1 flex items-center justify-center relative touch-none"
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
             >
-              <img 
-                src={getOptimizedImageUrl(activeStory.imageUrl, 1080)} 
-                alt="Story" 
-                className="max-w-full max-h-full object-contain pointer-events-none"
-              />
+              {activeStory.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || activeStory.imageUrl?.includes('/video/upload/') ? (
+                <video 
+                  src={activeStory.imageUrl} 
+                  autoPlay
+                  playsInline
+                  onEnded={handleNextStory}
+                  className="max-w-full max-h-full object-contain pointer-events-none"
+                />
+              ) : (
+                <img 
+                  src={getOptimizedImageUrl(activeStory.imageUrl, 1080)} 
+                  alt="Story" 
+                  className="max-w-full max-h-full object-contain pointer-events-none"
+                />
+              )}
             </div>
 
             {/* Viewers Button (Only for author) */}

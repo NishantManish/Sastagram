@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Notification } from '../types';
 import { formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns';
-import { Bell, Heart, MessageCircle, UserPlus, ArrowLeft, MoreHorizontal } from 'lucide-react';
+import { Bell, Heart, MessageCircle, UserPlus, ArrowLeft, MoreHorizontal, Check, Trash2, X } from 'lucide-react';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
@@ -17,6 +17,10 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
+  const [showMenu, setShowMenu] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -79,6 +83,39 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
     return Object.entries(groups).filter(([_, items]) => items.length > 0);
   }, [filteredNotifications]);
 
+  const toggleSelectNotification = (id: string) => {
+    setSelectedNotifications(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedNotifications.length === 0 || !auth.currentUser) return;
+    
+    setIsDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      selectedNotifications.forEach(id => {
+        batch.delete(doc(db, 'notifications', id));
+      });
+      await batch.commit();
+      setSelectedNotifications([]);
+      setIsSelectMode(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'notifications');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedNotifications.length === filteredNotifications.length) {
+      setSelectedNotifications([]);
+    } else {
+      setSelectedNotifications(filteredNotifications.map(n => n.id));
+    }
+  };
+
   if (selectedUserId) {
     return (
       <Profile 
@@ -101,7 +138,17 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
       {/* Header */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl border-b border-zinc-100/50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {onBack && (
+          {isSelectMode ? (
+            <button 
+              onClick={() => {
+                setIsSelectMode(false);
+                setSelectedNotifications([]);
+              }}
+              className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100/80 rounded-2xl transition-all active:scale-95"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          ) : onBack && (
             <button 
               onClick={onBack}
               className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100/80 rounded-2xl transition-all active:scale-95"
@@ -109,11 +156,59 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Activity</h1>
+          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
+            {isSelectMode ? `${selectedNotifications.length} Selected` : 'Activity'}
+          </h1>
         </div>
-        <button className="p-2 text-zinc-400 hover:bg-zinc-100/80 rounded-2xl transition-all">
-          <MoreHorizontal className="w-5 h-5" />
-        </button>
+        
+        <div className="relative">
+          <button 
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-2 text-zinc-400 hover:bg-zinc-100/80 rounded-2xl transition-all"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+          </button>
+
+          <AnimatePresence>
+            {showMenu && (
+              <>
+                <div 
+                  className="fixed inset-0 z-30" 
+                  onClick={() => setShowMenu(false)} 
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-zinc-100 py-2 z-40 overflow-hidden"
+                >
+                  <button
+                    onClick={() => {
+                      setIsSelectMode(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-4 py-2.5 text-left text-sm font-semibold text-zinc-700 hover:bg-zinc-50 flex items-center gap-3"
+                  >
+                    <Check className="w-4 h-4" />
+                    Select Notifications
+                  </button>
+                  {isSelectMode && (
+                    <button
+                      onClick={() => {
+                        handleSelectAll();
+                        setShowMenu(false);
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm font-semibold text-zinc-700 hover:bg-zinc-50 flex items-center gap-3"
+                    >
+                      <Bell className="w-4 h-4" />
+                      {selectedNotifications.length === filteredNotifications.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {filteredNotifications.length === 0 ? (
@@ -141,9 +236,20 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                     key={notification.id} 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    onClick={() => setSelectedUserId(notification.senderId)}
-                    className={`group relative p-3 flex items-center gap-4 rounded-2xl transition-all hover:bg-zinc-50 cursor-pointer ${!notification.read ? 'bg-indigo-50/30' : ''}`}
+                    onClick={() => {
+                      if (isSelectMode) {
+                        toggleSelectNotification(notification.id);
+                      } else {
+                        setSelectedUserId(notification.senderId);
+                      }
+                    }}
+                    className={`group relative p-3 flex items-center gap-4 rounded-2xl transition-all hover:bg-zinc-50 cursor-pointer ${!notification.read ? 'bg-indigo-50/30' : ''} ${selectedNotifications.includes(notification.id) ? 'bg-indigo-50/50 ring-1 ring-indigo-200' : ''}`}
                   >
+                    {isSelectMode && (
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${selectedNotifications.includes(notification.id) ? 'bg-indigo-600 border-indigo-600' : 'border-zinc-300'}`}>
+                        {selectedNotifications.includes(notification.id) && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                    )}
                     <div className="relative shrink-0">
                       <UserAvatar 
                         userId={notification.senderId} 
@@ -185,6 +291,28 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {isSelectMode && selectedNotifications.length > 0 && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs">
+          <motion.button
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            onClick={handleDeleteSelected}
+            disabled={isDeleting}
+            className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl shadow-2xl shadow-red-200 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
+          >
+            {isDeleting ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <Trash2 className="w-5 h-5" />
+                Delete {selectedNotifications.length} Notifications
+              </>
+            )}
+          </motion.button>
         </div>
       )}
     </div>

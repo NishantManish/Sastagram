@@ -45,7 +45,6 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       })) as Chat[];
       
       setChats(fetchedChats);
-      setLoading(false);
 
       // Fetch user details for chats
       const userIds = new Set<string>();
@@ -68,6 +67,10 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       if (Object.keys(usersData).length > 0) {
         setChatUsers(prev => ({ ...prev, ...usersData }));
       }
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'chats');
+      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -89,6 +92,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       })) as Message[];
       setMessages(fetchedMessages);
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `chats/${selectedChat.id}/messages`);
     });
 
     return () => unsubscribe();
@@ -290,6 +295,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                 <img 
                   src={getOptimizedImageUrl(otherUser.photoURL, 64, 64)} 
                   alt={otherUser.displayName || ''} 
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover" 
                   referrerPolicy="no-referrer" 
                 />
@@ -309,52 +316,63 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 bg-zinc-50/50">
-          {messages.map((msg, index) => {
-            const isMine = msg.senderId === auth.currentUser?.uid;
-            const isLastMessage = index === messages.length - 1;
-            const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
-            const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
+              <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mb-4">
+                <MessageSquare className="w-8 h-8 text-zinc-400" />
+              </div>
+              <p className="text-zinc-500 text-sm font-medium">No messages yet. Say hello!</p>
+            </div>
+          ) : (
+            messages.map((msg, index) => {
+              const isMine = msg.senderId === auth.currentUser?.uid;
+              const isLastMessage = index === messages.length - 1;
+              const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
+              const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
 
-            const showTime = index === 0 || 
-              (msg.createdAt && messages[index - 1]?.createdAt && 
-               msg.createdAt.toMillis() - messages[index - 1].createdAt.toMillis() > 5 * 60 * 1000);
+              const showTime = index === 0 || 
+                (msg.createdAt && messages[index - 1]?.createdAt && 
+                 msg.createdAt.toMillis() - messages[index - 1].createdAt.toMillis() > 5 * 60 * 1000);
 
-            return (
-              <motion.div 
-                key={msg.id} 
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
-              >
-                {showTime && msg.createdAt && (
-                  <span className="text-[10px] font-medium text-zinc-400 mb-2 px-2 uppercase tracking-wider">
-                    {formatDistanceToNow(msg.createdAt.toDate(), { addSuffix: true })}
-                  </span>
-                )}
-                <div 
-                  className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm ${
-                    isMine 
-                      ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
-                      : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
-                  }`}
+              return (
+                <motion.div 
+                  key={msg.id} 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                 >
-                  {msg.attachmentUrl && (
-                    <img 
-                      src={getOptimizedImageUrl(msg.attachmentUrl, 600)} 
-                      alt="Attachment" 
-                      className="rounded-xl mb-2 max-w-full border border-black/5" 
-                      referrerPolicy="no-referrer" 
-                    />
+                  {showTime && msg.createdAt && (
+                    <span className="text-[10px] font-medium text-zinc-400 mb-2 px-2 uppercase tracking-wider">
+                      {formatDistanceToNow(msg.createdAt.toDate(), { addSuffix: true })}
+                    </span>
                   )}
-                  {msg.text && <p className="text-[15px] leading-relaxed">{msg.text}</p>}
-                </div>
-                {isRead && (
-                  <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
-                )}
-              </motion.div>
-            );
-          })}
+                  <div 
+                    className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm ${
+                      isMine 
+                        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
+                        : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
+                    }`}
+                  >
+                    {msg.attachmentUrl && (
+                      <img 
+                        src={getOptimizedImageUrl(msg.attachmentUrl, 400)} 
+                        alt="Attachment" 
+                        loading="lazy"
+                        decoding="async"
+                        className="rounded-xl mb-2 max-w-full border border-black/5" 
+                        referrerPolicy="no-referrer" 
+                      />
+                    )}
+                    {msg.text && <p className="text-[15px] leading-relaxed">{msg.text}</p>}
+                  </div>
+                  {isRead && (
+                    <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
+                  )}
+                </motion.div>
+              );
+            })
+          )}
           {Object.entries(currentChat.typingStatus || {}).map(([userId, isTyping]) => {
             if (isTyping && userId !== auth.currentUser?.uid) {
               return (
@@ -518,6 +536,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                     <img 
                       src={getOptimizedImageUrl(otherUser.photoURL, 96, 96)} 
                       alt={otherUser.displayName || ''} 
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover" 
                       referrerPolicy="no-referrer" 
                     />

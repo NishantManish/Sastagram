@@ -217,14 +217,23 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
         className="relative w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col md:flex-row"
       >
         
-        {/* Left side: Post Image (hidden on small screens, shown on md+) */}
+        {/* Left side: Post Image/Video (hidden on small screens, shown on md+) */}
         <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center">
-          <img 
-            src={getOptimizedImageUrl(post.imageUrl, 1200)} 
-            alt="Post content" 
-            className="max-w-full max-h-full object-contain"
-            referrerPolicy="no-referrer"
-          />
+          {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
+            <video 
+              src={post.imageUrl} 
+              controls 
+              playsInline
+              className="max-w-full max-h-full object-contain"
+            />
+          ) : (
+            <img 
+              src={getOptimizedImageUrl(post.imageUrl, 1200)} 
+              alt="Post content" 
+              className="max-w-full max-h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+          )}
         </div>
 
         {/* Right side: Details & Comments */}
@@ -285,14 +294,23 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
             confirmText="Delete"
           />
           
-          {/* Mobile Image (only visible on small screens) */}
+          {/* Mobile Image/Video (only visible on small screens) */}
           <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center">
-             <img 
-              src={getOptimizedImageUrl(post.imageUrl, 800)} 
-              alt="Post content" 
-              className="max-w-full max-h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+            {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
+              <video 
+                src={post.imageUrl} 
+                controls 
+                playsInline
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <img 
+                src={getOptimizedImageUrl(post.imageUrl, 800)} 
+                alt="Post content" 
+                className="max-w-full max-h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </div>
 
           {/* Comments Area */}

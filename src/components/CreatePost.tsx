@@ -2,6 +2,7 @@ import React, { useState, FormEvent, useRef, useCallback } from 'react';
 import { addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { deleteFromCloudinary } from '../utils/media';
 import { ImagePlus, Loader2, Upload, Camera, Layout, X, Crop as CropIcon } from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '../utils/cropImage';
@@ -115,7 +116,9 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
             createdAt: serverTimestamp(),
           });
         } catch (err) {
+          await deleteFromCloudinary(downloadURL).catch(console.error);
           handleFirestoreError(err, OperationType.CREATE, 'posts');
+          throw err;
         }
       } else {
         try {
@@ -131,7 +134,9 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
             expiresAt: Timestamp.fromDate(expiresAt),
           });
         } catch (err) {
+          await deleteFromCloudinary(downloadURL).catch(console.error);
           handleFirestoreError(err, OperationType.CREATE, 'stories');
+          throw err;
         }
       }
       

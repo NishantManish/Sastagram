@@ -274,7 +274,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   return (
     <div className="max-w-md mx-auto pb-24 bg-white min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-2xl border-b border-zinc-100/50 px-6 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-2xl border-b border-zinc-100/50 px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {(viewedUserId || onBack) && (
             <button 
@@ -286,14 +286,16 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
           )}
           <div className="flex flex-col">
             <h1 className="text-base font-black text-zinc-900 tracking-tight leading-none">
-              {userProfile.username || userProfile.displayName}
+              {userProfile.displayName || userProfile.username}
             </h1>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
-              <span className="text-[8px] uppercase tracking-[0.2em] text-zinc-400 font-black">
-                {isOwnProfile ? 'Your Space' : 'Creator'}
-              </span>
-            </div>
+            {!isOwnProfile && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
+                <span className="text-[8px] uppercase tracking-[0.2em] text-zinc-400 font-black">
+                  Creator
+                </span>
+              </div>
+            )}
           </div>
         </div>
         
@@ -324,7 +326,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 initial={{ opacity: 0, scale: 0.95, y: -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                className="absolute right-6 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
+                className="absolute right-4 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
               >
                 <button
                   onClick={async () => {
@@ -368,7 +370,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 initial={{ opacity: 0, scale: 0.95, y: -10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                className="absolute right-6 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
+                className="absolute right-4 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
               >
                 <button
                   onClick={() => {
@@ -394,7 +396,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       </header>
 
       {/* Profile Content */}
-      <div className="px-8 pt-6 pb-4">
+      <div className="px-4 pt-12 pb-4">
         <div className="flex flex-col items-center text-center mb-6">
           <div className="relative mb-4">
             <div className="absolute -inset-1.5 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur-lg opacity-20 animate-pulse"></div>
@@ -627,12 +629,21 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 onClick={() => setSelectedPost(post)}
               >
                 <div className="aspect-[3/4] bg-zinc-100 rounded-[2rem] overflow-hidden relative shadow-sm group-hover:shadow-xl transition-all duration-500">
-                  <img 
-                    src={getOptimizedImageUrl(post.imageUrl, 600)} 
-                    alt="Saved post" 
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    referrerPolicy="no-referrer"
-                  />
+                  {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
+                    <video 
+                      src={post.imageUrl} 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      muted
+                      playsInline
+                    />
+                  ) : (
+                    <img 
+                      src={getOptimizedImageUrl(post.imageUrl, 600)} 
+                      alt="Saved post" 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
                   <div className="absolute top-4 right-4 p-2 bg-white/20 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
                     <Bookmark className="w-4 h-4 fill-current" />
                   </div>
@@ -661,13 +672,23 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 transition={{ delay: index * 0.03 }}
                 className="aspect-square bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl"
               >
-                <img 
-                  src={getOptimizedImageUrl(post.imageUrl, 400, 400)} 
-                  alt="Post" 
-                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                  referrerPolicy="no-referrer"
-                  onClick={() => setSelectedPost(post)}
-                />
+                {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
+                  <video 
+                    src={post.imageUrl} 
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    muted
+                    playsInline
+                    onClick={() => setSelectedPost(post)}
+                  />
+                ) : (
+                  <img 
+                    src={getOptimizedImageUrl(post.imageUrl, 400, 400)} 
+                    alt="Post" 
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                    referrerPolicy="no-referrer"
+                    onClick={() => setSelectedPost(post)}
+                  />
+                )}
                 <div 
                   className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center text-white backdrop-blur-[4px]"
                   onClick={() => setSelectedPost(post)}

@@ -3,6 +3,7 @@ import { X, Upload, Loader2, Crop as CropIcon, ImagePlus } from 'lucide-react';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { deleteFromCloudinary } from '../utils/media';
 import { motion, AnimatePresence } from 'motion/react';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '../utils/cropImage';
@@ -135,16 +136,30 @@ export default function CreateHighlightModal({ onClose }: CreateHighlightModalPr
       const coverUrl = await uploadToCloudinary(imageFile);
       
       // Upload all media
-      const mediaUrls = await Promise.all(mediaFiles.map(file => uploadToCloudinary(file)));
+      let mediaUrls: string[] = [];
+      try {
+        mediaUrls = await Promise.all(mediaFiles.map(file => uploadToCloudinary(file)));
+      } catch (uploadErr) {
+        // Cleanup cover if media upload fails
+        await deleteFromCloudinary(coverUrl).catch(console.error);
+        throw uploadErr;
+      }
 
       // Create highlight document
-      await addDoc(collection(db, 'highlights'), {
-        userId: auth.currentUser.uid,
-        label: label.trim(),
-        imageUrl: coverUrl,
-        mediaUrls: mediaUrls,
-        createdAt: serverTimestamp()
-      });
+      try {
+        await addDoc(collection(db, 'highlights'), {
+          userId: auth.currentUser.uid,
+          label: label.trim(),
+          imageUrl: coverUrl,
+          mediaUrls: mediaUrls,
+          createdAt: serverTimestamp()
+        });
+      } catch (dbErr) {
+        // Cleanup all uploaded media if DB save fails
+        await deleteFromCloudinary(coverUrl).catch(console.error);
+        await Promise.all(mediaUrls.map(url => deleteFromCloudinary(url).catch(console.error)));
+        throw dbErr;
+      }
 
       onClose();
     } catch (err) {
