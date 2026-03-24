@@ -324,7 +324,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                   >
                     {post.authorName}
                   </button>
-                  <span className="text-sm text-zinc-800">{post.caption}</span>
+                  <span className="text-sm text-zinc-800 whitespace-pre-wrap">{post.caption}</span>
                   <div className="text-xs text-zinc-500 mt-1">
                     {post.createdAt?.toDate ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
                   </div>

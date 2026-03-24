@@ -415,7 +415,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           >
             {post.authorName}
           </button>
-          <span className="text-zinc-800">{post.caption}</span>
+          <span className="text-zinc-800 whitespace-pre-wrap">{post.caption}</span>
         </div>
 
         <div className="text-[11px] text-zinc-400 font-bold uppercase tracking-widest mt-2.5">

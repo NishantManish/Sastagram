@@ -196,6 +196,27 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
     }
   };
 
+  const handleShareProfile = async () => {
+    const shareData = {
+      title: `${userProfile?.displayName} on Social App`,
+      text: `Check out ${userProfile?.displayName}'s profile!`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Profile link copied to clipboard!');
+      }
+    } catch (err) {
+      console.error('Error sharing profile:', err);
+    }
+    setShowOptionsMenu(false);
+    setShowProfileMenu(false);
+  };
+
   if (!targetUserId || !userProfile) return null;
 
   if (amIBlocked) {
@@ -299,7 +320,10 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                     </>
                   )}
                 </button>
-                <button className="w-full px-3 py-2.5 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-zinc-50 text-zinc-900">
+                <button 
+                  onClick={handleShareProfile}
+                  className="w-full px-3 py-2.5 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-zinc-50 text-zinc-900"
+                >
                   <Share2 className="w-3.5 h-3.5" />
                   Share Profile
                 </button>
@@ -324,6 +348,13 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   Logout
+                </button>
+                <button 
+                  onClick={handleShareProfile}
+                  className="w-full px-3 py-3 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-zinc-50 transition-colors text-zinc-900"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Share Profile
                 </button>
               </motion.div>
             </>
@@ -357,7 +388,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
           )}
           
           {userProfile.bio && (
-            <p className="text-zinc-500 text-xs leading-relaxed font-medium max-w-[240px] mb-6">
+            <p className="text-zinc-500 text-xs leading-relaxed font-medium max-w-[240px] mb-6 whitespace-pre-wrap">
               {userProfile.bio}
             </p>
           )}
