@@ -328,6 +328,7 @@ service cloud.firestore {
                       // Admin can update anything
                       isAdmin()
                     );
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     function isValidMessage() {

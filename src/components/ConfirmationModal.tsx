@@ -12,6 +12,7 @@ interface ConfirmationModalProps {
   cancelText?: string;
   isDanger?: boolean;
   isLoading?: boolean;
+  countdown?: number;
 }
 
 export default function ConfirmationModal({
@@ -24,6 +25,7 @@ export default function ConfirmationModal({
   cancelText = 'Cancel',
   isDanger = true,
   isLoading = false,
+  countdown = 0,
 }: ConfirmationModalProps) {
   return (
     <AnimatePresence>
@@ -46,10 +48,10 @@ export default function ConfirmationModal({
               <div className="flex flex-col gap-2">
                 <button
                   onClick={onConfirm}
-                  disabled={isLoading}
+                  disabled={isLoading || countdown > 0}
                   className={`w-full py-3 ${isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold rounded-xl transition-colors disabled:opacity-50`}
                 >
-                  {isLoading ? 'Processing...' : confirmText}
+                  {isLoading ? 'Processing...' : countdown > 0 ? `${confirmText} (${countdown}s)` : confirmText}
                 </button>
                 <button
                   onClick={onClose}

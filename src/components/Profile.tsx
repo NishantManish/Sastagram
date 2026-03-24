@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, getDocs, addDoc } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { signOut, deleteUser } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
-import { Post, User, Highlight } from '../types';
+import { Post, User, Highlight, Story, Message } from '../types';
 import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle, Plus } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import EditProfileModal from './EditProfileModal';
@@ -50,6 +50,127 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
   const [viewingHighlight, setViewingHighlight] = useState<Highlight | null>(null);
+
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [deleteAccountCountdown, setDeleteAccountCountdown] = useState(10);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showDeleteAccountConfirm && deleteAccountCountdown > 0) {
+      timer = setInterval(() => {
+        setDeleteAccountCountdown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [showDeleteAccountConfirm, deleteAccountCountdown]);
+
+  const handleDeleteAccount = async () => {
+    if (!auth.currentUser) return;
+    setIsDeletingAccount(true);
+    try {
+      const uid = auth.currentUser.uid;
+      const batch = writeBatch(db);
+      const mediaToDelete: string[] = [];
+
+      // 1. User document & photo
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as User;
+        if (userData.photoURL) mediaToDelete.push(userData.photoURL);
+        batch.delete(userDoc.ref);
+      }
+
+      // 2. Posts & media
+      const postsRef = collection(db, 'posts');
+      const postsSnap = await getDocs(query(postsRef, where('authorId', '==', uid)));
+      postsSnap.docs.forEach(d => {
+        const data = d.data() as Post;
+        if (data.imageUrl) mediaToDelete.push(data.imageUrl);
+        batch.delete(d.ref);
+      });
+
+      // 3. Highlights & media
+      const highlightsRef = collection(db, 'highlights');
+      const highlightsSnap = await getDocs(query(highlightsRef, where('userId', '==', uid)));
+      highlightsSnap.docs.forEach(d => {
+        const data = d.data() as Highlight;
+        if (data.imageUrl) mediaToDelete.push(data.imageUrl);
+        if (data.mediaUrls) mediaToDelete.push(...data.mediaUrls);
+        batch.delete(d.ref);
+      });
+
+      // 4. Stories & media
+      const storiesRef = collection(db, 'stories');
+      const storiesSnap = await getDocs(query(storiesRef, where('authorId', '==', uid)));
+      storiesSnap.docs.forEach(d => {
+        const data = d.data() as Story;
+        if (data.imageUrl) mediaToDelete.push(data.imageUrl);
+        batch.delete(d.ref);
+      });
+
+      // 5. Messages & media
+      const messagesRef = collection(db, 'messages');
+      const messagesSnap = await getDocs(query(messagesRef, where('senderId', '==', uid)));
+      messagesSnap.docs.forEach(d => {
+        const data = d.data() as Message;
+        if (data.attachmentUrl) mediaToDelete.push(data.attachmentUrl);
+        batch.delete(d.ref);
+      });
+
+      // 6. Notifications
+      const notificationsRef = collection(db, 'notifications');
+      const notificationsSnap = await getDocs(query(notificationsRef, where('userId', '==', uid)));
+      notificationsSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // 7. Likes
+      const likesRef = collection(db, 'likes');
+      const likesSnap = await getDocs(query(likesRef, where('userId', '==', uid)));
+      likesSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // 8. Comments
+      const commentsRef = collection(db, 'comments');
+      const commentsSnap = await getDocs(query(commentsRef, where('authorId', '==', uid)));
+      commentsSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // 9. Saved Posts
+      const savedPostsRef = collection(db, 'savedPosts');
+      const savedPostsSnap = await getDocs(query(savedPostsRef, where('userId', '==', uid)));
+      savedPostsSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // 10. Follows
+      const followsRef = collection(db, 'follows');
+      const followerSnap = await getDocs(query(followsRef, where('followerId', '==', uid)));
+      followerSnap.docs.forEach(d => batch.delete(d.ref));
+      const followingSnap = await getDocs(query(followsRef, where('followingId', '==', uid)));
+      followingSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // Delete all media from Cloudinary
+      try {
+        await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url)));
+      } catch (err) {
+        console.error('Error deleting media from Cloudinary:', err);
+      }
+
+      // Commit the batch
+      await batch.commit();
+
+      // 10. Delete auth user
+      await deleteUser(auth.currentUser);
+      
+      // Redirect or refresh
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error deleting account:', error);
+      if (error.code === 'auth/requires-recent-login') {
+        alert('This action requires a recent login. Please log out and log back in to delete your account.');
+      } else {
+        alert('Failed to delete account. Please try again.');
+      }
+      setIsDeletingAccount(false);
+      setShowDeleteAccountConfirm(false);
+    }
+  };
   const [activeHighlightMenu, setActiveHighlightMenu] = useState<string | null>(null);
   const [highlightToDelete, setHighlightToDelete] = useState<Highlight | null>(null);
   const [isDeletingHighlight, setIsDeletingHighlight] = useState(false);
@@ -389,11 +510,34 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
                   <Share2 className="w-3.5 h-3.5" />
                   Share Profile
                 </button>
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    setDeleteAccountCountdown(10);
+                    setShowDeleteAccountConfirm(true);
+                  }}
+                  className="w-full px-3 py-3 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-red-50 transition-colors text-red-600 border-t border-zinc-100 mt-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Account
+                </button>
               </motion.div>
             </>
           )}
         </AnimatePresence>
       </header>
+
+      <ConfirmationModal
+        isOpen={showDeleteAccountConfirm}
+        onClose={() => setShowDeleteAccountConfirm(false)}
+        onConfirm={handleDeleteAccount}
+        isLoading={isDeletingAccount}
+        countdown={deleteAccountCountdown}
+        title="Delete Account Permanently"
+        message="Are you sure you want to delete your account? This action is permanent and will delete all your posts, highlights, and profile data. You cannot undo this."
+        confirmText="Delete Account"
+        isDanger={true}
+      />
 
       {/* Profile Content */}
       <div className="px-4 pt-12 pb-4">

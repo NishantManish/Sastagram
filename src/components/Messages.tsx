@@ -38,36 +38,16 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       orderBy('updatedAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedChats = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Chat[];
       
       setChats(fetchedChats);
-
-      // Fetch user details for chats
-      const userIds = new Set<string>();
-      fetchedChats.forEach(chat => {
-        chat.participants.forEach(id => {
-          if (id !== auth.currentUser?.uid) userIds.add(id);
-        });
-      });
-
-      const usersData: Record<string, User> = {};
-      for (const id of Array.from(userIds)) {
-        if (!chatUsers[id]) {
-          const userDoc = await getDoc(doc(db, 'users', id));
-          if (userDoc.exists()) {
-            usersData[id] = { uid: userDoc.id, ...userDoc.data() } as User;
-          }
-        }
+      if (fetchedChats.length === 0) {
+        setLoading(false);
       }
-      
-      if (Object.keys(usersData).length > 0) {
-        setChatUsers(prev => ({ ...prev, ...usersData }));
-      }
-      setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'chats');
       setLoading(false);
@@ -75,6 +55,46 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch user details for chats
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (chats.length === 0) return;
+
+      const userIds = new Set<string>();
+      chats.forEach(chat => {
+        chat.participants.forEach(id => {
+          if (id !== auth.currentUser?.uid) userIds.add(id);
+        });
+      });
+
+      const missingIds = Array.from(userIds).filter(id => !chatUsers[id]);
+      if (missingIds.length === 0) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const usersData: Record<string, User> = {};
+        await Promise.all(missingIds.map(async (id) => {
+          const userDoc = await getDoc(doc(db, 'users', id));
+          if (userDoc.exists()) {
+            usersData[id] = { uid: userDoc.id, ...userDoc.data() } as User;
+          }
+        }));
+        
+        if (Object.keys(usersData).length > 0) {
+          setChatUsers(prev => ({ ...prev, ...usersData }));
+        }
+      } catch (error) {
+        console.error('Error fetching chat users:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, [chats]);
 
   // Handle messages subscription
   useEffect(() => {
@@ -281,8 +301,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
     const isBlocked = otherUser ? (blockedIds.includes(otherUser.uid) || blockedByIds.includes(otherUser.uid)) : false;
     
     return (
-      <div className="max-w-md mx-auto bg-white min-h-screen flex flex-col">
-        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+      <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
           <button onClick={() => setSelectedChat(null)} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -315,7 +335,7 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 bg-zinc-50/50">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/50">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
               <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mb-4">
@@ -408,7 +428,7 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-zinc-200 p-3 max-w-md mx-auto pb-safe shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.05)]">
+        <div className="bg-white/90 backdrop-blur-md border-t border-zinc-200 p-3 pb-safe shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.05)] shrink-0">
           {isBlocked ? (
             <div className="flex items-center justify-center gap-2 text-zinc-500 text-sm py-2">
               <ShieldAlert className="w-4 h-4" />
@@ -470,8 +490,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
   }
 
   return (
-    <div className="max-w-md mx-auto pb-20 bg-white min-h-screen">
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+    <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
         {onBack && (
           <button onClick={onBack} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -480,38 +500,39 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
         <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Messages</h1>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center h-40">
-          <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-        </div>
-      ) : filteredChats.length === 0 ? (
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center justify-center h-[70vh] px-8 text-center"
-        >
-          <div className="relative mb-8">
-            <div className="w-24 h-24 bg-indigo-50 rounded-[32px] flex items-center justify-center border border-indigo-100/50 shadow-sm rotate-3">
-              <MessageSquare className="w-10 h-10 text-indigo-500" />
-            </div>
-            <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center border border-purple-100/50 shadow-sm -rotate-6">
-              <Send className="w-5 h-5 text-purple-500" />
-            </div>
+      <div className="flex-1 overflow-y-auto pb-20">
+        {loading ? (
+          <div className="flex justify-center items-center h-40">
+            <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
           </div>
-          <h2 className="text-2xl font-bold text-zinc-900 mb-3 tracking-tight">Your inbox is waiting</h2>
-          <p className="text-zinc-500 text-[15px] leading-relaxed max-w-[260px]">
-            Connect with friends and start a conversation. Your messages will appear here.
-          </p>
-          <button 
-            onClick={() => onNavigate?.('search')}
-            className="mt-8 px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all text-sm"
+        ) : filteredChats.length === 0 ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center h-full px-8 text-center"
           >
-            Find someone to chat
-          </button>
-        </motion.div>
-      ) : (
-        <div className="divide-y divide-zinc-100/50 px-2">
-          {filteredChats.map((chat, index) => {
+            <div className="relative mb-8">
+              <div className="w-24 h-24 bg-indigo-50 rounded-[32px] flex items-center justify-center border border-indigo-100/50 shadow-sm rotate-3">
+                <MessageSquare className="w-10 h-10 text-indigo-500" />
+              </div>
+              <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center border border-purple-100/50 shadow-sm -rotate-6">
+                <Send className="w-5 h-5 text-purple-500" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-zinc-900 mb-3 tracking-tight">Your inbox is waiting</h2>
+            <p className="text-zinc-500 text-[15px] leading-relaxed max-w-[260px]">
+              Connect with friends and start a conversation. Your messages will appear here.
+            </p>
+            <button 
+              onClick={() => onNavigate?.('search')}
+              className="mt-8 px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all text-sm"
+            >
+              Find someone to chat
+            </button>
+          </motion.div>
+        ) : (
+          <div className="divide-y divide-zinc-100/50 px-2">
+            {filteredChats.map((chat, index) => {
             const otherUser = getOtherUser(chat);
             if (!otherUser) return null;
             
@@ -570,6 +591,7 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           })}
         </div>
       )}
+      </div>
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>

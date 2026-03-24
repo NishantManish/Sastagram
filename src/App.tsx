@@ -99,8 +99,9 @@ export default function App() {
 
       {/* Main Content */}
       <main className={cn(
-        "max-w-md mx-auto min-h-[calc(100vh-4rem)] pb-32 transition-all duration-300",
-        activeTab === 'feed' && "pt-16"
+        "max-w-md mx-auto min-h-[calc(100vh-4rem)] transition-all duration-300",
+        activeTab === 'feed' && "pt-16",
+        activeTab !== 'messages' && "pb-32"
       )}>
         {activeTab === 'feed' && <Feed onNavigate={setActiveTab} />}
         {activeTab === 'search' && <Search onNavigate={setActiveTab} />}
