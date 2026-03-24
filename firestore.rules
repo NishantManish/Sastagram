@@ -1,66 +1,85 @@
-// ===============================================================
-// Assumed Data Model
-// ===============================================================
-//
-// Collection: users
-// Document ID: {userId}
-// Fields:
-//   - uid: string (required, immutable) - Firebase Auth UID
-//   - displayName: string (required, max 50 chars) - User's display name
-//   - photoURL: string (optional, max 1000 chars) - Profile picture URL
-//   - bio: string (optional, max 150 chars) - User's biography
-//   - followersCount: number (required) - Number of followers
-//   - followingCount: number (required) - Number of users followed
-//   - createdAt: timestamp (required, immutable) - Creation time
-//
-// Collection: posts
-// Document ID: {postId}
-// Fields:
-//   - authorId: string (required, immutable) - Author's UID
-//   - authorName: string (required, max 50 chars) - Author's display name
-//   - authorPhoto: string (optional, max 1000 chars) - Author's profile picture URL
-//   - imageUrl: string (required, max 1000 chars) - Image URL
-//   - caption: string (optional, max 2200 chars) - Post caption
-//   - likesCount: number (required) - Number of likes
-//   - createdAt: timestamp (required, immutable) - Creation time
-//
-// Collection: likes
-// Document ID: {postId}_{userId}
-// Fields:
-//   - postId: string (required, immutable) - Liked post ID
-//   - userId: string (required, immutable) - Liking user ID
-//   - createdAt: timestamp (required, immutable) - Creation time
-//
-// Collection: follows
-// Document ID: {followerId}_{followingId}
-// Fields:
-//   - followerId: string (required, immutable) - Follower user ID
-//   - followingId: string (required, immutable) - Followed user ID
-//   - createdAt: timestamp (required, immutable) - Creation time
-//
-// Collection: chats
-// Document ID: {chatId}
-// Fields:
-//   - participants: list (required, size 2) - UIDs of participants
-//   - lastMessage: string (optional, max 1000 chars) - Last message text
-//   - lastMessageTime: timestamp (optional) - Last message time
-//   - updatedAt: timestamp (required) - Last update time
-//
-// Collection: messages (subcollection of chats)
-// Document ID: {messageId}
-// Fields:
-//   - chatId: string (required, immutable) - Chat ID
-//   - senderId: string (required, immutable) - Sender UID
-//   - text: string (required, max 1000 chars) - Message text
-//   - attachmentUrl: string (optional, max 1000 chars) - Media attachment URL
-//   - createdAt: timestamp (required, immutable) - Creation time
-//
-// ===============================================================
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable) - Firebase Auth UID
+    //   - displayName: string (required, max 50 chars) - User's display name
+    //   - photoURL: string (optional, max 1000 chars) - Profile picture URL
+    //   - bio: string (optional, max 150 chars) - User's biography
+    //   - followersCount: number (required) - Number of followers
+    //   - followingCount: number (required) - Number of users followed
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: posts
+    // Document ID: {postId}
+    // Fields:
+    //   - authorId: string (required, immutable) - Author's UID
+    //   - authorName: string (required, max 50 chars) - Author's display name
+    //   - authorPhoto: string (optional, max 1000 chars) - Author's profile picture URL
+    //   - imageUrl: string (required, max 1000 chars) - Image URL
+    //   - caption: string (optional, max 2200 chars) - Post caption
+    //   - likesCount: number (required) - Number of likes
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: likes
+    // Document ID: {postId}_{userId}
+    // Fields:
+    //   - postId: string (required, immutable) - Liked post ID
+    //   - userId: string (required, immutable) - Liking user ID
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: follows
+    // Document ID: {followerId}_{followingId}
+    // Fields:
+    //   - followerId: string (required, immutable) - Follower user ID
+    //   - followingId: string (required, immutable) - Followed user ID
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: chats
+    // Document ID: {chatId}
+    // Fields:
+    //   - participants: list (required, size 2) - UIDs of participants
+    //   - lastMessage: string (optional, max 1000 chars) - Last message text
+    //   - lastMessageTime: timestamp (optional) - Last message time
+    //   - updatedAt: timestamp (required) - Last update time
+    //
+    // Collection: messages (subcollection of chats)
+    // Document ID: {messageId}
+    // Fields:
+    //   - chatId: string (required, immutable) - Chat ID
+    //   - senderId: string (required, immutable) - Sender UID
+    //   - text: string (required, max 1000 chars) - Message text
+    //   - attachmentUrl: string (optional, max 1000 chars) - Media attachment URL
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: comments
+    // Document ID: {commentId}
+    // Fields:
+    //   - postId: string (required, immutable) - Post ID
+    //   - authorId: string (required, immutable) - Author UID
+    //   - authorName: string (required, max 50 chars) - Author display name
+    //   - authorPhoto: string (optional, max 1000 chars) - Author profile picture URL
+    //   - text: string (required, max 500 chars) - Comment text
+    //   - likesCount: number (optional) - Number of likes
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: commentLikes
+    // Document ID: {commentId}_{userId}
+    // Fields:
+    //   - commentId: string (required, immutable) - Liked comment ID
+    //   - postId: string (required, immutable) - Post ID
+    //   - userId: string (required, immutable) - Liking user ID
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // ===============================================================
+    
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -104,6 +123,7 @@ service cloud.firestore {
     
     function isValidOptionalString(field, minLen, maxLen) {
       return !(field in request.resource.data) ||
+             request.resource.data[field] == null ||
              (request.resource.data[field] is string &&
               request.resource.data[field].size() >= minLen &&
               request.resource.data[field].size() <= maxLen);
@@ -114,7 +134,9 @@ service cloud.firestore {
     }
 
     function isValidOptionalNumber(field) {
-      return !(field in request.resource.data) || (request.resource.data[field] is number && request.resource.data[field] >= 0);
+      return !(field in request.resource.data) || 
+             request.resource.data[field] == null || 
+             (request.resource.data[field] is number && request.resource.data[field] >= 0);
     }
 
     // ===============================================================
@@ -165,13 +187,23 @@ service cloud.firestore {
     }
 
     function isValidComment() {
-      return hasOnlyAllowedFields(['postId', 'authorId', 'authorName', 'authorPhoto', 'text', 'createdAt']) &&
+      return hasOnlyAllowedFields(['postId', 'authorId', 'authorName', 'authorPhoto', 'text', 'likesCount', 'createdAt']) &&
              hasRequiredFields(['postId', 'authorId', 'authorName', 'text', 'createdAt']) &&
              validStringLength('postId', 1, 128) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
              validStringLength('text', 1, 500) &&
+             isValidOptionalNumber('likesCount') &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidCommentLike() {
+      return hasOnlyAllowedFields(['commentId', 'postId', 'userId', 'createdAt']) &&
+             hasRequiredFields(['commentId', 'postId', 'userId', 'createdAt']) &&
+             validStringLength('commentId', 1, 128) &&
+             validStringLength('postId', 1, 128) &&
+             validStringLength('userId', 1, 128) &&
              request.resource.data.createdAt is timestamp;
     }
 
@@ -378,9 +410,54 @@ service cloud.firestore {
       
       allow create: if isAuthenticated() && 
                     isValidComment() &&
-                    request.resource.data.authorId == request.auth.uid;
+                    request.resource.data.authorId == request.auth.uid &&
+                    (!('likesCount' in request.resource.data) || request.resource.data.likesCount == 0);
+                    
+      allow update: if isAuthenticated() && (
+                      // Author updating text (if we wanted to allow editing)
+                      (resource.data.authorId == request.auth.uid &&
+                       isValidComment() &&
+                       isUnchanged('postId') &&
+                       isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('likesCount'))
+                      ||
+                      // Anyone updating likesCount
+                      (isValidComment() &&
+                       isUnchanged('postId') &&
+                       isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('text') &&
+                       isUnchanged('createdAt') &&
+                       (request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0) == 1 || request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0) == -1) &&
+                       (
+                         (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
+                          !exists(/databases/$(database)/documents/commentLikes/$(commentId + '_' + request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/commentLikes/$(commentId + '_' + request.auth.uid)) != null) ||
+                         (request.resource.data.get('likesCount', 0) < resource.data.get('likesCount', 0) &&
+                          exists(/databases/$(database)/documents/commentLikes/$(commentId + '_' + request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/commentLikes/$(commentId + '_' + request.auth.uid)) == null)
+                       )
+                      )
+                      ||
+                      isAdmin()
+                    );
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    match /commentLikes/{likeId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidCommentLike() &&
+                    request.resource.data.userId == request.auth.uid &&
+                    likeId == request.resource.data.commentId + '_' + request.auth.uid;
+                    
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /notifications/{notificationId} {

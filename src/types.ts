@@ -34,6 +34,15 @@ export interface Comment {
   authorName: string;
   authorPhoto?: string;
   text: string;
+  likesCount?: number;
+  createdAt: any; // Firestore Timestamp
+}
+
+export interface CommentLike {
+  id: string;
+  commentId: string;
+  postId: string;
+  userId: string;
   createdAt: any; // Firestore Timestamp
 }
 

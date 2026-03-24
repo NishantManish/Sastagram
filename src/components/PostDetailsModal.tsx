@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Trash2 } from 'lucide-react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs } from 'firebase/firestore';
+import { X, Send, Trash2, Heart } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, Comment } from '../types';
@@ -20,6 +20,8 @@ interface PostDetailsModalProps {
 
 export default function PostDetailsModal({ post, onClose, onUserClick }: PostDetailsModalProps) {
   const [comments, setComments] = useState<Comment[]>([]);
+  const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
+  const [processingLikes, setProcessingLikes] = useState<Set<string>>(new Set());
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -42,6 +44,28 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
 
     return () => unsubscribe();
   }, [post.id]);
+
+  useEffect(() => {
+    if (!auth.currentUser) {
+      setLikedComments(new Set());
+      return;
+    }
+
+    const q = query(
+      collection(db, 'commentLikes'),
+      where('postId', '==', post.id),
+      where('userId', '==', auth.currentUser.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const likedIds = new Set(snapshot.docs.map(doc => doc.data().commentId));
+      setLikedComments(likedIds);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'commentLikes');
+    });
+
+    return () => unsubscribe();
+  }, [post.id, auth.currentUser]);
 
   const handleDelete = async () => {
     if (!auth.currentUser || auth.currentUser.uid !== post.authorId || isDeleting) return;
@@ -75,6 +99,67 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
       handleFirestoreError(err, OperationType.DELETE, `posts/${post.id}`);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleLikeComment = async (commentId: string) => {
+    if (!auth.currentUser || processingLikes.has(commentId)) return;
+    
+    setProcessingLikes(prev => new Set(prev).add(commentId));
+    const isLiked = likedComments.has(commentId);
+    const likeId = `${commentId}_${auth.currentUser.uid}`;
+    
+    try {
+      const batch = writeBatch(db);
+      const commentRef = doc(db, 'comments', commentId);
+      const likeRef = doc(db, 'commentLikes', likeId);
+
+      if (isLiked) {
+        // Unlike
+        batch.delete(likeRef);
+        batch.update(commentRef, {
+          likesCount: increment(-1)
+        });
+        // Optimistically update UI
+        setLikedComments(prev => {
+          const next = new Set(prev);
+          next.delete(commentId);
+          return next;
+        });
+      } else {
+        // Like
+        batch.set(likeRef, {
+          commentId,
+          postId: post.id,
+          userId: auth.currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+        batch.update(commentRef, {
+          likesCount: increment(1)
+        });
+        // Optimistically update UI
+        setLikedComments(prev => new Set(prev).add(commentId));
+      }
+
+      await batch.commit();
+    } catch (error) {
+      // Revert optimistic update on error
+      if (isLiked) {
+        setLikedComments(prev => new Set(prev).add(commentId));
+      } else {
+        setLikedComments(prev => {
+          const next = new Set(prev);
+          next.delete(commentId);
+          return next;
+        });
+      }
+      handleFirestoreError(error, OperationType.WRITE, `comments/${commentId}/likes`);
+    } finally {
+      setProcessingLikes(prev => {
+        const next = new Set(prev);
+        next.delete(commentId);
+        return next;
+      });
     }
   };
 
@@ -123,7 +208,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -133,11 +218,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
       >
         
         {/* Left side: Post Image (hidden on small screens, shown on md+) */}
-        <div className="hidden md:flex md:w-3/5 bg-black items-start justify-center overflow-y-auto custom-scrollbar">
+        <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center">
           <img 
             src={getOptimizedImageUrl(post.imageUrl, 1200)} 
             alt="Post content" 
-            className="w-full h-auto block"
+            className="max-w-full max-h-full object-contain"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -201,11 +286,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
           />
           
           {/* Mobile Image (only visible on small screens) */}
-          <div className="md:hidden w-full max-h-[400px] overflow-y-auto custom-scrollbar bg-black flex items-start justify-center">
+          <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center">
              <img 
               src={getOptimizedImageUrl(post.imageUrl, 800)} 
               alt="Post content" 
-              className="w-full h-auto block"
+              className="max-w-full max-h-full object-contain"
               referrerPolicy="no-referrer"
             />
           </div>
@@ -264,19 +349,37 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                     fallbackName={comment.authorName} 
                   />
                 </button>
-                <div>
-                  <button 
-                    onClick={() => {
-                      onUserClick?.(comment.authorId);
-                      onClose();
-                    }}
-                    className="font-semibold text-sm text-zinc-900 mr-2 hover:underline"
-                  >
-                    {comment.authorName}
-                  </button>
-                  <span className="text-sm text-zinc-800">{comment.text}</span>
-                  <div className="text-xs text-zinc-500 mt-1">
-                    {comment.createdAt?.toDate ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <button 
+                        onClick={() => {
+                          onUserClick?.(comment.authorId);
+                          onClose();
+                        }}
+                        className="font-semibold text-sm text-zinc-900 mr-2 hover:underline"
+                      >
+                        {comment.authorName}
+                      </button>
+                      <span className="text-sm text-zinc-800">{comment.text}</span>
+                    </div>
+                    <button 
+                      onClick={() => handleLikeComment(comment.id)}
+                      disabled={processingLikes.has(comment.id)}
+                      className={`transition-colors p-1 ${likedComments.has(comment.id) ? 'text-red-500' : 'text-zinc-400 hover:text-red-500'} ${processingLikes.has(comment.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <Heart className={`w-4 h-4 ${likedComments.has(comment.id) ? 'fill-current' : ''}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <div className="text-xs text-zinc-500">
+                      {comment.createdAt?.toDate ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                    </div>
+                    {comment.likesCount && comment.likesCount > 0 && (
+                      <div className="text-xs font-semibold text-zinc-500">
+                        {comment.likesCount} {comment.likesCount === 1 ? 'like' : 'likes'}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
