@@ -209,7 +209,7 @@ export default function AuthScreen() {
       </div>
 
       {/* Right Side - Auth Form */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 lg:p-24 bg-zinc-50/50">
+      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 lg:p-12 bg-zinc-50/50">
         <div className="w-full max-w-[400px]">
           {/* Mobile Logo */}
           <div className="lg:hidden flex items-center gap-2 mb-12">
@@ -406,7 +406,7 @@ export default function AuthScreen() {
                   </button>
                 </form>
 
-                <div className="relative py-4">
+                <div className="relative py-2">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-zinc-200"></div>
                   </div>

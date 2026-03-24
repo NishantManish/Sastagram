@@ -1,5 +1,18 @@
 {
   "entities": {
+    "Highlight": {
+      "title": "Highlight",
+      "description": "A profile highlight containing an image and a label.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who created the highlight." },
+        "label": { "type": "string", "description": "The label/title of the highlight." },
+        "imageUrl": { "type": "string", "description": "The URL of the highlight cover/image." },
+        "mediaUrls": { "type": "array", "items": { "type": "string" }, "description": "The URLs of the media in the highlight." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the highlight was created." }
+      },
+      "required": ["userId", "label", "imageUrl", "mediaUrls", "createdAt"]
+    },
     "User": {
       "title": "User",
       "description": "A user profile in the app.",
@@ -211,6 +224,10 @@
     "/blocks/{blockId}": {
       "schema": { "$ref": "#/entities/Block" },
       "description": "Stores block records."
+    },
+    "/highlights/{highlightId}": {
+      "schema": { "$ref": "#/entities/Highlight" },
+      "description": "Stores user profile highlights."
     }
   }
 }

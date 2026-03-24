@@ -241,6 +241,17 @@ service cloud.firestore {
              (!('viewers' in request.resource.data) || request.resource.data.viewers is list);
     }
 
+    function isValidHighlight() {
+      return hasOnlyAllowedFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt']) &&
+             hasRequiredFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt']) &&
+             validStringLength('userId', 1, 128) &&
+             validStringLength('label', 1, 50) &&
+             validStringLength('imageUrl', 1, 2000) &&
+             request.resource.data.mediaUrls is list &&
+             request.resource.data.mediaUrls.size() <= 100 &&
+             request.resource.data.createdAt is timestamp;
+    }
+
     function isValidChat() {
       return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt', 'readStatus', 'typingStatus']) &&
              hasRequiredFields(['participants', 'updatedAt']) &&
@@ -489,6 +500,22 @@ service cloud.firestore {
                     savedPostId == request.auth.uid + '_' + request.resource.data.postId;
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    match /highlights/{highlightId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidHighlight() &&
+                    request.resource.data.userId == request.auth.uid;
+                    
+      allow update: if isAuthenticated() && 
+                    isValidHighlight() &&
+                    resource.data.userId == request.auth.uid &&
+                    isUnchanged('userId') &&
+                    isUnchanged('createdAt');
+                    
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /stories/{storyId} {

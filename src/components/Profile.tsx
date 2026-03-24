@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, getDocs, addDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
-import { Post, User } from '../types';
-import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle } from 'lucide-react';
+import { Post, User, Highlight } from '../types';
+import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle, Plus } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import EditProfileModal from './EditProfileModal';
 import FollowListModal from './FollowListModal';
+import CreateHighlightModal from './CreateHighlightModal';
+import EditHighlightModal from './EditHighlightModal';
+import HighlightViewerModal from './HighlightViewerModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { blockUser, unblockUser, useBlocks } from '../services/blockService';
+import { deleteHighlight } from '../services/highlightService';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
@@ -42,6 +46,16 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [activeGridTab, setActiveGridTab] = useState<'posts' | 'saved' | 'tagged'>('posts');
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
+  const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
+  const [viewingHighlight, setViewingHighlight] = useState<Highlight | null>(null);
+  const [activeHighlightMenu, setActiveHighlightMenu] = useState<string | null>(null);
+  const [highlightToDelete, setHighlightToDelete] = useState<Highlight | null>(null);
+  const [isDeletingHighlight, setIsDeletingHighlight] = useState(false);
+
+  const holdTimer = useRef<number>(0);
+  const pointerDownTime = useRef<number>(0);
 
   const currentUser = auth.currentUser;
   const targetUserId = viewedUserId || userId || currentUser?.uid;
@@ -60,6 +74,22 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       if (docSnap.exists()) {
         setUserProfile({ uid: docSnap.id, ...docSnap.data() } as User);
       }
+    });
+
+    // Fetch user highlights
+    const highlightsQ = query(
+      collection(db, 'highlights'),
+      where('userId', '==', targetUserId),
+      orderBy('createdAt', 'asc')
+    );
+    const unsubscribeHighlights = onSnapshot(highlightsQ, (snapshot) => {
+      const newHighlights = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Highlight[];
+      setHighlights(newHighlights);
+    }, (error) => {
+      console.error('Error fetching highlights:', error);
     });
 
     // Fetch user posts
@@ -110,6 +140,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
 
     return () => {
       unsubscribeUser();
+      unsubscribeHighlights();
       unsubscribePosts();
       unsubscribeSaved();
     };
@@ -492,28 +523,33 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
 
         {/* Highlights Section */}
         {!isBlockedByMe && (
-          <div className="mb-6 overflow-x-auto no-scrollbar flex gap-4 px-2">
-            {[
-              { label: 'Travel', color: 'from-orange-400 to-pink-500' },
-              { label: 'Food', color: 'from-green-400 to-emerald-500' },
-              { label: 'Life', color: 'from-blue-400 to-indigo-500' },
-              { label: 'Art', color: 'from-purple-400 to-violet-500' },
-            ].map((highlight, i) => (
-              <div key={i} className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer">
-                <div className={`w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr ${highlight.color} p-0.5 transition-transform duration-300 group-hover:scale-105`}>
+          <div className="mb-6 overflow-x-auto no-scrollbar flex gap-4 px-2 relative">
+            {highlights.map((highlight) => (
+              <div 
+                key={highlight.id} 
+                className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer relative"
+                onClick={() => setViewingHighlight(highlight)}
+              >
+                <div className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-zinc-200 to-zinc-300 p-0.5 transition-transform duration-300 group-hover:scale-105">
                   <div className="w-full h-full rounded-[1.4rem] bg-white p-0.5">
-                    <div className={`w-full h-full rounded-[1.2rem] bg-gradient-to-tr ${highlight.color} opacity-80 flex items-center justify-center text-white`}>
-                      <Camera className="w-5 h-5" />
-                    </div>
+                    <img 
+                      src={getOptimizedImageUrl(highlight.imageUrl, 150)} 
+                      alt={highlight.label}
+                      className="w-full h-full rounded-[1.2rem] object-cover"
+                      referrerPolicy="no-referrer"
+                    />
                   </div>
                 </div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">{highlight.label}</span>
               </div>
             ))}
             {isOwnProfile && (
-              <div className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer">
+              <div 
+                onClick={() => setIsCreatingHighlight(true)}
+                className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer"
+              >
                 <div className="w-14 h-14 rounded-[1.5rem] border-2 border-dashed border-zinc-200 flex items-center justify-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50">
-                  <span className="text-xl text-zinc-300 group-hover:text-indigo-400">+</span>
+                  <Plus className="w-5 h-5 text-zinc-300 group-hover:text-indigo-400" />
                 </div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">New</span>
               </div>
@@ -753,6 +789,50 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
         message="Are you sure you want to delete this post? This action cannot be undone."
         confirmText="Delete"
       />
+
+      <ConfirmationModal
+        isOpen={!!highlightToDelete}
+        onClose={() => setHighlightToDelete(null)}
+        onConfirm={async () => {
+          if (!highlightToDelete) return;
+          setIsDeletingHighlight(true);
+          try {
+            await deleteHighlight(highlightToDelete.id, highlightToDelete);
+            setHighlightToDelete(null);
+          } catch (err) {
+            console.error('Failed to delete highlight', err);
+          } finally {
+            setIsDeletingHighlight(false);
+          }
+        }}
+        isLoading={isDeletingHighlight}
+        title="Delete Highlight?"
+        message="Are you sure you want to delete this highlight? This action cannot be undone."
+        confirmText="Delete"
+      />
+
+      <AnimatePresence>
+        {isCreatingHighlight && (
+          <CreateHighlightModal onClose={() => setIsCreatingHighlight(false)} />
+        )}
+        {editingHighlight && (
+          <EditHighlightModal 
+            highlight={editingHighlight} 
+            onClose={() => setEditingHighlight(null)} 
+          />
+        )}
+        {viewingHighlight && (
+          <HighlightViewerModal
+            highlight={viewingHighlight}
+            onClose={() => setViewingHighlight(null)}
+            isOwnProfile={isOwnProfile}
+            onEdit={() => {
+              setViewingHighlight(null);
+              setEditingHighlight(viewingHighlight);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -95,3 +95,12 @@ export interface Message {
   attachmentUrl?: string;
   createdAt: any; // Firestore Timestamp
 }
+
+export interface Highlight {
+  id: string;
+  userId: string;
+  label: string;
+  imageUrl: string;
+  mediaUrls: string[];
+  createdAt: any; // Firestore Timestamp
+}
