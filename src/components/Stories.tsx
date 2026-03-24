@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, Timestamp, updateDoc, arrayUnion, increment } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, deleteObject } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Story } from '../types';
@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
+import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
 import { getDoc } from 'firebase/firestore';
 
@@ -38,6 +39,7 @@ export default function Stories() {
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
+  const [storyToDelete, setStoryToDelete] = useState<{ id: string, imageUrl: string } | null>(null);
   
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -68,9 +70,11 @@ export default function Stories() {
             deleteDoc(doc(db, 'stories', story.id)).catch((err) => {
               handleFirestoreError(err, OperationType.DELETE, `stories/${story.id}`);
             });
-            if (story.imageUrl) {
+            if (story.imageUrl && (story.imageUrl.includes('firebasestorage.googleapis.com') || story.imageUrl.startsWith('gs://'))) {
               const imageRef = ref(storage, story.imageUrl);
               deleteObject(imageRef).catch(console.error);
+            } else if (story.imageUrl && story.imageUrl.includes('cloudinary.com')) {
+              deleteFromCloudinary(story.imageUrl).catch(console.error);
             }
           }
           return false;
@@ -112,9 +116,22 @@ export default function Stories() {
 
     setIsUploading(true);
     try {
-      const storageRef = ref(storage, `stories/${auth.currentUser.uid}/${Date.now()}_${previewFile.name}`);
-      const snapshot = await uploadBytes(storageRef, previewFile);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      // Upload image to Cloudinary
+      const formData = new FormData();
+      formData.append('file', previewFile);
+      formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
+      
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/upload`,
+        { method: 'POST', body: formData }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload image to Cloudinary');
+      }
+      
+      const data = await response.json();
+      const downloadURL = data.secure_url;
       
       const expiresAtDate = new Date();
       expiresAtDate.setHours(expiresAtDate.getHours() + 24);
@@ -200,19 +217,36 @@ export default function Stories() {
     }
   };
 
-  const handleDeleteStory = async (storyId: string, imageUrl: string) => {
+  const handleDeleteStory = (storyId: string, imageUrl: string) => {
+    setIsPaused(true);
+    setStoryToDelete({ id: storyId, imageUrl });
+  };
+
+  const confirmDeleteStory = async () => {
+    if (!storyToDelete) return;
     try {
-      await deleteDoc(doc(db, 'stories', storyId));
+      await deleteDoc(doc(db, 'stories', storyToDelete.id));
       try {
-        const imageRef = ref(storage, imageUrl);
-        await deleteObject(imageRef);
+        if (storyToDelete.imageUrl && (storyToDelete.imageUrl.includes('firebasestorage.googleapis.com') || storyToDelete.imageUrl.startsWith('gs://'))) {
+          const imageRef = ref(storage, storyToDelete.imageUrl);
+          await deleteObject(imageRef);
+        } else if (storyToDelete.imageUrl && storyToDelete.imageUrl.includes('cloudinary.com')) {
+          await deleteFromCloudinary(storyToDelete.imageUrl);
+        }
       } catch (storageError) {
         console.error('Error deleting story image from storage:', storageError);
       }
+      setStoryToDelete(null);
+      setIsPaused(false);
       handleNextStory();
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `stories/${storyId}`);
+      handleFirestoreError(error, OperationType.DELETE, `stories/${storyToDelete.id}`);
     }
+  };
+
+  const cancelDeleteStory = () => {
+    setStoryToDelete(null);
+    setIsPaused(false);
   };
 
   const activeStory = activeUserStories ? activeUserStories[currentStoryIndex] : null;
@@ -465,6 +499,47 @@ export default function Stories() {
                       </div>
                     )}
                   </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Delete Confirmation Modal */}
+            <AnimatePresence>
+              {storyToDelete && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                    className="bg-white rounded-[32px] p-8 max-w-sm w-full shadow-2xl text-center"
+                  >
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Trash2 className="w-8 h-8 text-red-500" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-zinc-900 mb-2">Delete Story?</h3>
+                    <p className="text-zinc-500 mb-8 leading-relaxed">
+                      This will permanently remove your story. This action cannot be undone.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={confirmDeleteStory}
+                        className="w-full py-4 bg-red-500 hover:bg-red-600 text-white font-bold rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-red-200"
+                      >
+                        Delete Story
+                      </button>
+                      <button
+                        onClick={cancelDeleteStory}
+                        className="w-full py-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold rounded-2xl transition-all active:scale-[0.98]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>

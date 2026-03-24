@@ -63,8 +63,10 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
 
   const handleCancelCrop = () => {
     setIsCropping(false);
-    if (!imageFile) {
-      setImagePreview('');
+    setImageFile(null);
+    setImagePreview('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -145,13 +147,24 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
     }
   };
 
+  const handleTabSwitch = (type: UploadType) => {
+    setUploadType(type);
+    setImageFile(null);
+    setImagePreview('');
+    setCaption('');
+    setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="max-w-md mx-auto p-4 pt-6 pb-24">
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Create new</h2>
         <div className="flex bg-zinc-100/80 p-1 rounded-2xl backdrop-blur-sm">
           <button
-            onClick={() => setUploadType('post')}
+            onClick={() => handleTabSwitch('post')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
               uploadType === 'post' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
             }`}
@@ -160,7 +173,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
             Post
           </button>
           <button
-            onClick={() => setUploadType('story')}
+            onClick={() => handleTabSwitch('story')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
               uploadType === 'story' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
             }`}
@@ -204,7 +217,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
                 image={imagePreview}
                 crop={crop}
                 zoom={zoom}
-                aspect={uploadType === 'story' ? 9 / 16 : undefined}
+                aspect={uploadType === 'story' ? 9 / 16 : 1}
                 onCropChange={setCrop}
                 onCropComplete={onCropComplete}
                 onZoomChange={setZoom}
@@ -248,7 +261,14 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
                     alt="Preview" 
                     className="w-full h-auto block"
                   />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm">
+                  <button
+                    type="button"
+                    onClick={() => handleTabSwitch(uploadType)}
+                    className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all z-10"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm pointer-events-none group-hover:pointer-events-auto">
                     <button 
                       type="button"
                       onClick={() => setIsCropping(true)}
