@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Trash2, Heart } from 'lucide-react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc } from 'firebase/firestore';
+import { X, Send, Trash2, Heart, Edit2 } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, Comment } from '../types';
@@ -11,14 +11,16 @@ import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
+import EditPostModal from './EditPostModal';
 
 interface PostDetailsModalProps {
   post: Post;
   onClose: () => void;
   onUserClick?: (userId: string) => void;
+  onTagClick?: (tag: string) => void;
 }
 
-export default function PostDetailsModal({ post, onClose, onUserClick }: PostDetailsModalProps) {
+export default function PostDetailsModal({ post, onClose, onUserClick, onTagClick }: PostDetailsModalProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const [processingLikes, setProcessingLikes] = useState<Set<string>>(new Set());
@@ -26,6 +28,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -207,6 +210,56 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
     }
   };
 
+  const renderCaption = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(\s+)/);
+    return parts.map((part, i) => {
+      if (part.startsWith('#')) {
+        const tag = part.slice(1).replace(/[^\w]/g, '');
+        return (
+          <button
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTagClick?.(tag);
+              onClose();
+            }}
+            className="text-indigo-600 font-medium hover:underline"
+          >
+            {part}
+          </button>
+        );
+      }
+      if (part.startsWith('@')) {
+        const username = part.slice(1).replace(/[^\w]/g, '');
+        return (
+          <button
+            key={i}
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const q = query(collection(db, 'users'), where('username', '==', username), limit(1));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                  onUserClick?.(snap.docs[0].id);
+                } else {
+                  onTagClick?.(`@${username}`);
+                  onClose();
+                }
+              } catch (err) {
+                console.error(err);
+              }
+            }}
+            className="text-indigo-600 font-medium hover:underline"
+          >
+            {part}
+          </button>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div 
@@ -267,13 +320,22 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
             </div>
             <div className="flex items-center gap-2">
               {auth.currentUser?.uid === post.authorId && (
-                <button 
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={isDeleting}
-                  className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                <>
+                  <button 
+                    onClick={() => setShowEditModal(true)}
+                    disabled={isDeleting}
+                    className="p-2 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-50"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={isDeleting}
+                    className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </>
               )}
               <button 
                 onClick={onClose}
@@ -283,6 +345,12 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
               </button>
             </div>
           </div>
+
+          <EditPostModal
+            isOpen={showEditModal}
+            onClose={() => setShowEditModal(false)}
+            post={post}
+          />
 
           <ConfirmationModal
             isOpen={showDeleteConfirm}
@@ -342,7 +410,9 @@ export default function PostDetailsModal({ post, onClose, onUserClick }: PostDet
                   >
                     {post.authorName}
                   </button>
-                  <span className="text-sm text-zinc-800 whitespace-pre-wrap">{post.caption}</span>
+                  <span className="text-sm text-zinc-800 whitespace-pre-wrap">
+                    {renderCaption(post.caption)}
+                  </span>
                   <div className="text-xs text-zinc-500 mt-1">
                     {post.createdAt?.toDate ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
                   </div>

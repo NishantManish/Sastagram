@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs, onSnapshot, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post } from '../types';
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
 import ShareModal from './ShareModal';
+import EditPostModal from './EditPostModal';
 
 interface PostCardProps {
   key?: string | number;
@@ -19,9 +20,10 @@ interface PostCardProps {
   onLikeToggle?: () => void;
   onCommentClick?: () => void;
   onUserClick?: (userId: string) => void;
+  onTagClick?: (tag: string) => void;
 }
 
-export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick }: PostCardProps) {
+export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick, onTagClick }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likesCount);
   const [isLiking, setIsLiking] = useState(false);
@@ -32,6 +34,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
@@ -273,6 +276,61 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true }) 
     : 'Just now';
 
+  const renderCaption = (text: string) => {
+    if (!text) return null;
+    
+    // Split by spaces but preserve them
+    const parts = text.split(/(\s+)/);
+    
+    return parts.map((part, i) => {
+      if (part.startsWith('#')) {
+        const tag = part.slice(1).replace(/[^\w]/g, '');
+        return (
+          <button
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTagClick?.(tag);
+            }}
+            className="text-indigo-600 font-medium hover:underline"
+          >
+            {part}
+          </button>
+        );
+      }
+      
+      if (part.startsWith('@')) {
+        const username = part.slice(1).replace(/[^\w]/g, '');
+        return (
+          <button
+            key={i}
+            onClick={async (e) => {
+              e.stopPropagation();
+              // Try to find user by username
+              try {
+                const q = query(collection(db, 'users'), where('username', '==', username), limit(1));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                  onUserClick?.(snap.docs[0].id);
+                } else {
+                  // If user not found, maybe just search for them
+                  onTagClick?.(`@${username}`);
+                }
+              } catch (err) {
+                console.error(err);
+              }
+            }}
+            className="text-indigo-600 font-medium hover:underline"
+          >
+            {part}
+          </button>
+        );
+      }
+      
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   return (
     <div className="bg-white border-b border-zinc-100 sm:border sm:rounded-xl sm:mb-4 overflow-hidden">
       {/* Header */}
@@ -311,16 +369,31 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           )}
 
           {auth.currentUser?.uid === post.authorId && (
-            <button 
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isDeleting}
-              className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50 active:scale-90"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => setShowEditModal(true)}
+                disabled={isDeleting}
+                className="p-2 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-50 active:scale-90"
+              >
+                <Edit2 className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isDeleting}
+                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50 active:scale-90"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
           )}
         </div>
       </div>
+
+      <EditPostModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        post={post}
+      />
 
       <ConfirmationModal
         isOpen={showDeleteConfirm}
@@ -426,7 +499,9 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           >
             {post.authorName}
           </button>
-          <span className="text-zinc-800 whitespace-pre-wrap">{post.caption}</span>
+          <span className="text-zinc-800 whitespace-pre-wrap">
+            {renderCaption(post.caption)}
+          </span>
         </div>
 
         <div className="text-[11px] text-zinc-400 font-bold uppercase tracking-widest mt-2.5">

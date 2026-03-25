@@ -16,6 +16,8 @@ export interface Post {
   authorPhoto: string;
   imageUrl: string;
   caption: string;
+  tags?: string[];
+  mentions?: string[];
   likesCount: number;
   createdAt: any; // Firestore Timestamp
 }
@@ -93,7 +95,10 @@ export interface Message {
   senderId: string;
   text: string;
   attachmentUrl?: string;
+  sharedPostId?: string;
   createdAt: any; // Firestore Timestamp
+  editedAt?: any; // Firestore Timestamp
+  isEdited?: boolean;
 }
 
 export interface Highlight {

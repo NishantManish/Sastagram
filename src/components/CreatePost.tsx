@@ -105,12 +105,17 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
 
       if (uploadType === 'post') {
         try {
+          const tags = caption.match(/#(\w+)/g)?.map(t => t.slice(1).toLowerCase()) || [];
+          const mentions = caption.match(/@(\w+)/g)?.map(m => m.slice(1).toLowerCase()) || [];
+
           await addDoc(collection(db, 'posts'), {
             authorId: auth.currentUser.uid,
             authorName: auth.currentUser.displayName || 'Anonymous',
             authorPhoto: auth.currentUser.photoURL || '',
             imageUrl: downloadURL,
             caption: caption.trim(),
+            tags,
+            mentions,
             likesCount: 0,
             commentsCount: 0,
             createdAt: serverTimestamp(),

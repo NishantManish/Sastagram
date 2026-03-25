@@ -25,6 +25,8 @@ service cloud.firestore {
     //   - authorPhoto: string (optional, max 1000 chars) - Author's profile picture URL
     //   - imageUrl: string (required, max 1000 chars) - Image URL
     //   - caption: string (optional, max 2200 chars) - Post caption
+    //   - tags: list (optional) - Hashtags extracted from caption
+    //   - mentions: list (optional) - User mentions extracted from caption
     //   - likesCount: number (required) - Number of likes
     //   - createdAt: timestamp (required, immutable) - Creation time
     //
@@ -162,13 +164,15 @@ service cloud.firestore {
     }
 
     function isValidPost() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'caption', 'likesCount', 'commentsCount', 'createdAt']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt']) &&
              hasRequiredFields(['authorId', 'authorName', 'imageUrl', 'createdAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
              validStringLength('imageUrl', 1, 2000) &&
              isValidOptionalString('caption', 0, 2200) &&
+             (!('tags' in request.resource.data) || request.resource.data.tags is list) &&
+             (!('mentions' in request.resource.data) || request.resource.data.mentions is list) &&
              isValidOptionalNumber('likesCount') &&
              isValidOptionalNumber('commentsCount') &&
              request.resource.data.createdAt is timestamp;
@@ -332,15 +336,18 @@ service cloud.firestore {
     }
 
     function isValidMessage() {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'createdAt']) &&
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'createdAt', 'editedAt', 'isEdited']) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              validStringLength('chatId', 1, 128) &&
              validStringLength('senderId', 1, 128) &&
              request.resource.data.text is string &&
              request.resource.data.text.size() <= 1000 &&
-             (request.resource.data.text.size() > 0 || ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0)) &&
+             (request.resource.data.text.size() > 0 || ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0) || ('sharedPostId' in request.resource.data && request.resource.data.sharedPostId.size() > 0)) &&
              isValidOptionalString('attachmentUrl', 0, 2000) &&
-             request.resource.data.createdAt is timestamp;
+             isValidOptionalString('sharedPostId', 0, 128) &&
+             request.resource.data.createdAt is timestamp &&
+             (!('editedAt' in request.resource.data) || request.resource.data.editedAt is timestamp) &&
+             (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool);
     }
 
     match /posts/{postId} {
@@ -368,6 +375,8 @@ service cloud.firestore {
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
                        isUnchanged('caption') &&
+                       isUnchanged('tags') &&
+                       isUnchanged('mentions') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('commentsCount') &&
                        (request.resource.data.likesCount - resource.data.likesCount == 1 || resource.data.likesCount - request.resource.data.likesCount == 1) &&
@@ -387,6 +396,8 @@ service cloud.firestore {
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
                        isUnchanged('caption') &&
+                       isUnchanged('tags') &&
+                       isUnchanged('mentions') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('likesCount') &&
                        (request.resource.data.commentsCount - resource.data.commentsCount == 1 || resource.data.commentsCount - request.resource.data.commentsCount == 1)
@@ -579,6 +590,17 @@ service cloud.firestore {
                       request.resource.data.chatId == chatId &&
                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
                       !isEitherBlocked(get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0], get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]);
+
+        allow update: if isAuthenticated() &&
+                      isValidMessage() &&
+                      resource.data.senderId == request.auth.uid &&
+                      request.resource.data.senderId == request.auth.uid &&
+                      request.time.toMillis() < resource.data.createdAt.toMillis() + 3600000 &&
+                      isUnchanged('chatId') &&
+                      isUnchanged('senderId') &&
+                      isUnchanged('createdAt') &&
+                      isUnchanged('attachmentUrl') &&
+                      isUnchanged('sharedPostId');
 
         allow delete: if isAuthenticated() && (resource == null || request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
       }

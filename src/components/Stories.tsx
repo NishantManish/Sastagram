@@ -120,6 +120,7 @@ export default function Stories() {
       const formData = new FormData();
       formData.append('file', previewFile);
       formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
+      formData.append('tags', `user_${auth.currentUser.uid},story`);
       
       const response = await fetch(
         `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/upload`,

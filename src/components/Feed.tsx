@@ -11,7 +11,7 @@ import { Camera, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 
-export default function Feed({ onNavigate }: { onNavigate?: (tab: any) => void }) {
+export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: any) => void, onTagClick?: (tag: string) => void }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -108,7 +108,7 @@ export default function Feed({ onNavigate }: { onNavigate?: (tab: any) => void }
   }
 
   if (selectedUserId) {
-    return <Profile userId={selectedUserId} onBack={() => setSelectedUserId(null)} onNavigate={onNavigate} />;
+    return <Profile userId={selectedUserId} onBack={() => setSelectedUserId(null)} onNavigate={onNavigate} onTagClick={onTagClick} />;
   }
 
   return (
@@ -163,6 +163,7 @@ export default function Feed({ onNavigate }: { onNavigate?: (tab: any) => void }
                     post={post} 
                     onCommentClick={() => setSelectedPost(post)}
                     onUserClick={setSelectedUserId}
+                    onTagClick={onTagClick}
                   />
                 </motion.div>
               ))}
@@ -177,6 +178,7 @@ export default function Feed({ onNavigate }: { onNavigate?: (tab: any) => void }
             post={selectedPost} 
             onClose={() => setSelectedPost(null)} 
             onUserClick={setSelectedUserId}
+            onTagClick={onTagClick}
           />
         )}
       </AnimatePresence>

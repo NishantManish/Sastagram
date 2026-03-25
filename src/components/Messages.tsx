@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, addDoc, serverTimestamp, getDocs, writeBatch, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
-import { Chat, Message, User } from '../types';
-import { Send, ArrowLeft, MessageSquare, Paperclip, X, Trash2, ShieldAlert } from 'lucide-react';
+import { Chat, Message, User, Post } from '../types';
+import { Send, ArrowLeft, MessageSquare, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import Profile from './Profile';
+import PostDetailsModal from './PostDetailsModal';
 import { useBlocks } from '../services/blockService';
 import { motion, AnimatePresence } from 'motion/react';
 import { deleteDoc } from 'firebase/firestore';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
 
-export default function Messages({ onBack, onNavigate }: { onBack?: () => void, onNavigate?: (tab: any) => void }) {
+export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: () => void, onNavigate?: (tab: any) => void, onTagClick?: (tag: string) => void }) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -22,10 +23,21 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
   const [loading, setLoading] = useState(true);
   const [chatUsers, setChatUsers] = useState<Record<string, User>>({});
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Edit state
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [heldMessage, setHeldMessage] = useState<Message | null>(null);
+  const messageLongPressTimer = useRef<NodeJS.Timeout | null>(null);
+
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -181,9 +193,128 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
     }, 2000);
   };
 
+  // Handle user search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const searchUsers = async () => {
+      setIsSearching(true);
+      try {
+        const q = query(
+          collection(db, 'users'),
+          where('username', '>=', searchQuery.toLowerCase()),
+          where('username', '<=', searchQuery.toLowerCase() + '\uf8ff')
+        );
+        const snapshot = await getDocs(q);
+        const results = snapshot.docs
+          .map(doc => ({ uid: doc.id, ...doc.data() } as User))
+          .filter(u => u.uid !== auth.currentUser?.uid && !blockedIds.includes(u.uid) && !blockedByIds.includes(u.uid));
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Error searching users:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const debounce = setTimeout(searchUsers, 300);
+    return () => clearTimeout(debounce);
+  }, [searchQuery, blockedIds, blockedByIds]);
+
+  const handleStartChat = async (user: User) => {
+    if (!auth.currentUser) return;
+    
+    // Check if chat exists
+    const existingChat = chats.find(c => c.participants.includes(user.uid));
+    if (existingChat) {
+      setSelectedChat(existingChat);
+      setSearchQuery('');
+      setSearchResults([]);
+      return;
+    }
+
+    // Create new chat
+    try {
+      const newChatRef = await addDoc(collection(db, 'chats'), {
+        participants: [auth.currentUser.uid, user.uid],
+        updatedAt: serverTimestamp(),
+        readStatus: {
+          [auth.currentUser.uid]: true,
+          [user.uid]: true
+        }
+      });
+      
+      const newChat: Chat = {
+        id: newChatRef.id,
+        participants: [auth.currentUser.uid, user.uid],
+        updatedAt: new Date(),
+        readStatus: {
+          [auth.currentUser.uid]: true,
+          [user.uid]: true
+        }
+      };
+      
+      setSelectedChat(newChat);
+      setSearchQuery('');
+      setSearchResults([]);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'chats');
+    }
+  };
+
+  const handleMessageTouchStart = (msg: Message) => {
+    if (msg.senderId !== auth.currentUser?.uid) return;
+    messageLongPressTimer.current = setTimeout(() => {
+      setHeldMessage(msg);
+      if ('vibrate' in navigator) {
+        navigator.vibrate(50);
+      }
+    }, 600);
+  };
+
+  const handleMessageTouchEnd = () => {
+    if (messageLongPressTimer.current) {
+      clearTimeout(messageLongPressTimer.current);
+    }
+  };
+
+  const handleDeleteMessage = async (msg: Message) => {
+    if (!selectedChat || !auth.currentUser || msg.senderId !== auth.currentUser.uid) return;
+    try {
+      const msgRef = doc(db, `chats/${selectedChat.id}/messages`, msg.id);
+      await deleteDoc(msgRef);
+      
+      if (msg.attachmentUrl) {
+        await deleteFromCloudinary(msg.attachmentUrl);
+      }
+      
+      // Update last message if this was the last one
+      if (messages[messages.length - 1]?.id === msg.id) {
+        const lastMsg = messages[messages.length - 2];
+        await updateDoc(doc(db, 'chats', selectedChat.id), {
+          lastMessage: lastMsg ? (lastMsg.text || 'Attachment') : '',
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `chats/${selectedChat.id}/messages/${msg.id}`);
+    } finally {
+      setHeldMessage(null);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!newMessage.trim() && !attachment) || !selectedChat || !auth.currentUser) return;
+    if (!selectedChat || !auth.currentUser) return;
+    
+    if (editingMessage) {
+      if (!newMessage.trim() && !editingMessage.attachmentUrl && !editingMessage.sharedPostId) return;
+    } else {
+      if (!newMessage.trim() && !attachment) return;
+    }
 
     let attachmentUrl = '';
     if (attachment) {
@@ -203,8 +334,26 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
     setNewMessage('');
     setAttachment(null);
 
+    if (editingMessage) {
+      try {
+        const msgRef = doc(db, `chats/${selectedChat.id}/messages`, editingMessage.id);
+        await updateDoc(msgRef, {
+          text: messageText,
+          editedAt: serverTimestamp(),
+          isEdited: true
+        });
+        setEditingMessage(null);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `chats/${selectedChat.id}/messages/${editingMessage.id}`);
+      }
+      return;
+    }
+
     try {
-      await addDoc(collection(db, `chats/${selectedChat.id}/messages`), {
+      const batch = writeBatch(db);
+
+      const newMessageRef = doc(collection(db, `chats/${selectedChat.id}/messages`));
+      batch.set(newMessageRef, {
         chatId: selectedChat.id,
         senderId: auth.currentUser.uid,
         text: messageText,
@@ -213,7 +362,7 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
       });
 
       const otherUserId = selectedChat.participants.find(id => id !== auth.currentUser?.uid);
-      await setDoc(doc(db, 'chats', selectedChat.id), {
+      batch.set(doc(db, 'chats', selectedChat.id), {
         lastMessage: messageText || 'Attachment',
         updatedAt: serverTimestamp(),
         readStatus: {
@@ -224,6 +373,8 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           [auth.currentUser.uid]: false
         }
       }, { merge: true });
+
+      await batch.commit();
 
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -291,6 +442,19 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
     }
   };
 
+  const handlePostClick = async (postId: string) => {
+    try {
+      const postDoc = await getDoc(doc(db, 'posts', postId));
+      if (postDoc.exists()) {
+        setSelectedPost({ id: postDoc.id, ...postDoc.data() } as Post);
+      } else {
+        alert('This post is no longer available.');
+      }
+    } catch (error) {
+      console.error('Error fetching post:', error);
+    }
+  };
+
   if (selectedUserId) {
     return <Profile userId={selectedUserId} onBack={() => setSelectedUserId(null)} onNavigate={onNavigate} />;
   }
@@ -335,7 +499,13 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/50">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/50 relative">
+          {heldMessage && (
+            <div 
+              className="fixed inset-0 z-10" 
+              onClick={() => setHeldMessage(null)} 
+            />
+          )}
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
               <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mb-4">
@@ -354,13 +524,15 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                 (msg.createdAt && messages[index - 1]?.createdAt && 
                  msg.createdAt.toMillis() - messages[index - 1].createdAt.toMillis() > 5 * 60 * 1000);
 
+              const isEditable = isMine && msg.createdAt && (Date.now() - msg.createdAt.toMillis() < 60 * 60 * 1000);
+
               return (
                 <motion.div 
                   key={msg.id} 
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
+                  className={`flex flex-col group ${isMine ? 'items-end' : 'items-start'}`}
                 >
                   {showTime && msg.createdAt && (
                     <span className="text-[10px] font-medium text-zinc-400 mb-2 px-2 uppercase tracking-wider">
@@ -368,23 +540,90 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                     </span>
                   )}
                   <div 
-                    className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm ${
-                      isMine 
-                        ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
-                        : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
-                    }`}
+                    className={`flex items-center gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+                    onMouseDown={() => handleMessageTouchStart(msg)}
+                    onMouseUp={handleMessageTouchEnd}
+                    onMouseLeave={handleMessageTouchEnd}
+                    onTouchStart={() => handleMessageTouchStart(msg)}
+                    onTouchEnd={handleMessageTouchEnd}
                   >
-                    {msg.attachmentUrl && (
-                      <img 
-                        src={getOptimizedImageUrl(msg.attachmentUrl, 400)} 
-                        alt="Attachment" 
-                        loading="lazy"
-                        decoding="async"
-                        className="rounded-xl mb-2 max-w-full border border-black/5" 
-                        referrerPolicy="no-referrer" 
-                      />
-                    )}
-                    {msg.text && <p className="text-[15px] leading-relaxed">{msg.text}</p>}
+                    <div 
+                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm relative ${
+                        isMine 
+                          ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
+                          : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
+                      }`}
+                    >
+                      <AnimatePresence>
+                        {heldMessage?.id === msg.id && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                            className={`absolute z-20 bottom-full mb-2 flex flex-col items-stretch bg-white rounded-2xl shadow-xl border border-zinc-100 p-1.5 min-w-[140px] ${isMine ? 'right-0' : 'left-0'}`}
+                          >
+                            {isEditable && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingMessage(msg);
+                                  setNewMessage(msg.text || '');
+                                  setHeldMessage(null);
+                                }}
+                                className="flex items-center gap-3 px-4 py-2.5 text-zinc-700 hover:bg-zinc-50 rounded-xl transition-colors"
+                              >
+                                <Pencil className="w-4 h-4 text-indigo-500" />
+                                <span className="text-sm font-medium">Edit</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('Delete this message?')) {
+                                  handleDeleteMessage(msg);
+                                }
+                              }}
+                              className="flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span className="text-sm font-medium">Delete</span>
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      {msg.attachmentUrl && (
+                        <img 
+                          src={getOptimizedImageUrl(msg.attachmentUrl, 400)} 
+                          alt="Attachment" 
+                          loading="lazy"
+                          decoding="async"
+                          className="rounded-xl mb-2 max-w-full border border-black/5" 
+                          referrerPolicy="no-referrer" 
+                        />
+                      )}
+                      {msg.sharedPostId && (
+                        <div 
+                          onClick={() => handlePostClick(msg.sharedPostId!)}
+                          className={`mb-2 p-3 rounded-xl border cursor-pointer transition-colors flex items-center gap-3 ${
+                            isMine ? 'bg-indigo-600/50 border-indigo-400 hover:bg-indigo-600/70' : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isMine ? 'bg-indigo-500' : 'bg-zinc-200'}`}>
+                            <ImageIcon className={`w-5 h-5 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>Shared Post</p>
+                            <p className={`text-xs truncate ${isMine ? 'text-indigo-200' : 'text-zinc-500'}`}>Tap to view</p>
+                          </div>
+                        </div>
+                      )}
+                      {msg.text && (
+                        <div className="flex items-end gap-2">
+                          <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
+                          {msg.isEdited && <span className="text-[10px] opacity-70 mb-0.5 shrink-0">(edited)</span>}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {isRead && (
                     <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
@@ -436,6 +675,23 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
             </div>
           ) : (
             <>
+              {editingMessage && (
+                <div className="mb-2 flex items-center justify-between bg-indigo-50/50 border border-indigo-100/50 px-3 py-2 rounded-xl">
+                  <div className="flex items-center gap-2 text-indigo-600">
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Editing message</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setEditingMessage(null);
+                      setNewMessage('');
+                    }} 
+                    className="p-1 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               {attachment && (
                 <div className="mb-2 flex items-center gap-2 bg-zinc-100 p-2 rounded-lg">
                   <span className="text-xs truncate flex-1">{attachment.name}</span>
@@ -460,6 +716,7 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="p-2 text-zinc-500 hover:text-zinc-900"
+                  disabled={!!editingMessage}
                 >
                   <Paperclip className="w-5 h-5" />
                 </button>
@@ -470,13 +727,13 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
                     setNewMessage(e.target.value);
                     handleTyping();
                   }}
-                  placeholder="Message..."
+                  placeholder={editingMessage ? "Edit message..." : "Message..."}
                   className="flex-1 bg-zinc-100/80 border border-zinc-200/50 rounded-full px-4 py-2.5 text-[15px] focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition-all"
                 />
                 <motion.button 
                   whileTap={{ scale: 0.9 }}
                   type="submit"
-                  disabled={(!newMessage.trim() && !attachment)}
+                  disabled={editingMessage ? (!newMessage.trim() && !editingMessage.attachmentUrl && !editingMessage.sharedPostId) : (!newMessage.trim() && !attachment)}
                   className="p-2.5 bg-indigo-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors shadow-sm"
                 >
                   <Send className="w-4 h-4 ml-0.5" />
@@ -485,23 +742,83 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
             </>
           )}
         </div>
+        <AnimatePresence>
+          {selectedPost && (
+            <PostDetailsModal 
+              post={selectedPost} 
+              onClose={() => setSelectedPost(null)} 
+              onUserClick={setSelectedUserId}
+              onTagClick={onTagClick}
+            />
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
   return (
     <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
-        {onBack && (
-          <button onClick={onBack} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-        )}
-        <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Messages</h1>
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex flex-col gap-3 shadow-sm shrink-0">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button onClick={onBack} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Messages</h1>
+        </div>
+        
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          <input
+            type="text"
+            placeholder="Search users to chat..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-zinc-100 border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all outline-none"
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-200 rounded-full"
+            >
+              <X className="w-3 h-3 text-zinc-500" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-20">
-        {loading ? (
+        {searchQuery ? (
+          <div className="px-2 py-2">
+            {isSearching ? (
+              <div className="flex justify-center p-4"><div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" /></div>
+            ) : searchResults.length > 0 ? (
+              searchResults.map(user => (
+                <div 
+                  key={user.uid}
+                  onClick={() => handleStartChat(user)}
+                  className="p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all"
+                >
+                  <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0">
+                    {user.photoURL ? (
+                      <img src={getOptimizedImageUrl(user.photoURL, 96, 96)} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">{user.displayName?.charAt(0)}</div>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-zinc-900">{user.displayName}</h3>
+                    <p className="text-sm text-zinc-500">@{user.username}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-zinc-500 p-4">No users found</p>
+            )}
+          </div>
+        ) : loading ? (
           <div className="flex justify-center items-center h-40">
             <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
           </div>
@@ -636,6 +953,16 @@ export default function Messages({ onBack, onNavigate }: { onBack?: () => void, 
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {selectedPost && (
+          <PostDetailsModal 
+            post={selectedPost} 
+            onClose={() => setSelectedPost(null)} 
+            onUserClick={setSelectedUserId}
+            onTagClick={onTagClick}
+          />
         )}
       </AnimatePresence>
     </div>

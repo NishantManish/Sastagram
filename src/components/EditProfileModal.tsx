@@ -106,6 +106,7 @@ export default function EditProfileModal({ userProfile, onClose }: EditProfileMo
         const formData = new FormData();
         formData.append('file', imageFile);
         formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
+        formData.append('tags', `user_${auth.currentUser.uid},profile_photo`);
         
         const response = await fetch(
           `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/upload`,

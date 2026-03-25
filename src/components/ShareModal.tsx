@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, Link, PlusCircle } from 'lucide-react';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { User, Post } from '../types';
 import UserAvatar from './UserAvatar';
@@ -97,8 +97,12 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
         }
       }
 
+      const batch = writeBatch(db);
+
       if (!chatId) {
-        const newChatRef = await addDoc(collection(db, 'chats'), {
+        const newChatRef = doc(collection(db, 'chats'));
+        chatId = newChatRef.id;
+        batch.set(newChatRef, {
           participants: [auth.currentUser.uid, user.uid],
           updatedAt: serverTimestamp(),
           lastMessage: 'Shared a post',
@@ -107,26 +111,28 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
             [user.uid]: false
           }
         });
-        chatId = newChatRef.id;
+      } else {
+        batch.set(doc(db, 'chats', chatId), {
+          updatedAt: serverTimestamp(),
+          lastMessage: 'Shared a post',
+          readStatus: {
+            [auth.currentUser.uid]: true,
+            [user.uid]: false
+          }
+        }, { merge: true });
       }
 
       // Send message with post link
-      const postUrl = `${window.location.origin}/post/${post.id}`;
-      await addDoc(collection(db, `chats/${chatId}/messages`), {
+      const newMessageRef = doc(collection(db, `chats/${chatId}/messages`));
+      batch.set(newMessageRef, {
         chatId: chatId,
         senderId: auth.currentUser.uid,
-        text: `Check out this post: ${postUrl}`,
+        text: '',
+        sharedPostId: post.id,
         createdAt: serverTimestamp()
       });
 
-      await setDoc(doc(db, 'chats', chatId), {
-        updatedAt: serverTimestamp(),
-        lastMessage: 'Shared a post',
-        readStatus: {
-          [auth.currentUser.uid]: true,
-          [user.uid]: false
-        }
-      }, { merge: true });
+      await batch.commit();
 
       onClose();
     } catch (err) {
@@ -139,9 +145,28 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
   const handleCopyLink = () => {
     const url = `${window.location.origin}/post/${post.id}`;
     navigator.clipboard.writeText(url).then(() => {
-      alert('Link copied to clipboard!');
+      // alert('Link copied to clipboard!'); // Avoid alert in iframe
       onClose();
     });
+  };
+
+  const handleNativeShare = async () => {
+    const shareData = {
+      title: `${post.authorName}'s post on Sastagram`,
+      text: post.caption || 'Check out this post!',
+      url: `${window.location.origin}/post/${post.id}`,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        onClose();
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Error sharing post:', err);
+      }
+    }
   };
 
   return (
@@ -189,6 +214,18 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
                   </div>
                   <span className="text-xs font-medium text-zinc-700">Copy Link</span>
                 </button>
+
+                {navigator.share && (
+                  <button 
+                    onClick={handleNativeShare}
+                    className="flex flex-col items-center gap-2 shrink-0"
+                  >
+                    <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                      <Send className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-medium text-zinc-700">Share via...</span>
+                  </button>
+                )}
               </div>
 
               <div className="mt-2">

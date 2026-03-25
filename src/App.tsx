@@ -17,8 +17,14 @@ export default function App() {
   const [user, setUser] = useState(auth.currentUser);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
+  const [initialSearchQuery, setInitialSearchQuery] = useState('');
   const [showHeader, setShowHeader] = useState(true);
   const lastScrollY = useRef(0);
+
+  const handleNavigateToSearch = (query: string) => {
+    setInitialSearchQuery(query);
+    setActiveTab('search');
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -103,12 +109,12 @@ export default function App() {
         activeTab === 'feed' && "pt-16",
         activeTab !== 'messages' && "pb-32"
       )}>
-        {activeTab === 'feed' && <Feed onNavigate={setActiveTab} />}
-        {activeTab === 'search' && <Search onNavigate={setActiveTab} />}
+        {activeTab === 'feed' && <Feed onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} />}
+        {activeTab === 'search' && <Search onNavigate={setActiveTab} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
         {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}
         {activeTab === 'notifications' && <Notifications onBack={() => setActiveTab('feed')} />}
-        {activeTab === 'profile' && <Profile onNavigate={setActiveTab} />}
-        {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} onNavigate={setActiveTab} />}
+        {activeTab === 'profile' && <Profile onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} />}
+        {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} />}
       </main>
 
       {/* Navigation */}

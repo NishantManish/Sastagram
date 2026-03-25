@@ -99,6 +99,7 @@ export default function CreateHighlightModal({ onClose }: CreateHighlightModalPr
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
+    formData.append('tags', `user_${auth.currentUser?.uid},highlight`);
     
     const resourceType = file.type.startsWith('video/') ? 'video' : 'image';
     

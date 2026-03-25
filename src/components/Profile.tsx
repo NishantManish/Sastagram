@@ -23,11 +23,13 @@ interface ProfileProps {
   userId?: string;
   onBack?: () => void;
   onNavigate?: (tab: 'feed' | 'search' | 'create' | 'notifications' | 'profile' | 'messages') => void;
+  onTagClick?: (tag: string) => void;
 }
 
-export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
+export default function Profile({ userId, onBack, onNavigate, onTagClick }: ProfileProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
+  const [taggedPosts, setTaggedPosts] = useState<Post[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
@@ -235,6 +237,25 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       setLoading(false);
     });
 
+    // Fetch tagged posts
+    let unsubscribeTagged = () => {};
+    if (userProfile?.username) {
+      const taggedQ = query(
+        collection(db, 'posts'),
+        where('mentions', 'array-contains', userProfile.username.toLowerCase()),
+        orderBy('createdAt', 'desc')
+      );
+      unsubscribeTagged = onSnapshot(taggedQ, (snapshot) => {
+        const newTaggedPosts = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Post[];
+        setTaggedPosts(newTaggedPosts);
+      }, (error) => {
+        console.error('Error fetching tagged posts:', error);
+      });
+    }
+
     // Fetch saved posts if own profile
     let unsubscribeSaved = () => {};
     if (isOwnProfile && currentUser) {
@@ -264,8 +285,9 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
       unsubscribeHighlights();
       unsubscribePosts();
       unsubscribeSaved();
+      unsubscribeTagged();
     };
-  }, [targetUserId, isOwnProfile, currentUser?.uid]);
+  }, [targetUserId, isOwnProfile, currentUser?.uid, userProfile?.username]);
 
   useEffect(() => {
     // Check follow status with real-time listeners
@@ -357,16 +379,32 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
 
     try {
       if (navigator.share) {
-        await navigator.share(shareData);
+        try {
+          await navigator.share(shareData);
+        } catch (shareErr: any) {
+          // If the user canceled, don't do anything
+          if (shareErr.name === 'AbortError') {
+            return;
+          }
+          // For other errors (like iframe restrictions), fallback to clipboard
+          throw shareErr;
+        }
       } else {
-        await navigator.clipboard.writeText(window.location.href);
-        alert('Profile link copied to clipboard!');
+        throw new Error('Share not supported');
       }
     } catch (err) {
-      console.error('Error sharing profile:', err);
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        // We avoid alert() as per guidelines for iframes, 
+        // the user will see the link is copied if they check their clipboard
+        // or we could add a temporary "Copied" state to the UI.
+      } catch (clipboardErr) {
+        console.error('Error copying to clipboard:', clipboardErr);
+      }
+    } finally {
+      setShowOptionsMenu(false);
+      setShowProfileMenu(false);
     }
-    setShowOptionsMenu(false);
-    setShowProfileMenu(false);
   };
 
   if (!targetUserId || !userProfile) return null;
@@ -750,15 +788,17 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
           <div className="flex justify-center items-center py-24">
             <div className="w-8 h-8 border-4 border-zinc-100 border-t-zinc-900 rounded-full animate-spin" />
           </div>
-        ) : (activeGridTab === 'posts' ? posts : activeGridTab === 'saved' ? savedPosts : []).length === 0 ? (
+        ) : (activeGridTab === 'posts' ? posts : activeGridTab === 'saved' ? savedPosts : taggedPosts).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
             <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
-              {activeGridTab === 'posts' ? <Camera className="w-10 h-10 text-zinc-300" /> : <Bookmark className="w-10 h-10 text-zinc-300" />}
+              {activeGridTab === 'posts' ? <Camera className="w-10 h-10 text-zinc-300" /> : activeGridTab === 'saved' ? <Bookmark className="w-10 h-10 text-zinc-300" /> : <Camera className="w-10 h-10 text-zinc-300" />}
             </div>
             <p className="text-xl font-black text-zinc-900 mb-2">
-              {activeGridTab === 'posts' ? 'No Posts Yet' : activeGridTab === 'saved' ? 'No Saved Posts' : 'No Tags Yet'}
+              {activeGridTab === 'posts' ? 'No Posts Yet' : activeGridTab === 'saved' ? 'No Saved Posts' : 'No Tagged Posts'}
             </p>
-            <p className="text-sm text-zinc-400 font-medium">Capture and share your first moment.</p>
+            <p className="text-sm text-zinc-400 font-medium">
+              {activeGridTab === 'posts' ? 'Capture and share your first moment.' : activeGridTab === 'saved' ? 'Save posts you love.' : 'When people tag you in posts, they will appear here.'}
+            </p>
           </div>
         ) : activeGridTab === 'saved' ? (
           /* Editorial 2-Column Layout for Saved Posts */
@@ -806,9 +846,9 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
             ))}
           </div>
         ) : (
-          /* Standard 3-Column Grid for Posts */
+          /* Standard 3-Column Grid for Posts and Tagged */
           <div className="grid grid-cols-3 gap-1.5">
-            {posts.map((post, index) => (
+            {(activeGridTab === 'posts' ? posts : taggedPosts).map((post, index) => (
               <motion.div 
                 key={post.id}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -872,6 +912,7 @@ export default function Profile({ userId, onBack, onNavigate }: ProfileProps) {
             post={selectedPost} 
             onClose={() => setSelectedPost(null)} 
             onUserClick={setViewedUserId}
+            onTagClick={onTagClick}
           />
         )}
       </AnimatePresence>
