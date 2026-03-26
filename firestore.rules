@@ -336,7 +336,7 @@ service cloud.firestore {
     }
 
     function isValidMessage() {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'createdAt', 'editedAt', 'isEdited']) &&
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              validStringLength('chatId', 1, 128) &&
              validStringLength('senderId', 1, 128) &&
@@ -347,7 +347,8 @@ service cloud.firestore {
              isValidOptionalString('sharedPostId', 0, 128) &&
              request.resource.data.createdAt is timestamp &&
              (!('editedAt' in request.resource.data) || request.resource.data.editedAt is timestamp) &&
-             (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool);
+             (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool) &&
+             (!('deletedFor' in request.resource.data) || request.resource.data.deletedFor is list);
     }
 
     match /posts/{postId} {
@@ -593,16 +594,40 @@ service cloud.firestore {
 
         allow update: if isAuthenticated() &&
                       isValidMessage() &&
-                      resource.data.senderId == request.auth.uid &&
-                      request.resource.data.senderId == request.auth.uid &&
-                      request.time.toMillis() < resource.data.createdAt.toMillis() + 3600000 &&
-                      isUnchanged('chatId') &&
-                      isUnchanged('senderId') &&
-                      isUnchanged('createdAt') &&
-                      isUnchanged('attachmentUrl') &&
-                      isUnchanged('sharedPostId');
+                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+                      (
+                        (
+                          resource.data.senderId == request.auth.uid &&
+                          request.resource.data.senderId == request.auth.uid &&
+                          request.time.toMillis() < resource.data.createdAt.toMillis() + 3600000 &&
+                          isUnchanged('chatId') &&
+                          isUnchanged('senderId') &&
+                          isUnchanged('createdAt') &&
+                          isUnchanged('attachmentUrl') &&
+                          isUnchanged('sharedPostId') &&
+                          isUnchanged('deletedFor')
+                        )
+                        ||
+                        (
+                          isUnchanged('chatId') &&
+                          isUnchanged('senderId') &&
+                          isUnchanged('text') &&
+                          isUnchanged('attachmentUrl') &&
+                          isUnchanged('sharedPostId') &&
+                          isUnchanged('createdAt') &&
+                          isUnchanged('editedAt') &&
+                          isUnchanged('isEdited') &&
+                          request.resource.data.deletedFor.hasAll(resource.data.get('deletedFor', [])) &&
+                          request.resource.data.deletedFor.hasAll([request.auth.uid]) &&
+                          request.resource.data.deletedFor.size() == resource.data.get('deletedFor', []).size() + 1
+                        )
+                      );
 
-        allow delete: if isAuthenticated() && (resource == null || request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
+        allow delete: if isAuthenticated() && (
+                          (resource.data.senderId == request.auth.uid && 
+                           (resource.data.createdAt == null || request.time.toMillis() < resource.data.createdAt.toMillis() + 86400000)) || 
+                          isAdmin()
+                        );
       }
     }
 

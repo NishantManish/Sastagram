@@ -99,6 +99,7 @@ export interface Message {
   createdAt: any; // Firestore Timestamp
   editedAt?: any; // Firestore Timestamp
   isEdited?: boolean;
+  deletedFor?: string[];
 }
 
 export interface Highlight {

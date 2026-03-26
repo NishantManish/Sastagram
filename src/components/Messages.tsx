@@ -4,7 +4,7 @@ import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, Message, User, Post } from '../types';
 import { Send, ArrowLeft, MessageSquare, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
 import { useBlocks } from '../services/blockService';
@@ -12,6 +12,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { deleteDoc } from 'firebase/firestore';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
+
+import ConfirmationModal from './ConfirmationModal';
 
 export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: () => void, onNavigate?: (tab: any) => void, onTagClick?: (tag: string) => void }) {
   const [chats, setChats] = useState<Chat[]>([]);
@@ -25,7 +27,9 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+  const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   
   // Search state
@@ -43,6 +47,19 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
 
   useEffect(() => {
     if (!auth.currentUser) return;
+
+    const fetchUserRole = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role || 'user');
+        }
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+      }
+    };
+
+    fetchUserRole();
 
     const q = query(
       collection(db, 'chats'),
@@ -122,7 +139,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         id: doc.id,
         ...doc.data()
       })) as Message[];
-      setMessages(fetchedMessages);
+      setMessages(fetchedMessages.filter(m => !m.deletedFor?.includes(auth.currentUser?.uid || '')));
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `chats/${selectedChat.id}/messages`);
@@ -266,7 +283,6 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   };
 
   const handleMessageTouchStart = (msg: Message) => {
-    if (msg.senderId !== auth.currentUser?.uid) return;
     messageLongPressTimer.current = setTimeout(() => {
       setHeldMessage(msg);
       if ('vibrate' in navigator) {
@@ -281,27 +297,47 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
     }
   };
 
-  const handleDeleteMessage = async (msg: Message) => {
-    if (!selectedChat || !auth.currentUser || msg.senderId !== auth.currentUser.uid) return;
+  const handleDeleteMessage = async (msg: Message, type: 'me' | 'everyone') => {
+    if (!selectedChat || !auth.currentUser) return;
+    setIsDeleting(true);
     try {
       const msgRef = doc(db, `chats/${selectedChat.id}/messages`, msg.id);
-      await deleteDoc(msgRef);
       
-      if (msg.attachmentUrl) {
-        await deleteFromCloudinary(msg.attachmentUrl);
-      }
-      
-      // Update last message if this was the last one
-      if (messages[messages.length - 1]?.id === msg.id) {
-        const lastMsg = messages[messages.length - 2];
-        await updateDoc(doc(db, 'chats', selectedChat.id), {
-          lastMessage: lastMsg ? (lastMsg.text || 'Attachment') : '',
-          updatedAt: serverTimestamp()
+      if (type === 'everyone') {
+        await deleteDoc(msgRef);
+        
+        if (msg.attachmentUrl) {
+          await deleteFromCloudinary(msg.attachmentUrl);
+        }
+        
+        // Update last message if this was the last one
+        const currentMessages = [...messages];
+        if (currentMessages[currentMessages.length - 1]?.id === msg.id) {
+          const lastMsg = currentMessages[currentMessages.length - 2];
+          await updateDoc(doc(db, 'chats', selectedChat.id), {
+            lastMessage: lastMsg ? (lastMsg.text || 'Attachment') : '',
+            updatedAt: serverTimestamp()
+          });
+        }
+      } else {
+        // Delete for me
+        const newDeletedFor = [...(msg.deletedFor || []), auth.currentUser.uid];
+        await updateDoc(msgRef, {
+          deletedFor: newDeletedFor
         });
+        
+        // Update last message if this was the last one and we are deleting for ourselves
+        // We might want to keep the lastMessage in the chat doc as is, because it's still the last message for the other person.
+        // But for our own view, we might want to update it. However, the chat list usually just shows the last message from the chat doc.
+        // For simplicity, we won't update the chat doc's lastMessage when deleting for 'me', 
+        // as it would affect the other user's chat list too.
       }
+      
+      setMessageToDelete(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `chats/${selectedChat.id}/messages/${msg.id}`);
+      handleFirestoreError(error, type === 'everyone' ? OperationType.DELETE : OperationType.UPDATE, `chats/${selectedChat.id}/messages/${msg.id}`);
     } finally {
+      setIsDeleting(false);
       setHeldMessage(null);
     }
   };
@@ -499,10 +535,10 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/50 relative">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-zinc-50/50 relative">
           {heldMessage && (
             <div 
-              className="fixed inset-0 z-10" 
+              className="fixed inset-0 z-40" 
               onClick={() => setHeldMessage(null)} 
             />
           )}
@@ -520,9 +556,9 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
               const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
               const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
 
-              const showTime = index === 0 || 
+              const showDate = index === 0 || 
                 (msg.createdAt && messages[index - 1]?.createdAt && 
-                 msg.createdAt.toMillis() - messages[index - 1].createdAt.toMillis() > 5 * 60 * 1000);
+                 !isSameDay(msg.createdAt.toDate(), messages[index - 1].createdAt.toDate()));
 
               const isEditable = isMine && msg.createdAt && (Date.now() - msg.createdAt.toMillis() < 60 * 60 * 1000);
 
@@ -532,23 +568,43 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                  className={`flex flex-col group ${isMine ? 'items-end' : 'items-start'}`}
+                  className="w-full relative"
                 >
-                  {showTime && msg.createdAt && (
-                    <span className="text-[10px] font-medium text-zinc-400 mb-2 px-2 uppercase tracking-wider">
-                      {formatDistanceToNow(msg.createdAt.toDate(), { addSuffix: true })}
-                    </span>
+                  {showDate && msg.createdAt && (
+                    <div className="w-full flex justify-center my-4">
+                      <span className="text-[10px] font-medium text-zinc-500 bg-zinc-200/50 px-3 py-1 rounded-full uppercase tracking-wider">
+                        {format(msg.createdAt.toDate(), 'MMMM d, yyyy')}
+                      </span>
+                    </div>
                   )}
-                  <div 
-                    className={`flex items-center gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+                  
+                  <motion.div 
+                    drag="x"
+                    dragConstraints={{ left: -60, right: 0 }}
+                    dragElastic={0.1}
+                    onDragStart={handleMessageTouchEnd}
+                    className={`flex flex-col w-full ${isMine ? 'items-end' : 'items-start'} relative ${heldMessage?.id === msg.id ? 'z-50' : 'z-10'}`}
                     onMouseDown={() => handleMessageTouchStart(msg)}
                     onMouseUp={handleMessageTouchEnd}
                     onMouseLeave={handleMessageTouchEnd}
                     onTouchStart={() => handleMessageTouchStart(msg)}
                     onTouchEnd={handleMessageTouchEnd}
                   >
+                    {/* Hidden Timestamp that moves with the message */}
+                    <div className="absolute left-full top-0 bottom-0 flex items-center ml-3">
+                      <span className="text-[10px] font-medium text-zinc-400 whitespace-nowrap">
+                        {msg.createdAt && format(msg.createdAt.toDate(), 'h:mm a')}
+                      </span>
+                    </div>
+
+                    {msg.isEdited && (
+                      <span className={`text-[10px] text-zinc-400 mb-1 ${isMine ? 'mr-1' : 'ml-1'}`}>
+                        Edited
+                      </span>
+                    )}
+
                     <div 
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm relative ${
+                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm relative flex flex-col ${
                         isMine 
                           ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
                           : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
@@ -556,34 +612,35 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                     >
                       <AnimatePresence>
                         {heldMessage?.id === msg.id && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                            className={`absolute z-20 bottom-full mb-2 flex flex-col items-stretch bg-white rounded-2xl shadow-xl border border-zinc-100 p-1.5 min-w-[140px] ${isMine ? 'right-0' : 'left-0'}`}
-                          >
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9, y: index === 0 ? -10 : 10 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.9, y: index === 0 ? -10 : 10 }}
+                              className={`absolute z-20 ${index === 0 ? 'top-full mt-2' : 'bottom-full mb-2'} flex flex-col items-stretch bg-white rounded-2xl shadow-xl border border-zinc-100 p-1.5 min-w-[140px] ${isMine ? 'right-0' : 'left-0'}`}
+                            >
                             {isEditable && (
                               <button
-                                onClick={(e) => {
+                                onPointerDown={(e) => {
                                   e.stopPropagation();
+                                  handleMessageTouchEnd();
                                   setEditingMessage(msg);
                                   setNewMessage(msg.text || '');
                                   setHeldMessage(null);
                                 }}
-                                className="flex items-center gap-3 px-4 py-2.5 text-zinc-700 hover:bg-zinc-50 rounded-xl transition-colors"
+                                className="flex items-center gap-3 px-4 py-2.5 text-zinc-700 hover:bg-zinc-50 rounded-xl transition-colors w-full text-left"
                               >
                                 <Pencil className="w-4 h-4 text-indigo-500" />
                                 <span className="text-sm font-medium">Edit</span>
                               </button>
                             )}
                             <button
-                              onClick={(e) => {
+                              onPointerDown={(e) => {
                                 e.stopPropagation();
-                                if (confirm('Delete this message?')) {
-                                  handleDeleteMessage(msg);
-                                }
+                                handleMessageTouchEnd();
+                                setMessageToDelete(msg);
+                                setHeldMessage(null);
                               }}
-                              className="flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                              className="flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors w-full text-left"
                             >
                               <Trash2 className="w-4 h-4" />
                               <span className="text-sm font-medium">Delete</span>
@@ -620,14 +677,13 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                       {msg.text && (
                         <div className="flex items-end gap-2">
                           <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
-                          {msg.isEdited && <span className="text-[10px] opacity-70 mb-0.5 shrink-0">(edited)</span>}
                         </div>
                       )}
                     </div>
-                  </div>
-                  {isRead && (
-                    <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
-                  )}
+                    {isRead && (
+                      <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
+                    )}
+                  </motion.div>
                 </motion.div>
               );
             })
@@ -910,51 +966,63 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       )}
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Modals */}
+      <ConfirmationModal
+        isOpen={!!chatToDelete}
+        onClose={() => setChatToDelete(null)}
+        onConfirm={handleDeleteChat}
+        title="Delete Chat"
+        message="Are you sure you want to delete this entire chat? This action cannot be undone."
+        confirmText="Delete"
+        isLoading={isDeleting}
+      />
+
       <AnimatePresence>
-        {chatToDelete && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          >
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-              className="bg-white rounded-[24px] w-full max-w-xs overflow-hidden shadow-2xl border border-zinc-100"
+        {messageToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
             >
-              <div className="p-6 text-center">
-                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100/50 shadow-sm">
-                  <Trash2 className="w-7 h-7" />
-                </div>
-                <h3 className="text-[19px] font-bold text-zinc-900 mb-2 tracking-tight">Delete Chat?</h3>
-                <p className="text-zinc-500 text-[15px] mb-6 leading-relaxed">
-                  Are you sure you want to delete this conversation? This action cannot be undone.
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-zinc-900 mb-2">Delete Message</h3>
+                <p className="text-zinc-500 text-sm mb-6">
+                  Are you sure you want to delete this message?
                 </p>
-                <div className="flex flex-col gap-2.5">
+                <div className="space-y-2">
+                  {(messageToDelete.senderId === auth.currentUser?.uid || userRole === 'admin') && 
+                   (!messageToDelete.createdAt || Date.now() - messageToDelete.createdAt.toMillis() < 24 * 60 * 60 * 1000 || userRole === 'admin') && (
+                    <button
+                      onClick={() => handleDeleteMessage(messageToDelete, 'everyone')}
+                      disabled={isDeleting}
+                      className="w-full py-3 px-4 bg-red-50 text-red-600 font-medium rounded-xl hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      Delete for everyone
+                    </button>
+                  )}
                   <button
-                    onClick={handleDeleteChat}
+                    onClick={() => handleDeleteMessage(messageToDelete, 'me')}
                     disabled={isDeleting}
-                    className="w-full py-3.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm"
+                    className="w-full py-3 px-4 bg-zinc-50 text-zinc-900 font-medium rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-50"
                   >
-                    {isDeleting ? 'Deleting...' : 'Delete'}
+                    Delete for me
                   </button>
                   <button
-                    onClick={() => setChatToDelete(null)}
+                    onClick={() => setMessageToDelete(null)}
                     disabled={isDeleting}
-                    className="w-full py-3.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-semibold rounded-xl transition-colors disabled:opacity-50"
+                    className="w-full py-3 px-4 bg-white border border-zinc-200 text-zinc-700 font-medium rounded-xl hover:bg-zinc-50 transition-colors disabled:opacity-50"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
+
       <AnimatePresence>
         {selectedPost && (
           <PostDetailsModal 
