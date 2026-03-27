@@ -218,7 +218,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
                 <X className="w-6 h-6" />
               </button>
               <h3 className="text-white font-bold">Crop Image</h3>
-              <button onClick={handleCropSave} className="px-4 py-2 bg-white text-black font-bold rounded-full text-sm hover:bg-zinc-200 transition-colors">
+              <button onClick={handleCropSave} className="px-4 py-2 bg-white text-zinc-900 font-bold rounded-full text-sm hover:bg-zinc-200 transition-colors">
                 Done
               </button>
             </div>

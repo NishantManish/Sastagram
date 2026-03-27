@@ -1,4 +1,73 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+.dark .bg-white { background-color: #09090b !important; }
+.dark .bg-white\/90 { background-color: rgba(9, 9, 11, 0.9) !important; }
+.dark .bg-white\/80 { background-color: rgba(9, 9, 11, 0.8) !important; }
+.dark .bg-white\/70 { background-color: rgba(9, 9, 11, 0.7) !important; }
+.dark .bg-white\/50 { background-color: rgba(9, 9, 11, 0.5) !important; }
+
+.dark .text-zinc-900 { color: #fafafa !important; }
+.dark .text-zinc-800 { color: #f4f4f5 !important; }
+.dark .text-zinc-700 { color: #e4e4e7 !important; }
+.dark .text-zinc-600 { color: #d4d4d8 !important; }
+.dark .text-zinc-500 { color: #a1a1aa !important; }
+.dark .text-zinc-400 { color: #a1a1aa !important; }
+.dark .text-zinc-300 { color: #52525b !important; }
+.dark .text-zinc-950 { color: #ffffff !important; }
+
+.dark .bg-zinc-50 { background-color: #18181b !important; }
+.dark .bg-zinc-50\/50 { background-color: rgba(24, 24, 27, 0.5) !important; }
+.dark .bg-zinc-100 { background-color: #27272a !important; }
+.dark .bg-zinc-100\/80 { background-color: rgba(39, 39, 42, 0.8) !important; }
+.dark .bg-zinc-100\/50 { background-color: rgba(39, 39, 42, 0.5) !important; }
+.dark .bg-zinc-200 { background-color: #3f3f46 !important; }
+.dark .bg-zinc-200\/50 { background-color: rgba(63, 63, 70, 0.5) !important; }
+.dark .bg-zinc-800 { background-color: #f4f4f5 !important; }
+.dark .bg-zinc-900 { background-color: #fafafa !important; }
+.dark .bg-zinc-950 { background-color: #ffffff !important; }
+
+.dark .border-zinc-100 { border-color: #27272a !important; }
+.dark .border-zinc-100\/50 { border-color: rgba(39, 39, 42, 0.5) !important; }
+.dark .border-zinc-200 { border-color: #3f3f46 !important; }
+.dark .border-zinc-200\/50 { border-color: rgba(63, 63, 70, 0.5) !important; }
+.dark .border-zinc-300 { border-color: #52525b !important; }
+.dark .border-zinc-800 { border-color: #f4f4f5 !important; }
+
+.dark .shadow-zinc-100 { --tw-shadow-color: #27272a !important; }
+.dark .shadow-indigo-50 { --tw-shadow-color: #1e1b4b !important; }
+.dark .shadow-indigo-100 { --tw-shadow-color: #312e81 !important; }
+.dark .shadow-indigo-200 { --tw-shadow-color: #3730a3 !important; }
+.dark .shadow-red-200 { --tw-shadow-color: #991b1b !important; }
+
+.dark .ring-zinc-950 { --tw-ring-color: #ffffff !important; }
+
+.dark .bg-indigo-50 { background-color: #1e1b4b !important; }
+.dark .bg-indigo-100 { background-color: #312e81 !important; }
+.dark .border-indigo-100 { border-color: #312e81 !important; }
+.dark .text-indigo-600 { color: #818cf8 !important; }
+.dark .text-indigo-700 { color: #a5b4fc !important; }
+
+.dark .bg-red-50 { background-color: #450a0a !important; }
+.dark .bg-red-100 { background-color: #7f1d1d !important; }
+.dark .border-red-100 { border-color: #7f1d1d !important; }
+.dark .text-red-600 { color: #fca5a5 !important; }
+.dark .text-green-600 { color: #86efac !important; }
+.dark .text-green-700 { color: #86efac !important; }
+.dark .bg-green-50 { background-color: #052e16 !important; }
+.dark .border-green-100 { border-color: #14532d !important; }
+
+.dark ::selection {
+  background-color: #312e81 !important;
+  color: #eef2ff !important;
+}
+
+/* Fix text-white on light backgrounds in dark mode */
+.dark .bg-zinc-900.text-white,
+.dark .bg-zinc-950.text-white,
+.dark .bg-zinc-800.text-white {
+  color: #09090b !important;
+}
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {

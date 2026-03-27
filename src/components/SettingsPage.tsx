@@ -16,6 +16,8 @@ import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { unblockUser, useBlocks } from '../services/blockService';
 import UserAvatar from './UserAvatar';
 
+import { useTheme } from '../contexts/ThemeContext';
+
 interface SettingsPageProps {
   onBack: () => void;
   onEditProfile?: () => void;
@@ -27,7 +29,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   
-  const [activeView, setActiveView] = useState<'main' | 'password' | 'notifications' | 'privacy' | 'saved' | 'liked' | 'blocked'>('main');
+  const [activeView, setActiveView] = useState<'main' | 'password' | 'notifications' | 'privacy' | 'saved' | 'liked' | 'blocked' | 'theme'>('main');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -48,6 +50,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
 
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
   const { blockedIds } = useBlocks(auth.currentUser?.uid);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (activeView !== 'blocked' || blockedIds.length === 0) {
@@ -193,6 +196,12 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
   };
 
   const settingsGroups = [
+    {
+      title: "App Settings",
+      items: [
+        { icon: <Moon className="w-5 h-5" />, title: "Theme", onClick: () => setActiveView('theme') }
+      ]
+    },
     {
       title: "How you use Social App",
       items: [
@@ -465,6 +474,33 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
             onClose={() => setSelectedPost(null)}
           />
         )}
+      </div>
+    );
+  }
+
+  if (activeView === 'theme') {
+    return (
+      <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
+        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
+          <button onClick={() => setActiveView('main')} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-lg font-bold text-zinc-900">Theme</h1>
+        </div>
+        <div className="p-4 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium text-zinc-900">Dark Mode</h3>
+              <p className="text-sm text-zinc-500">Switch between light and dark themes.</p>
+            </div>
+            <button 
+              onClick={toggleTheme}
+              className={`w-12 h-6 rounded-full transition-colors relative ${theme === 'dark' ? 'bg-indigo-600' : 'bg-zinc-200'}`}
+            >
+              <div className={`w-5 h-5 rounded-full absolute top-0.5 transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'}`} style={{ backgroundColor: '#ffffff' }} />
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

@@ -349,7 +349,7 @@ export default function Stories() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="flex-1 flex items-center justify-center bg-zinc-900">
+            <div className="flex-1 flex items-center justify-center bg-black">
               <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
             </div>
             <div className="p-4 bg-black flex justify-end">
