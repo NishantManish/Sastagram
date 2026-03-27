@@ -163,9 +163,11 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
         onClose();
       }
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.error('Error sharing post:', err);
+      // Ignore AbortError or "canceled" messages which happen when user cancels the share
+      if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('cancel'))) {
+        return;
       }
+      console.error('Error sharing post:', err);
     }
   };
 

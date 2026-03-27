@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { Camera, Mail, Lock, User as UserIcon, AtSign, ArrowRight, ChevronLeft } from 'lucide-react';
+import { Camera, Mail, Lock, User as UserIcon, AtSign, ArrowRight, ChevronLeft, Eye, EyeOff } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -18,6 +18,7 @@ export default function AuthScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const checkUsernameUnique = async (usernameToCheck: string) => {
     try {
@@ -364,14 +365,21 @@ export default function AuthScreen() {
                     <div className="relative">
                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                       <input
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full pl-12 pr-4 py-4 bg-white border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:border-transparent transition-all font-medium"
+                        className="w-full pl-12 pr-12 py-4 bg-white border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:border-transparent transition-all font-medium"
                         required
                         minLength={6}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-950 transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
 

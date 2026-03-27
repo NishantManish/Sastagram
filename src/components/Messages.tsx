@@ -620,7 +620,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                             >
                             {isEditable && (
                               <button
-                                onPointerDown={(e) => {
+                                onClick={(e) => {
                                   e.stopPropagation();
                                   handleMessageTouchEnd();
                                   setEditingMessage(msg);
@@ -634,7 +634,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                               </button>
                             )}
                             <button
-                              onPointerDown={(e) => {
+                              onClick={(e) => {
                                 e.stopPropagation();
                                 handleMessageTouchEnd();
                                 setMessageToDelete(msg);
@@ -811,7 +811,12 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
 
         <AnimatePresence>
           {messageToDelete && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -851,7 +856,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   </div>
                 </div>
               </motion.div>
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>

@@ -4,13 +4,14 @@ import { signOut, deleteUser } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, User, Highlight, Story, Message } from '../types';
-import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle, Plus } from 'lucide-react';
+import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle, Plus, UserCheck, Link, QrCode, ChevronDown, Mail } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import EditProfileModal from './EditProfileModal';
 import FollowListModal from './FollowListModal';
 import CreateHighlightModal from './CreateHighlightModal';
 import EditHighlightModal from './EditHighlightModal';
 import HighlightViewerModal from './HighlightViewerModal';
+import SettingsPage from './SettingsPage';
 import { motion, AnimatePresence } from 'motion/react';
 import { blockUser, unblockUser, useBlocks } from '../services/blockService';
 import { deleteHighlight } from '../services/highlightService';
@@ -24,11 +25,11 @@ interface ProfileProps {
   onBack?: () => void;
   onNavigate?: (tab: 'feed' | 'search' | 'create' | 'notifications' | 'profile' | 'messages') => void;
   onTagClick?: (tag: string) => void;
+  onSettingsToggle?: (isOpen: boolean) => void;
 }
 
-export default function Profile({ userId, onBack, onNavigate, onTagClick }: ProfileProps) {
+export default function Profile({ userId, onBack, onNavigate, onTagClick, onSettingsToggle }: ProfileProps) {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [taggedPosts, setTaggedPosts] = useState<Post[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,14 +48,21 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
   const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
-  const [activeGridTab, setActiveGridTab] = useState<'posts' | 'saved' | 'tagged'>('posts');
+  const [showSettingsPage, setShowSettingsPage] = useState(false);
+
+  useEffect(() => {
+    onSettingsToggle?.(showSettingsPage);
+  }, [showSettingsPage, onSettingsToggle]);
+  const [activeGridTab, setActiveGridTab] = useState<'posts' | 'tagged'>('posts');
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
   const [viewingHighlight, setViewingHighlight] = useState<Highlight | null>(null);
+  const [showProfilePhotoModal, setShowProfilePhotoModal] = useState(false);
 
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const [deleteAccountCountdown, setDeleteAccountCountdown] = useState(10);
+  const [isCopied, setIsCopied] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
@@ -256,35 +264,10 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
       });
     }
 
-    // Fetch saved posts if own profile
-    let unsubscribeSaved = () => {};
-    if (isOwnProfile && currentUser) {
-      const savedQ = query(
-        collection(db, 'savedPosts'),
-        where('userId', '==', currentUser.uid),
-        orderBy('createdAt', 'desc')
-      );
-
-      unsubscribeSaved = onSnapshot(savedQ, async (snapshot) => {
-        const savedDocs = snapshot.docs;
-        const postPromises = savedDocs.map(async (saveDoc) => {
-          const postRef = doc(db, 'posts', saveDoc.data().postId);
-          const postSnap = await getDoc(postRef);
-          if (postSnap.exists()) {
-            return { id: postSnap.id, ...postSnap.data() } as Post;
-          }
-          return null;
-        });
-        const resolvedPosts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
-        setSavedPosts(resolvedPosts);
-      });
-    }
-
     return () => {
       unsubscribeUser();
       unsubscribeHighlights();
       unsubscribePosts();
-      unsubscribeSaved();
       unsubscribeTagged();
     };
   }, [targetUserId, isOwnProfile, currentUser?.uid, userProfile?.username]);
@@ -383,7 +366,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
           await navigator.share(shareData);
         } catch (shareErr: any) {
           // If the user canceled, don't do anything
-          if (shareErr.name === 'AbortError') {
+          if (shareErr.name === 'AbortError' || (shareErr.message && shareErr.message.toLowerCase().includes('cancel'))) {
             return;
           }
           // For other errors (like iframe restrictions), fallback to clipboard
@@ -408,6 +391,18 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
   };
 
   if (!targetUserId || !userProfile) return null;
+
+  if (showSettingsPage) {
+    return (
+      <SettingsPage
+        onBack={() => setShowSettingsPage(false)}
+        onEditProfile={() => {
+          setShowSettingsPage(false);
+          setIsEditingProfile(true);
+        }}
+      />
+    );
+  }
 
   if (amIBlocked) {
     return (
@@ -460,12 +455,20 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
         
         <div className="flex items-center gap-2">
           {isOwnProfile ? (
-            <button 
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="p-2 text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
+            <>
+              <button 
+                onClick={handleShareProfile}
+                className="p-2 text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setShowSettingsPage(true)}
+                className="p-2 text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </>
           ) : (
             <button 
               onClick={() => setShowOptionsMenu(!showOptionsMenu)}
@@ -522,46 +525,6 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
               </motion.div>
             </>
           )}
-          {showProfileMenu && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setShowProfileMenu(false)} />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                className="absolute right-4 top-16 w-52 bg-white rounded-2xl shadow-2xl border border-zinc-100 z-30 overflow-hidden p-1.5"
-              >
-                <button
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    handleSignOut();
-                  }}
-                  className="w-full px-3 py-3 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-red-50 transition-colors text-red-500"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  Logout
-                </button>
-                <button 
-                  onClick={handleShareProfile}
-                  className="w-full px-3 py-3 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-zinc-50 transition-colors text-zinc-900"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  Share Profile
-                </button>
-                <button
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    setDeleteAccountCountdown(10);
-                    setShowDeleteAccountConfirm(true);
-                  }}
-                  className="w-full px-3 py-3 text-left text-xs font-bold flex items-center gap-2.5 rounded-xl hover:bg-red-50 transition-colors text-red-600 border-t border-zinc-100 mt-1"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete Account
-                </button>
-              </motion.div>
-            </>
-          )}
         </AnimatePresence>
       </header>
 
@@ -582,7 +545,10 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
         <div className="flex flex-col items-center text-center mb-6">
           <div className="relative mb-4">
             <div className="absolute -inset-1.5 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur-lg opacity-20 animate-pulse"></div>
-            <div className="relative p-0.5 bg-white rounded-[2rem] shadow-lg">
+            <div 
+              className="relative p-0.5 bg-white rounded-[2rem] shadow-lg cursor-pointer active:scale-95 transition-transform"
+              onClick={() => userProfile.photoURL && setShowProfilePhotoModal(true)}
+            >
               <UserAvatar 
                 userId={targetUserId} 
                 size={88} 
@@ -639,7 +605,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
                 Edit Profile
               </button>
             ) : (
-              <>
+              <div className="flex gap-2 flex-1">
                 {isFollowing === false && !isBlockedByMe && (
                   <button 
                     onClick={handleFollowToggle}
@@ -700,7 +666,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
                     {isMessagingLoading ? 'Loading...' : 'Message'}
                   </button>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -753,17 +719,6 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
           {activeGridTab === 'posts' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
         </button>
         
-        {isOwnProfile && (
-          <button 
-            onClick={() => setActiveGridTab('saved')}
-            className={`flex-1 py-3.5 flex flex-col items-center gap-1.5 transition-all ${activeGridTab === 'saved' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
-          >
-            <Bookmark className="w-4 h-4" />
-            <span className={`text-[7px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'saved' ? 'opacity-100' : 'opacity-0'}`}>Saved</span>
-            {activeGridTab === 'saved' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
-          </button>
-        )}
-
         <button 
           onClick={() => setActiveGridTab('tagged')}
           className={`flex-1 py-3.5 flex flex-col items-center gap-1.5 transition-all ${activeGridTab === 'tagged' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
@@ -788,62 +743,17 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
           <div className="flex justify-center items-center py-24">
             <div className="w-8 h-8 border-4 border-zinc-100 border-t-zinc-900 rounded-full animate-spin" />
           </div>
-        ) : (activeGridTab === 'posts' ? posts : activeGridTab === 'saved' ? savedPosts : taggedPosts).length === 0 ? (
+        ) : (activeGridTab === 'posts' ? posts : taggedPosts).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
             <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
-              {activeGridTab === 'posts' ? <Camera className="w-10 h-10 text-zinc-300" /> : activeGridTab === 'saved' ? <Bookmark className="w-10 h-10 text-zinc-300" /> : <Camera className="w-10 h-10 text-zinc-300" />}
+              <Camera className="w-10 h-10 text-zinc-300" />
             </div>
             <p className="text-xl font-black text-zinc-900 mb-2">
-              {activeGridTab === 'posts' ? 'No Posts Yet' : activeGridTab === 'saved' ? 'No Saved Posts' : 'No Tagged Posts'}
+              {activeGridTab === 'posts' ? 'No Posts Yet' : 'No Tagged Posts'}
             </p>
             <p className="text-sm text-zinc-400 font-medium">
-              {activeGridTab === 'posts' ? 'Capture and share your first moment.' : activeGridTab === 'saved' ? 'Save posts you love.' : 'When people tag you in posts, they will appear here.'}
+              {activeGridTab === 'posts' ? 'Capture and share your first moment.' : 'When people tag you in posts, they will appear here.'}
             </p>
-          </div>
-        ) : activeGridTab === 'saved' ? (
-          /* Editorial 2-Column Layout for Saved Posts */
-          <div className="grid grid-cols-2 gap-4">
-            {savedPosts.map((post, index) => (
-              <motion.div 
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="flex flex-col gap-3 group cursor-pointer"
-                onClick={() => setSelectedPost(post)}
-              >
-                <div className="aspect-[3/4] bg-zinc-100 rounded-[2rem] overflow-hidden relative shadow-sm group-hover:shadow-xl transition-all duration-500">
-                  {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
-                    <video 
-                      src={post.imageUrl} 
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      muted
-                      playsInline
-                    />
-                  ) : (
-                    <img 
-                      src={getOptimizedImageUrl(post.imageUrl, 600)} 
-                      alt="Saved post" 
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
-                    />
-                  )}
-                  <div className="absolute top-4 right-4 p-2 bg-white/20 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Bookmark className="w-4 h-4 fill-current" />
-                  </div>
-                </div>
-                <div className="px-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <UserAvatar userId={post.authorId} size={20} className="rounded-lg" />
-                    <span className="text-[10px] font-black text-zinc-900 uppercase tracking-tight">{post.authorName}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-zinc-400">
-                    <Heart className="w-3 h-3" />
-                    <span className="text-[9px] font-bold">{post.likesCount}</span>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
           </div>
         ) : (
           /* Standard 3-Column Grid for Posts and Tagged */
@@ -906,6 +816,123 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick }: Prof
       </div>
 
       {/* Modals */}
+      <AnimatePresence>
+        {showProfilePhotoModal && userProfile?.photoURL && (
+          <div 
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/60 backdrop-blur-2xl"
+            onClick={() => setShowProfilePhotoModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="relative w-full flex flex-col items-center justify-center h-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Blurred Background Image */}
+              <div className="absolute inset-0 -z-10 overflow-hidden">
+                <img 
+                  src={userProfile.photoURL} 
+                  className="w-full h-full object-cover blur-3xl opacity-50 scale-150"
+                  alt=""
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              {/* Close Button */}
+              <button 
+                onClick={() => setShowProfilePhotoModal(false)}
+                className="absolute top-12 right-6 z-[110] p-2 bg-white/10 backdrop-blur-md text-white rounded-full hover:bg-white/20 transition-colors"
+              >
+                <Plus className="w-6 h-6 rotate-45" />
+              </button>
+              
+              {/* Circular Profile Photo with Zoom */}
+              <motion.div 
+                className="relative w-[85vw] max-w-[400px] aspect-square overflow-hidden shadow-2xl border-4 border-white/10"
+                initial={{ borderRadius: "9999px" }}
+                whileTap={{ 
+                  scale: 1.25,
+                  borderRadius: "9999px",
+                  zIndex: 50
+                }}
+                transition={{ type: "spring", stiffness: 200, damping: 25 }}
+              >
+                  <motion.img 
+                    src={userProfile.photoURL} 
+                    alt={userProfile.displayName}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    drag
+                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                    dragElastic={0.1}
+                    whileTap={{ scale: 1.05 }}
+                    whileDrag={{ scale: 1.05 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 25 }}
+                  />
+              </motion.div>
+              
+              {/* Bottom Action Buttons */}
+              <div className="absolute bottom-12 left-0 right-0 px-6">
+                <div className="flex items-center justify-around max-w-sm mx-auto">
+                  <div className="flex flex-col items-center gap-2">
+                    <button 
+                      onClick={async () => {
+                        if (navigator.share) {
+                          try {
+                            await navigator.share({
+                              title: `${userProfile.displayName}'s Profile`,
+                              text: `Check out ${userProfile.displayName}'s profile on Social App!`,
+                              url: window.location.href,
+                            });
+                          } catch (err: any) {
+                            // Ignore AbortError or "canceled" messages which happen when user cancels the share
+                            if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('cancel'))) {
+                              return;
+                            }
+                            console.error('Error sharing:', err);
+                          }
+                        } else {
+                          navigator.clipboard.writeText(window.location.href);
+                          alert('Link copied to clipboard!');
+                        }
+                      }}
+                      className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-all active:scale-90"
+                    >
+                      <Share2 className="w-6 h-6" />
+                    </button>
+                    <span className="text-[10px] font-bold text-white/80 tracking-tight">Share profile</span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.href);
+                        setIsCopied(true);
+                        setTimeout(() => setIsCopied(false), 2000);
+                      }}
+                      className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-all active:scale-90"
+                    >
+                      <Link className="w-6 h-6" />
+                    </button>
+                    <span className="text-[10px] font-bold text-white/80 tracking-tight">
+                      {isCopied ? 'Copied!' : 'Copy link'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-2">
+                    <button className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-all active:scale-90">
+                      <QrCode className="w-6 h-6" />
+                    </button>
+                    <span className="text-[10px] font-bold text-white/80 tracking-tight">QR code</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {selectedPost && (
           <PostDetailsModal 

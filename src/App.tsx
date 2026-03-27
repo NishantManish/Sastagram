@@ -19,6 +19,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
   const [initialSearchQuery, setInitialSearchQuery] = useState('');
   const [showHeader, setShowHeader] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const lastScrollY = useRef(0);
 
   const handleNavigateToSearch = (query: string) => {
@@ -113,12 +114,12 @@ export default function App() {
         {activeTab === 'search' && <Search onNavigate={setActiveTab} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
         {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}
         {activeTab === 'notifications' && <Notifications onBack={() => setActiveTab('feed')} />}
-        {activeTab === 'profile' && <Profile onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} />}
+        {activeTab === 'profile' && <Profile onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
         {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} />}
       </main>
 
       {/* Navigation */}
-      {activeTab !== 'messages' && (
+      {activeTab !== 'messages' && !isSettingsOpen && (
         <BottomNav activeTab={activeTab} onChange={setActiveTab} />
       )}
     </div>
