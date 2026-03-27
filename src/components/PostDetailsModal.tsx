@@ -482,7 +482,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="Add a comment..."
-                className="flex-1 bg-transparent border-none focus:ring-0 text-sm placeholder:text-zinc-500"
+                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-sm placeholder:text-zinc-500"
                 disabled={isSubmitting}
               />
               <button 

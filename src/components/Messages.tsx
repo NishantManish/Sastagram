@@ -808,6 +808,52 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
             />
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {messageToDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+              >
+                <div className="p-6">
+                  <h3 className="text-lg font-semibold text-zinc-900 mb-2">Delete Message</h3>
+                  <p className="text-zinc-500 text-sm mb-6">
+                    Are you sure you want to delete this message?
+                  </p>
+                  <div className="space-y-2">
+                    {(messageToDelete.senderId === auth.currentUser?.uid || userRole === 'admin') && 
+                     (!messageToDelete.createdAt || Date.now() - messageToDelete.createdAt.toMillis() < 24 * 60 * 60 * 1000 || userRole === 'admin') && (
+                      <button
+                        onClick={() => handleDeleteMessage(messageToDelete, 'everyone')}
+                        disabled={isDeleting}
+                        className="w-full py-3 px-4 bg-red-50 text-red-600 font-medium rounded-xl hover:bg-red-100 transition-colors disabled:opacity-50"
+                      >
+                        Delete for everyone
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteMessage(messageToDelete, 'me')}
+                      disabled={isDeleting}
+                      className="w-full py-3 px-4 bg-zinc-50 text-zinc-900 font-medium rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-50"
+                    >
+                      Delete for me
+                    </button>
+                    <button
+                      onClick={() => setMessageToDelete(null)}
+                      disabled={isDeleting}
+                      className="w-full py-3 px-4 bg-white border border-zinc-200 text-zinc-700 font-medium rounded-xl hover:bg-zinc-50 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -976,52 +1022,6 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         confirmText="Delete"
         isLoading={isDeleting}
       />
-
-      <AnimatePresence>
-        {messageToDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
-            >
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-zinc-900 mb-2">Delete Message</h3>
-                <p className="text-zinc-500 text-sm mb-6">
-                  Are you sure you want to delete this message?
-                </p>
-                <div className="space-y-2">
-                  {(messageToDelete.senderId === auth.currentUser?.uid || userRole === 'admin') && 
-                   (!messageToDelete.createdAt || Date.now() - messageToDelete.createdAt.toMillis() < 24 * 60 * 60 * 1000 || userRole === 'admin') && (
-                    <button
-                      onClick={() => handleDeleteMessage(messageToDelete, 'everyone')}
-                      disabled={isDeleting}
-                      className="w-full py-3 px-4 bg-red-50 text-red-600 font-medium rounded-xl hover:bg-red-100 transition-colors disabled:opacity-50"
-                    >
-                      Delete for everyone
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteMessage(messageToDelete, 'me')}
-                    disabled={isDeleting}
-                    className="w-full py-3 px-4 bg-zinc-50 text-zinc-900 font-medium rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-50"
-                  >
-                    Delete for me
-                  </button>
-                  <button
-                    onClick={() => setMessageToDelete(null)}
-                    disabled={isDeleting}
-                    className="w-full py-3 px-4 bg-white border border-zinc-200 text-zinc-700 font-medium rounded-xl hover:bg-zinc-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {selectedPost && (
