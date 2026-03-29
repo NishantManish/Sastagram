@@ -18,15 +18,17 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
   const [pullDistance, setPullDistance] = useState(0);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [limitCount, setLimitCount] = useState(20);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const startY = useRef(0);
   const isDragging = useRef(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const q = query(
       collection(db, 'posts'),
       orderBy('createdAt', 'desc'),
-      limit(20)
+      limit(limitCount)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -48,7 +50,28 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [limitCount]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && !loading) {
+          setLimitCount(prev => prev + 20);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => {
+      if (observerTarget.current) {
+        observer.unobserve(observerTarget.current);
+      }
+    };
+  }, [observerTarget.current, loading]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (window.scrollY === 0) {
@@ -97,12 +120,36 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
-        <div className="relative">
-          <div className="w-12 h-12 border-4 border-indigo-100 rounded-full" />
-          <div className="absolute top-0 left-0 w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="max-w-md mx-auto pb-24 relative min-h-screen">
+        <div className="mt-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800 sm:border sm:rounded-xl sm:mb-4 overflow-hidden animate-pulse">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+                  <div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                </div>
+                <div className="w-16 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+              </div>
+              
+              {/* Image */}
+              <div className="w-full aspect-square bg-zinc-200 dark:bg-zinc-800" />
+              
+              {/* Actions */}
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="w-7 h-7 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+                  <div className="w-7 h-7 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+                  <div className="w-7 h-7 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+                </div>
+                <div className="w-20 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md mb-2" />
+                <div className="w-3/4 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md mb-1" />
+                <div className="w-1/2 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+              </div>
+            </div>
+          ))}
         </div>
-        <p className="text-zinc-400 text-sm font-bold uppercase tracking-widest animate-pulse">Loading Feed</p>
       </div>
     );
   }
@@ -152,9 +199,10 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
             </motion.div>
           ) : (
             <AnimatePresence mode="popLayout">
-              {filteredPosts.map((post) => (
+              {filteredPosts.map((post, index) => (
                 <motion.div
                   key={post.id}
+                  id={`post-${post.id}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -164,9 +212,26 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
                     onCommentClick={() => setSelectedPost(post)}
                     onUserClick={setSelectedUserId}
                     onTagClick={onTagClick}
+                    onSwipeNext={() => {
+                      if (index < filteredPosts.length - 1) {
+                        const nextPost = document.getElementById(`post-${filteredPosts[index + 1].id}`);
+                        if (nextPost) {
+                          nextPost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }
+                    }}
+                    onSwipePrev={() => {
+                      if (index > 0) {
+                        const prevPost = document.getElementById(`post-${filteredPosts[index - 1].id}`);
+                        if (prevPost) {
+                          prevPost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }
+                    }}
                   />
                 </motion.div>
               ))}
+              <div ref={observerTarget} className="h-10 w-full" />
             </AnimatePresence>
           )}
         </div>

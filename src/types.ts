@@ -15,6 +15,9 @@ export interface Post {
   authorName: string;
   authorPhoto: string;
   imageUrl: string;
+  videoUrl?: string;
+  mediaType?: 'image' | 'video';
+  mediaUrls?: { url: string; type: 'image' | 'video' }[];
   caption: string;
   tags?: string[];
   mentions?: string[];

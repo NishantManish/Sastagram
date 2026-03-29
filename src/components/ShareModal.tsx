@@ -63,7 +63,9 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
         authorId: auth.currentUser.uid,
         authorName: auth.currentUser.displayName || 'Anonymous',
         authorPhoto: auth.currentUser.photoURL || '',
-        imageUrl: post.imageUrl,
+        imageUrl: post.mediaUrls && post.mediaUrls.length > 0 && post.mediaUrls[0].type === 'image' ? post.mediaUrls[0].url : post.imageUrl || '',
+        videoUrl: post.mediaUrls && post.mediaUrls.length > 0 && post.mediaUrls[0].type === 'video' ? post.mediaUrls[0].url : post.videoUrl || '',
+        mediaType: post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0].type : post.mediaType || 'image',
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAtDate)
       });

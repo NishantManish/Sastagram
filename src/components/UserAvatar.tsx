@@ -9,9 +9,10 @@ interface UserAvatarProps {
   className?: string;
   fallbackPhoto?: string;
   fallbackName?: string;
+  shape?: 'circle' | 'squircle';
 }
 
-export default function UserAvatar({ userId, size, className = '', fallbackPhoto, fallbackName }: UserAvatarProps) {
+export default function UserAvatar({ userId, size, className = '', fallbackPhoto, fallbackName, shape = 'circle' }: UserAvatarProps) {
   const [photoURL, setPhotoURL] = useState<string | null>(fallbackPhoto || null);
   const [displayName, setDisplayName] = useState<string | null>(fallbackName || null);
 
@@ -32,9 +33,11 @@ export default function UserAvatar({ userId, size, className = '', fallbackPhoto
   const avatarSize = size || 40;
   const optimizedUrl = photoURL ? getOptimizedImageUrl(photoURL, avatarSize * 2, avatarSize * 2) : null;
 
+  const shapeClass = shape === 'squircle' ? 'rounded-[32%]' : 'rounded-full';
+
   return (
     <div 
-      className={`rounded-full bg-zinc-200 overflow-hidden shrink-0 flex items-center justify-center ${className}`}
+      className={`${shapeClass} bg-zinc-200 dark:bg-zinc-800 overflow-hidden shrink-0 flex items-center justify-center ${className}`}
       style={size ? { width: size, height: size } : {}}
     >
       {optimizedUrl ? (

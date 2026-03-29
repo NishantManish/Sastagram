@@ -6,21 +6,24 @@ import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, Comment } from '../types';
 import PostCard from './PostCard';
 import { formatDistanceToNow } from 'date-fns';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
 import EditPostModal from './EditPostModal';
+import ZoomableMedia from './ZoomableMedia';
 
 interface PostDetailsModalProps {
   post: Post;
   onClose: () => void;
   onUserClick?: (userId: string) => void;
   onTagClick?: (tag: string) => void;
+  onSwipeNext?: () => void;
+  onSwipePrev?: () => void;
 }
 
-export default function PostDetailsModal({ post, onClose, onUserClick, onTagClick }: PostDetailsModalProps) {
+export default function PostDetailsModal({ post, onClose, onUserClick, onTagClick, onSwipeNext, onSwipePrev }: PostDetailsModalProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const [processingLikes, setProcessingLikes] = useState<Set<string>>(new Set());
@@ -29,6 +32,35 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+
+  const mediaList = post.mediaUrls && post.mediaUrls.length > 0 
+    ? post.mediaUrls 
+    : [{ 
+        url: post.videoUrl || post.imageUrl, 
+        type: (post.mediaType === 'video' || post.videoUrl || (post.imageUrl && (post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/')))) ? 'video' : 'image' 
+      }];
+
+  const currentMedia = mediaList[currentMediaIndex];
+
+  const handleDragEnd = (e: any, { offset, velocity }: any) => {
+    const swipe = offset.x;
+    const swipeThreshold = 50;
+    
+    if (swipe < -swipeThreshold) {
+      if (currentMediaIndex < mediaList.length - 1) {
+        setCurrentMediaIndex(prev => prev + 1);
+      } else if (onSwipeNext) {
+        onSwipeNext();
+      }
+    } else if (swipe > swipeThreshold) {
+      if (currentMediaIndex > 0) {
+        setCurrentMediaIndex(prev => prev - 1);
+      } else if (onSwipePrev) {
+        onSwipePrev();
+      }
+    }
+  };
 
   useEffect(() => {
     const q = query(
@@ -271,21 +303,58 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
       >
         
         {/* Left side: Post Image/Video (hidden on small screens, shown on md+) */}
-        <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center">
-          {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
-            <video 
-              src={post.imageUrl} 
-              controls 
-              playsInline
-              className="max-w-full max-h-full object-contain"
-            />
-          ) : (
-            <img 
-              src={getOptimizedImageUrl(post.imageUrl, 1200)} 
-              alt="Post content" 
-              className="max-w-full max-h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
+        <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center relative overflow-hidden">
+          <motion.div
+            drag={(mediaList.length > 1 || onSwipeNext || onSwipePrev) ? "x" : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.2}
+            onDragEnd={handleDragEnd}
+            className="w-full h-full flex items-center justify-center relative touch-pan-y"
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentMediaIndex}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                transition={{ duration: 0.2 }}
+                className="w-full h-full flex items-center justify-center"
+              >
+                <ZoomableMedia className="w-full h-full">
+                  {currentMedia.type === 'video' ? (
+                    <video 
+                      src={currentMedia.url} 
+                      controls 
+                      playsInline
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  ) : (
+                    <img 
+                      src={getOptimizedImageUrl(currentMedia.url, 1200)} 
+                      alt="Post content" 
+                      className="max-w-full max-h-full object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
+                </ZoomableMedia>
+              </motion.div>
+            </AnimatePresence>
+          </motion.div>
+          
+          {/* Pagination Dots */}
+          {mediaList.length > 1 && (
+            <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
+              {mediaList.map((_, idx) => (
+                <div 
+                  key={idx} 
+                  className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                    idx === currentMediaIndex 
+                      ? "bg-white scale-125" 
+                      : "bg-white/50"
+                  }`}
+                />
+              ))}
+            </div>
           )}
         </div>
 
@@ -363,21 +432,58 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
           />
           
           {/* Mobile Image/Video (only visible on small screens) */}
-          <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center">
-            {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
-              <video 
-                src={post.imageUrl} 
-                controls 
-                playsInline
-                className="max-w-full max-h-full object-contain"
-              />
-            ) : (
-              <img 
-                src={getOptimizedImageUrl(post.imageUrl, 800)} 
-                alt="Post content" 
-                className="max-w-full max-h-full object-contain"
-                referrerPolicy="no-referrer"
-              />
+          <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center relative overflow-hidden">
+            <motion.div
+              drag={(mediaList.length > 1 || onSwipeNext || onSwipePrev) ? "x" : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={handleDragEnd}
+              className="w-full h-full flex items-center justify-center relative touch-pan-y"
+            >
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentMediaIndex}
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-full h-full flex items-center justify-center"
+                >
+                  <ZoomableMedia className="w-full h-full">
+                    {currentMedia.type === 'video' ? (
+                      <video 
+                        src={currentMedia.url} 
+                        controls 
+                        playsInline
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    ) : (
+                      <img 
+                        src={getOptimizedImageUrl(currentMedia.url, 800)} 
+                        alt="Post content" 
+                        className="max-w-full max-h-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
+                  </ZoomableMedia>
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+            
+            {/* Pagination Dots */}
+            {mediaList.length > 1 && (
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
+                {mediaList.map((_, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                      idx === currentMediaIndex 
+                        ? "bg-white scale-125" 
+                        : "bg-white/50"
+                    }`}
+                  />
+                ))}
+              </div>
             )}
           </div>
 

@@ -19,6 +19,7 @@
     "@capacitor/core": "^8.2.0",
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@use-gesture/react": "^10.3.1",
     "@vitejs/plugin-react": "^5.0.4",
     "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",

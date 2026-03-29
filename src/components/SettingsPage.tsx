@@ -282,12 +282,37 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
             className="aspect-square relative group cursor-pointer"
             onClick={() => setSelectedPost(post)}
           >
-            <img 
-              src={getOptimizedImageUrl(post.imageUrl, 400)} 
-              alt={post.caption}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
+            {post.mediaUrls && post.mediaUrls.length > 0 ? (
+              post.mediaUrls[0].type === 'video' ? (
+                <video 
+                  src={post.mediaUrls[0].url} 
+                  className="w-full h-full object-cover"
+                  muted
+                  playsInline
+                />
+              ) : (
+                <img 
+                  src={getOptimizedImageUrl(post.mediaUrls[0].url, 400)} 
+                  alt={post.caption}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              )
+            ) : post.mediaType === 'video' || post.videoUrl || (post.imageUrl && (post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/'))) ? (
+              <video 
+                src={post.videoUrl || post.imageUrl} 
+                className="w-full h-full object-cover"
+                muted
+                playsInline
+              />
+            ) : (
+              <img 
+                src={getOptimizedImageUrl(post.imageUrl, 400)} 
+                alt={post.caption}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </motion.div>
         ))}
       </div>

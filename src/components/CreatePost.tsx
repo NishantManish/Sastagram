@@ -1,12 +1,11 @@
-import React, { useState, FormEvent, useRef, useCallback } from 'react';
-import { addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
+import React, { useState, FormEvent, useRef } from 'react';
+import { addDoc, collection, serverTimestamp, Timestamp, writeBatch, doc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
-import { ImagePlus, Loader2, Upload, Camera, Layout, X, Crop as CropIcon } from 'lucide-react';
-import Cropper from 'react-easy-crop';
-import getCroppedImg from '../utils/cropImage';
+import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ZoomableMedia from './ZoomableMedia';
 
 interface CreatePostProps {
   onSuccess: () => void;
@@ -16,59 +15,58 @@ type UploadType = 'post' | 'story';
 
 export default function CreatePost({ onSuccess }: CreatePostProps) {
   const [uploadType, setUploadType] = useState<UploadType>('post');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>('');
+  const [mediaFiles, setMediaFiles] = useState<{ file: File, preview: string, type: 'image' | 'video' }[]>([]);
   const [caption, setCaption] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cropping states
-  const [isCropping, setIsCropping] = useState(false);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files) as File[];
+      const validFiles: { file: File, preview: string, type: 'image' | 'video' }[] = [];
+      
+      for (const file of newFiles) {
+        const isVideo = file.type.startsWith('video/');
+        
+        if (isVideo && file.size > 50 * 1024 * 1024) {
+          setError('Video is too large. Max size is 50MB.');
+          continue;
+        } else if (!isVideo && file.size > 5 * 1024 * 1024) {
+          setError('Image is too large. Max size is 5MB.');
+          continue;
+        }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.size > 5 * 1024 * 1024) {
-        setError('File is too large. Max size is 5MB.');
-        return;
+        validFiles.push({
+          file,
+          preview: URL.createObjectURL(file),
+          type: isVideo ? 'video' : 'image'
+        });
       }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-      setIsCropping(true); // Start cropping immediately
-      setError(null);
+
+      if (uploadType === 'story' && validFiles.length > 1) {
+        setMediaFiles([validFiles[0]]);
+        setError('Only one media file is allowed for stories.');
+      } else {
+        setMediaFiles(prev => [...prev, ...validFiles].slice(0, 10)); // Max 10 files
+        setError(null);
+      }
     }
   };
 
-  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
-
-  const handleCropSave = async () => {
-    try {
-      if (!imagePreview || !croppedAreaPixels) return;
-      const croppedImage = await getCroppedImg(imagePreview, croppedAreaPixels, 0);
-      if (croppedImage) {
-        setImageFile(croppedImage);
-        setImagePreview(URL.createObjectURL(croppedImage));
-        setIsCropping(false);
-      }
-    } catch (e) {
-      console.error(e);
-      setError('Failed to crop image');
-    }
+  const removeMedia = (index: number) => {
+    setMediaFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleCancelCrop = () => {
-    setIsCropping(false);
-    setImageFile(null);
-    setImagePreview('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const reorderMedia = (index: number, direction: 'left' | 'right') => {
+    setMediaFiles(prev => {
+      const newFiles = [...prev];
+      const targetIndex = direction === 'left' ? index - 1 : index + 1;
+      if (targetIndex >= 0 && targetIndex < newFiles.length) {
+        [newFiles[index], newFiles[targetIndex]] = [newFiles[targetIndex], newFiles[index]];
+      }
+      return newFiles;
+    });
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -77,8 +75,8 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
       setError('You must be logged in to upload.');
       return;
     }
-    if (!imageFile) {
-      setError('Please select an image');
+    if (mediaFiles.length === 0) {
+      setError('Please select an image or video');
       return;
     }
 
@@ -86,22 +84,26 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
     setError(null);
 
     try {
-      // Upload image to Cloudinary
-      const formData = new FormData();
-      formData.append('file', imageFile);
-      formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
-      
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/upload`,
-        { method: 'POST', body: formData }
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to upload image to Cloudinary');
+      const uploadedUrls: { url: string, type: 'image' | 'video' }[] = [];
+
+      for (const media of mediaFiles) {
+        const formData = new FormData();
+        formData.append('file', media.file);
+        formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
+        
+        const resourceType = media.type === 'video' ? 'video' : 'image';
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+          { method: 'POST', body: formData }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`Failed to upload ${media.type} to Cloudinary`);
+        }
+        
+        const data = await response.json();
+        uploadedUrls.push({ url: data.secure_url, type: media.type });
       }
-      
-      const data = await response.json();
-      const downloadURL = data.secure_url;
 
       if (uploadType === 'post') {
         try {
@@ -112,7 +114,10 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
             authorId: auth.currentUser.uid,
             authorName: auth.currentUser.displayName || 'Anonymous',
             authorPhoto: auth.currentUser.photoURL || '',
-            imageUrl: downloadURL,
+            imageUrl: uploadedUrls[0].type === 'image' ? uploadedUrls[0].url : '',
+            videoUrl: uploadedUrls[0].type === 'video' ? uploadedUrls[0].url : '',
+            mediaType: uploadedUrls[0].type,
+            mediaUrls: uploadedUrls,
             caption: caption.trim(),
             tags,
             mentions,
@@ -121,7 +126,9 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
             createdAt: serverTimestamp(),
           });
         } catch (err) {
-          await deleteFromCloudinary(downloadURL).catch(console.error);
+          for (const media of uploadedUrls) {
+            await deleteFromCloudinary(media.url).catch(console.error);
+          }
           handleFirestoreError(err, OperationType.CREATE, 'posts');
           throw err;
         }
@@ -130,23 +137,31 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
           const expiresAt = new Date();
           expiresAt.setHours(expiresAt.getHours() + 24);
 
-          await addDoc(collection(db, 'stories'), {
-            authorId: auth.currentUser.uid,
-            authorName: auth.currentUser.displayName || 'Anonymous',
-            authorPhoto: auth.currentUser.photoURL || '',
-            imageUrl: downloadURL,
-            createdAt: serverTimestamp(),
-            expiresAt: Timestamp.fromDate(expiresAt),
-          });
+          const batch = writeBatch(db);
+          for (const media of uploadedUrls) {
+            const storyRef = doc(collection(db, 'stories'));
+            batch.set(storyRef, {
+              authorId: auth.currentUser.uid,
+              authorName: auth.currentUser.displayName || 'Anonymous',
+              authorPhoto: auth.currentUser.photoURL || '',
+              imageUrl: media.type === 'image' ? media.url : '',
+              videoUrl: media.type === 'video' ? media.url : '',
+              mediaType: media.type,
+              createdAt: serverTimestamp(),
+              expiresAt: Timestamp.fromDate(expiresAt),
+            });
+          }
+          await batch.commit();
         } catch (err) {
-          await deleteFromCloudinary(downloadURL).catch(console.error);
+          for (const media of uploadedUrls) {
+            await deleteFromCloudinary(media.url).catch(console.error);
+          }
           handleFirestoreError(err, OperationType.CREATE, 'stories');
           throw err;
         }
       }
       
-      setImageFile(null);
-      setImagePreview('');
+      setMediaFiles([]);
       setCaption('');
       onSuccess();
     } catch (err: any) {
@@ -159,8 +174,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
 
   const handleTabSwitch = (type: UploadType) => {
     setUploadType(type);
-    setImageFile(null);
-    setImagePreview('');
+    setMediaFiles([]);
     setCaption('');
     setError(null);
     if (fileInputRef.current) {
@@ -171,12 +185,12 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
   return (
     <div className="max-w-md mx-auto p-4 pt-6 pb-24">
       <div className="flex items-center justify-between mb-8">
-        <h2 className="text-2xl font-bold text-zinc-900 tracking-tight">Create new</h2>
-        <div className="flex bg-zinc-100/80 p-1 rounded-2xl backdrop-blur-sm">
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">Create new</h2>
+        <div className="flex bg-zinc-100/80 dark:bg-zinc-800 p-1 rounded-2xl backdrop-blur-sm">
           <button
             onClick={() => handleTabSwitch('post')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-              uploadType === 'post' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              uploadType === 'post' ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
           >
             <Layout className="w-4 h-4" />
@@ -185,7 +199,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
           <button
             onClick={() => handleTabSwitch('story')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-              uploadType === 'story' ? 'bg-white text-indigo-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              uploadType === 'story' ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
           >
             <Camera className="w-4 h-4" />
@@ -198,148 +212,174 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 mb-6 bg-red-50 text-red-600 text-sm font-medium rounded-2xl border border-red-100"
+          className="p-4 mb-6 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium rounded-2xl border border-red-100 dark:border-red-900/30"
         >
           {error}
         </motion.div>
       )}
 
       <AnimatePresence mode="wait">
-        {isCropping ? (
-          <motion.div 
-            key="cropper"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-50 bg-black flex flex-col"
-          >
-            <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
-              <button onClick={handleCancelCrop} className="p-2 text-white/80 hover:text-white bg-black/20 rounded-full backdrop-blur-md">
-                <X className="w-6 h-6" />
-              </button>
-              <h3 className="text-white font-bold">Crop Image</h3>
-              <button onClick={handleCropSave} className="px-4 py-2 bg-white text-zinc-900 font-bold rounded-full text-sm hover:bg-zinc-200 transition-colors">
-                Done
-              </button>
-            </div>
-            <div className="relative flex-1">
-              <Cropper
-                image={imagePreview}
-                crop={crop}
-                zoom={zoom}
-                aspect={uploadType === 'story' ? 9 / 16 : 1}
-                onCropChange={setCrop}
-                onCropComplete={onCropComplete}
-                onZoomChange={setZoom}
-                objectFit="contain"
-              />
-            </div>
-            <div className="p-8 bg-gradient-to-t from-black/80 to-transparent absolute bottom-0 left-0 right-0 z-10">
-              <input
-                type="range"
-                value={zoom}
-                min={1}
-                max={3}
-                step={0.1}
-                aria-labelledby="Zoom"
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-full accent-white"
-              />
-            </div>
-          </motion.div>
-        ) : (
-          <motion.form 
-            key="form"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onSubmit={handleSubmit} 
-            className="space-y-6"
-          >
-            <div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                ref={fileInputRef}
-                className="hidden"
-              />
-              
-              {imagePreview ? (
-                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'min-h-[300px] max-h-[500px] overflow-y-auto custom-scrollbar'} bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200/50 shadow-sm group`}>
-                  <img 
-                    src={imagePreview} 
-                    alt="Preview" 
-                    className="w-full h-auto block"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleTabSwitch(uploadType)}
-                    className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all z-10"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm pointer-events-none group-hover:pointer-events-auto">
-                    <button 
+        <motion.form 
+          key="form"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onSubmit={handleSubmit} 
+          className="space-y-6"
+        >
+          <div>
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple={uploadType === 'post'}
+              onChange={handleMediaChange}
+              ref={fileInputRef}
+              className="hidden"
+            />
+            
+            {mediaFiles.length > 0 ? (
+              <div className="space-y-4">
+                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'min-h-[300px] max-h-[min(500px,70vh)] overflow-y-auto custom-scrollbar'} bg-zinc-100 dark:bg-zinc-800 rounded-3xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700 shadow-sm group`}>
+                  <ZoomableMedia className="w-full h-full">
+                    {mediaFiles[0].type === 'video' ? (
+                      <video 
+                        src={mediaFiles[0].preview} 
+                        controls
+                        className="w-full h-auto block object-contain"
+                      />
+                    ) : (
+                      <img 
+                        src={mediaFiles[0].preview} 
+                        alt="Preview" 
+                        className="w-full h-auto block object-contain"
+                      />
+                    )}
+                  </ZoomableMedia>
+                  <div className="absolute top-4 right-4 flex gap-2 z-10">
+                    {mediaFiles.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => reorderMedia(0, 'right')}
+                        className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all"
+                        title="Move right"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    )}
+                    <button
                       type="button"
-                      onClick={() => setIsCropping(true)}
-                      className="bg-white/90 text-zinc-900 px-4 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-white hover:scale-105 transition-all active:scale-95"
+                      onClick={() => removeMedia(0)}
+                      className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all"
                     >
-                      <CropIcon className="w-4 h-4" />
-                      Crop
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="bg-white/90 text-zinc-900 px-4 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-white hover:scale-105 transition-all active:scale-95"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Change
+                      <X className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'aspect-square'} bg-zinc-50/50 border-2 border-dashed border-zinc-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-50 hover:border-indigo-300 transition-all group`}
-                >
-                  <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform group-hover:shadow-md">
-                    <ImagePlus className="w-8 h-8 text-indigo-500" />
-                  </div>
-                  <p className="text-zinc-900 font-bold text-lg">Select an image</p>
-                  <p className="text-zinc-400 text-sm mt-1 font-medium">PNG, JPG up to 5MB</p>
-                </div>
-              )}
-            </div>
 
-            {uploadType === 'post' && (
-              <div className="bg-white p-2 rounded-3xl border border-zinc-100 shadow-sm transition-all">
-                <textarea
-                  id="caption"
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="Write a caption..."
-                  rows={3}
-                  className="block w-full p-3 bg-transparent border-none focus:ring-0 outline-none focus:outline-none text-zinc-900 placeholder:text-zinc-400 resize-none"
-                />
+                {uploadType === 'post' && mediaFiles.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                    {mediaFiles.slice(1).map((media, index) => {
+                      const realIndex = index + 1;
+                      return (
+                        <div key={realIndex} className="relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 group/thumb">
+                          {media.type === 'video' ? (
+                            <video src={media.preview} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={media.preview} alt={`Preview ${realIndex}`} className="w-full h-full object-cover" />
+                          )}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => reorderMedia(realIndex, 'left')}
+                              className="p-1 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md transition-all"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            {realIndex < mediaFiles.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => reorderMedia(realIndex, 'right')}
+                                className="p-1 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md transition-all"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeMedia(realIndex)}
+                              className="p-1 bg-red-500/50 hover:bg-red-500/70 text-white rounded-full backdrop-blur-md transition-all"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {mediaFiles.length < 10 && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex-shrink-0 w-24 h-24 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-600 flex items-center justify-center hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <Upload className="w-6 h-6 text-zinc-400" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                {uploadType === 'post' && mediaFiles.length === 1 && (
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full bg-white/90 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 px-4 py-3 rounded-xl font-bold shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center justify-center gap-2 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all"
+                  >
+                    <ImagePlus className="w-5 h-5" />
+                    Add more media
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className={`w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'aspect-square'} bg-zinc-50/50 dark:bg-zinc-800/50 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-500 transition-all group`}
+              >
+                <div className="w-16 h-16 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform group-hover:shadow-md">
+                  <ImagePlus className="w-8 h-8 text-indigo-500 dark:text-indigo-400" />
+                </div>
+                <p className="text-zinc-900 dark:text-zinc-50 font-bold text-lg">Select media</p>
+                <p className="text-zinc-400 dark:text-zinc-500 text-sm mt-1 font-medium">PNG, JPG up to 5MB, Video up to 50MB</p>
+                {uploadType === 'post' && <p className="text-zinc-400 dark:text-zinc-500 text-xs mt-1">Select multiple files to create a carousel</p>}
               </div>
             )}
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading || !imageFile}
-              className="w-full py-4 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98]"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  {uploadType === 'post' ? 'Sharing post...' : 'Uploading story...'}
-                </>
-              ) : (
-                uploadType === 'post' ? 'Share Post' : 'Upload Story'
-              )}
-            </button>
-          </motion.form>
-        )}
+          {uploadType === 'post' && (
+            <div className="bg-white dark:bg-zinc-900 p-2 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm transition-all">
+              <textarea
+                id="caption"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Write a caption..."
+                rows={3}
+                className="block w-full p-3 bg-transparent border-none focus:ring-0 outline-none focus:outline-none text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 resize-none"
+              />
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || mediaFiles.length === 0}
+            className="w-full py-4 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98]"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {uploadType === 'post' ? 'Sharing post...' : 'Uploading story...'}
+              </>
+            ) : (
+              uploadType === 'post' ? 'Share Post' : 'Upload Story'
+            )}
+          </button>
+        </motion.form>
       </AnimatePresence>
     </div>
   );

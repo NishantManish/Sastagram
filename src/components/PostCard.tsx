@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2, Volume2, VolumeX, Play } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs, onSnapshot, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
@@ -13,6 +13,7 @@ import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
 import ShareModal from './ShareModal';
 import EditPostModal from './EditPostModal';
+import ZoomableMedia from './ZoomableMedia';
 
 interface PostCardProps {
   key?: string | number;
@@ -21,9 +22,11 @@ interface PostCardProps {
   onCommentClick?: () => void;
   onUserClick?: (userId: string) => void;
   onTagClick?: (tag: string) => void;
+  onSwipeNext?: () => void;
+  onSwipePrev?: () => void;
 }
 
-export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick, onTagClick }: PostCardProps) {
+export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick, onTagClick, onSwipeNext, onSwipePrev }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likesCount);
   const [isLiking, setIsLiking] = useState(false);
@@ -37,6 +40,39 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [showEditModal, setShowEditModal] = useState(false);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const mediaList = post.mediaUrls && post.mediaUrls.length > 0 
+    ? post.mediaUrls 
+    : [{ 
+        url: post.videoUrl || post.imageUrl, 
+        type: (post.mediaType === 'video' || post.videoUrl || (post.imageUrl && (post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/')))) ? 'video' : 'image' 
+      }];
+
+  const currentMedia = mediaList[currentMediaIndex];
+
+  const handleDragEnd = (e: any, { offset, velocity }: any) => {
+    const swipe = offset.x;
+    const swipeThreshold = 50;
+    
+    if (swipe < -swipeThreshold) {
+      if (currentMediaIndex < mediaList.length - 1) {
+        setCurrentMediaIndex(prev => prev + 1);
+      } else if (onSwipeNext) {
+        onSwipeNext();
+      }
+    } else if (swipe > swipeThreshold) {
+      if (currentMediaIndex > 0) {
+        setCurrentMediaIndex(prev => prev - 1);
+      } else if (onSwipePrev) {
+        onSwipePrev();
+      }
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -87,6 +123,51 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       mounted = false;
     };
   }, [post.id, post.authorId, auth.currentUser?.uid]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+          } else {
+            video.pause();
+            setIsPlaying(false);
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.unobserve(video);
+    };
+  }, []);
+
+  const toggleMute = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setIsMuted(videoRef.current.muted);
+    }
+  };
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      }
+    }
+  };
 
   const handleFollow = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -413,26 +494,95 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
 
       {/* Image/Video */}
       <div 
-        className="w-full max-h-[500px] bg-zinc-50 relative cursor-pointer overflow-y-auto custom-scrollbar"
+        className="w-full max-h-[min(500px,70vh)] bg-zinc-50 dark:bg-zinc-900 relative cursor-pointer overflow-hidden group"
         onClick={handleDoubleTap}
       >
-        {post.imageUrl && (
-          post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/') ? (
-            <video 
-              src={post.imageUrl} 
-              controls 
-              playsInline
-              className="w-full h-auto block"
-            />
-          ) : (
-            <img 
-              src={getOptimizedImageUrl(post.imageUrl, 800)} 
-              alt="Post content" 
-              className="w-full h-auto block"
-              referrerPolicy="no-referrer"
-              loading="lazy"
-            />
-          )
+        <motion.div
+          drag={(mediaList.length > 1 || onSwipeNext || onSwipePrev) ? "x" : false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.2}
+          onDragEnd={handleDragEnd}
+          className="w-full h-full flex items-center justify-center relative touch-pan-y"
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentMediaIndex}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.2 }}
+              className="w-full h-full flex items-center justify-center"
+            >
+              <ZoomableMedia className="w-full h-full">
+                {currentMedia.type === 'video' ? (
+                  <div className="relative w-full h-full flex items-center justify-center bg-black">
+                    <video 
+                      ref={videoRef}
+                      src={currentMedia.url} 
+                      playsInline
+                      loop
+                      muted={isMuted}
+                      onClick={(e) => {
+                        // Don't stop propagation so double tap works
+                        if (videoRef.current && videoRef.current.paused) {
+                          videoRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+                        } else {
+                          toggleMute();
+                        }
+                      }}
+                      className="w-full h-auto max-h-[min(500px,70vh)] object-contain block"
+                    />
+                    
+                    {/* Custom Video Controls */}
+                    <div className="absolute bottom-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMute(e);
+                        }}
+                        className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-all"
+                      >
+                        {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    
+                    {!isPlaying && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-16 h-16 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-sm">
+                          <Play className="w-8 h-8 text-white fill-white ml-1" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <img 
+                    src={getOptimizedImageUrl(currentMedia.url, 800)} 
+                    alt="Post content" 
+                    className="w-full h-auto max-h-[min(500px,70vh)] object-contain block"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                )}
+              </ZoomableMedia>
+            </motion.div>
+          </AnimatePresence>
+        </motion.div>
+        
+        {/* Pagination Dots */}
+        {mediaList.length > 1 && (
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
+            {mediaList.map((_, idx) => (
+              <div 
+                key={idx} 
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                  idx === currentMediaIndex 
+                    ? "bg-white scale-125" 
+                    : "bg-white/50"
+                )}
+              />
+            ))}
+          </div>
         )}
         
         <AnimatePresence>
@@ -441,7 +591,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1.2, opacity: 1 }}
               exit={{ scale: 1.5, opacity: 0 }}
-              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
             >
               <Heart 
                 className="w-24 h-24 drop-shadow-2xl fill-red-500 text-red-500" 

@@ -107,6 +107,16 @@ export default function Stories() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    const isVideo = file.type.startsWith('video/');
+    if (isVideo && file.size > 50 * 1024 * 1024) {
+      alert('Video is too large. Max size is 50MB.');
+      return;
+    } else if (!isVideo && file.size > 5 * 1024 * 1024) {
+      alert('Image is too large. Max size is 5MB.');
+      return;
+    }
+
     setPreviewFile(file);
     setPreviewUrl(URL.createObjectURL(file));
   };
@@ -116,19 +126,22 @@ export default function Stories() {
 
     setIsUploading(true);
     try {
-      // Upload image to Cloudinary
+      const isVideo = previewFile.type.startsWith('video/');
+      const resourceType = isVideo ? 'video' : 'image';
+
+      // Upload media to Cloudinary
       const formData = new FormData();
       formData.append('file', previewFile);
       formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
       formData.append('tags', `user_${auth.currentUser.uid},story`);
       
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/upload`,
+        `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
         { method: 'POST', body: formData }
       );
       
       if (!response.ok) {
-        throw new Error('Failed to upload image to Cloudinary');
+        throw new Error(`Failed to upload ${resourceType} to Cloudinary`);
       }
       
       const data = await response.json();
@@ -141,7 +154,9 @@ export default function Stories() {
         authorId: auth.currentUser.uid,
         authorName: auth.currentUser.displayName || 'Anonymous',
         authorPhoto: auth.currentUser.photoURL || '',
-        imageUrl: downloadURL,
+        imageUrl: !isVideo ? downloadURL : '',
+        videoUrl: isVideo ? downloadURL : '',
+        mediaType: isVideo ? 'video' : 'image',
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAtDate)
       });
@@ -156,16 +171,20 @@ export default function Stories() {
   };
 
   const holdTimer = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoDuration, setVideoDuration] = useState<number>(5000);
 
   const handleNextStory = () => {
     if (!activeUserStories) return;
     if (currentStoryIndex < activeUserStories.length - 1) {
       setCurrentStoryIndex(prev => prev + 1);
       setProgress(0);
+      setVideoDuration(5000);
     } else {
       setActiveUserStories(null);
       setCurrentStoryIndex(0);
       setProgress(0);
+      setVideoDuration(5000);
     }
   };
 
@@ -173,15 +192,23 @@ export default function Stories() {
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex(prev => prev - 1);
       setProgress(0);
+      setVideoDuration(5000);
     }
   };
+
+  const activeStory = activeUserStories ? activeUserStories[currentStoryIndex] : null;
 
   useEffect(() => {
     if (!activeUserStories || isPaused) return;
 
-    const STORY_DURATION = 5000; // 5 seconds
+    let storyDuration = 5000; // Default 5 seconds
+    
+    if (activeStory && (activeStory.mediaType === 'video' || activeStory.videoUrl)) {
+      storyDuration = videoDuration;
+    }
+
     const intervalTime = 50; // Update every 50ms
-    const step = (intervalTime / STORY_DURATION) * 100;
+    const step = (intervalTime / storyDuration) * 100;
 
     const timer = setInterval(() => {
       setProgress(prev => {
@@ -194,7 +221,7 @@ export default function Stories() {
     }, intervalTime);
 
     return () => clearInterval(timer);
-  }, [activeUserStories, isPaused, currentStoryIndex]);
+  }, [activeUserStories, isPaused, currentStoryIndex, activeStory, videoDuration]);
 
   const handlePointerDown = () => {
     holdTimer.current = Date.now();
@@ -250,8 +277,6 @@ export default function Stories() {
     setIsPaused(false);
   };
 
-  const activeStory = activeUserStories ? activeUserStories[currentStoryIndex] : null;
-
   useEffect(() => {
     if (activeStory && auth.currentUser && activeStory.authorId !== auth.currentUser.uid) {
       const hasViewed = activeStory.viewers?.includes(auth.currentUser.uid);
@@ -283,7 +308,7 @@ export default function Stories() {
                   <Plus className="w-5 h-5 text-white" />
                   <input 
                     type="file" 
-                    accept="image/*" 
+                    accept="image/*,video/*" 
                     className="hidden" 
                     onChange={handleFileSelect}
                   />
@@ -350,7 +375,11 @@ export default function Stories() {
               </button>
             </div>
             <div className="flex-1 flex items-center justify-center bg-black">
-              <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
+              {previewFile?.type.startsWith('video/') ? (
+                <video src={previewUrl} controls className="max-w-full max-h-full object-contain" />
+              ) : (
+                <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
+              )}
             </div>
             <div className="p-4 bg-black flex justify-end">
               <button
@@ -439,12 +468,19 @@ export default function Stories() {
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
             >
-              {activeStory.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || activeStory.imageUrl?.includes('/video/upload/') ? (
+              {activeStory.mediaType === 'video' || activeStory.videoUrl || (activeStory.imageUrl && (activeStory.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || activeStory.imageUrl.includes('/video/upload/'))) ? (
                 <video 
-                  src={activeStory.imageUrl} 
+                  ref={videoRef}
+                  src={activeStory.videoUrl || activeStory.imageUrl} 
                   autoPlay
                   playsInline
                   onEnded={handleNextStory}
+                  onLoadedMetadata={(e) => {
+                    const video = e.target as HTMLVideoElement;
+                    if (video.duration && !isNaN(video.duration)) {
+                      setVideoDuration(video.duration * 1000);
+                    }
+                  }}
                   className="max-w-full max-h-full object-contain pointer-events-none"
                 />
               ) : (

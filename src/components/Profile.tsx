@@ -390,7 +390,77 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
     }
   };
 
-  if (!targetUserId || !userProfile) return null;
+  if (!targetUserId) return null;
+
+  if (!userProfile) {
+    return (
+      <div className="max-w-md mx-auto pb-24 bg-white dark:bg-zinc-950 min-h-screen animate-pulse">
+        {/* Header Skeleton */}
+        <header className="sticky top-0 z-30 bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800 px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-5 h-5 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            <div className="w-32 h-5 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl" />
+            <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl" />
+          </div>
+        </header>
+
+        {/* Profile Info Skeleton */}
+        <div className="px-4 pt-12 pb-4 flex flex-col items-center text-center">
+          <div className="w-[88px] h-[88px] bg-zinc-200 dark:bg-zinc-800 rounded-[1.8rem] mb-4" />
+          <div className="w-40 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-md mb-2" />
+          <div className="w-24 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md mb-6" />
+          <div className="w-64 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md mb-2" />
+          <div className="w-48 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md mb-6" />
+
+          {/* Stats Skeleton */}
+          <div className="flex items-center gap-8 mb-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <div className="w-8 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                <div className="w-12 h-3 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+              </div>
+            ))}
+          </div>
+
+          {/* Buttons Skeleton */}
+          <div className="flex gap-2 w-full mb-6">
+            <div className="flex-1 h-11 bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+            <div className="flex-1 h-11 bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+          </div>
+
+          {/* Highlights Skeleton */}
+          <div className="w-full flex gap-4 overflow-hidden px-2">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="flex flex-col items-center gap-2 flex-shrink-0">
+                <div className="w-14 h-14 bg-zinc-200 dark:bg-zinc-800 rounded-[1.5rem]" />
+                <div className="w-10 h-2 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid Tabs Skeleton */}
+        <div className="flex border-t border-zinc-100 dark:border-zinc-800">
+          <div className="flex-1 py-3.5 flex justify-center">
+            <div className="w-16 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+          </div>
+          <div className="flex-1 py-3.5 flex justify-center">
+            <div className="w-16 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+          </div>
+        </div>
+
+        {/* Grid Content Skeleton */}
+        <div className="grid grid-cols-3 gap-1.5 px-2 pt-2">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (showSettingsPage) {
     return (
@@ -740,8 +810,10 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
             <p className="text-sm text-zinc-400 font-medium leading-relaxed">Unblock this creator to view their editorial feed and interactions.</p>
           </div>
         ) : loading ? (
-          <div className="flex justify-center items-center py-24">
-            <div className="w-8 h-8 border-4 border-zinc-100 border-t-zinc-900 rounded-full animate-spin" />
+          <div className="grid grid-cols-3 gap-1.5 animate-pulse">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+            ))}
           </div>
         ) : (activeGridTab === 'posts' ? posts : taggedPosts).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
@@ -766,9 +838,27 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
                 transition={{ delay: index * 0.03 }}
                 className="aspect-square bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl"
               >
-                {post.imageUrl?.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl?.includes('/video/upload/') ? (
+                {post.mediaUrls && post.mediaUrls.length > 0 ? (
+                  post.mediaUrls[0].type === 'video' ? (
+                    <video 
+                      src={post.mediaUrls[0].url} 
+                      className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                      muted
+                      playsInline
+                      onClick={() => setSelectedPost(post)}
+                    />
+                  ) : (
+                    <img 
+                      src={getOptimizedImageUrl(post.mediaUrls[0].url, 400, 400)} 
+                      alt="Post" 
+                      className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                      referrerPolicy="no-referrer"
+                      onClick={() => setSelectedPost(post)}
+                    />
+                  )
+                ) : post.mediaType === 'video' || post.videoUrl || (post.imageUrl && (post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/'))) ? (
                   <video 
-                    src={post.imageUrl} 
+                    src={post.videoUrl || post.imageUrl} 
                     className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     muted
                     playsInline
