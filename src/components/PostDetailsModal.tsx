@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Trash2, Heart, Edit2 } from 'lucide-react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc, limit } from 'firebase/firestore';
+import { X, Send, Trash2, Heart, Edit2, MessageCircle, Bookmark } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc, limit, getDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post, Comment } from '../types';
@@ -13,6 +13,7 @@ import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
 import EditPostModal from './EditPostModal';
 import ZoomableMedia from './ZoomableMedia';
+import ShareModal from './ShareModal';
 
 interface PostDetailsModalProps {
   post: Post;
@@ -21,18 +22,122 @@ interface PostDetailsModalProps {
   onTagClick?: (tag: string) => void;
   onSwipeNext?: () => void;
   onSwipePrev?: () => void;
+  initialMediaIndex?: number;
 }
 
-export default function PostDetailsModal({ post, onClose, onUserClick, onTagClick, onSwipeNext, onSwipePrev }: PostDetailsModalProps) {
+export default function PostDetailsModal({ post, onClose, onUserClick, onTagClick, onSwipeNext, onSwipePrev, initialMediaIndex = 0 }: PostDetailsModalProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const [processingLikes, setProcessingLikes] = useState<Set<string>>(new Set());
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.likesCount);
+  const [isLiking, setIsLiking] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    
+    const checkInteractions = async () => {
+      const likeId = `${post.id}_${auth.currentUser!.uid}`;
+      const saveId = `${auth.currentUser!.uid}_${post.id}`;
+      
+      const [likeSnap, saveSnap] = await Promise.all([
+        getDoc(doc(db, 'likes', likeId)),
+        getDoc(doc(db, 'savedPosts', saveId))
+      ]);
+      
+      setIsLiked(likeSnap.exists());
+      setIsSaved(saveSnap.exists());
+    };
+    
+    checkInteractions();
+  }, [post.id]);
+
+  const handleLike = async () => {
+    if (!auth.currentUser || isLiking) return;
+    setIsLiking(true);
+    
+    const newIsLiked = !isLiked;
+    setIsLiked(newIsLiked);
+    setLikeCount((prev) => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
+
+    const likeId = `${post.id}_${auth.currentUser.uid}`;
+    const likeRef = doc(db, 'likes', likeId);
+    const postRef = doc(db, 'posts', post.id);
+    const batch = writeBatch(db);
+
+    try {
+      if (!newIsLiked) {
+        batch.delete(likeRef);
+        batch.update(postRef, { likesCount: increment(-1) });
+      } else {
+        batch.set(likeRef, {
+          postId: post.id,
+          userId: auth.currentUser.uid,
+          createdAt: serverTimestamp(),
+        });
+        batch.update(postRef, { likesCount: increment(1) });
+        
+        if (post.authorId !== auth.currentUser.uid) {
+          const notificationRef = doc(collection(db, 'notifications'));
+          batch.set(notificationRef, {
+            userId: post.authorId,
+            type: 'like',
+            senderId: auth.currentUser.uid,
+            senderName: auth.currentUser.displayName || 'Someone',
+            senderPhoto: auth.currentUser.photoURL || '',
+            postId: post.id,
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+      await batch.commit();
+    } catch (err) {
+      setIsLiked(!newIsLiked);
+      setLikeCount((prev) => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
+      handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}/likes`);
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!auth.currentUser || isSaving) return;
+    setIsSaving(true);
+    const saveId = `${auth.currentUser.uid}_${post.id}`;
+    const saveRef = doc(db, 'savedPosts', saveId);
+    try {
+      if (isSaved) {
+        await deleteDoc(saveRef);
+        setIsSaved(false);
+      } else {
+        await setDoc(saveRef, {
+          userId: auth.currentUser.uid,
+          postId: post.id,
+          createdAt: serverTimestamp(),
+        });
+        setIsSaved(true);
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `savedPosts/${auth.currentUser?.uid}_${post.id}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleShare = () => {
+    setShowShareModal(true);
+  };
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(initialMediaIndex);
+  const [mediaAspectRatio, setMediaAspectRatio] = useState<number>(1);
 
   const mediaList = post.mediaUrls && post.mediaUrls.length > 0 
     ? post.mediaUrls 
@@ -59,6 +164,20 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
       } else if (onSwipePrev) {
         onSwipePrev();
       }
+    }
+  };
+
+  // Reset aspect ratio when media changes
+  useEffect(() => {
+    setMediaAspectRatio(1);
+  }, [currentMediaIndex, post.id]);
+
+  const onMediaLoad = (e: React.SyntheticEvent<HTMLImageElement | HTMLVideoElement>) => {
+    const target = e.target as any;
+    const width = target.naturalWidth || target.videoWidth;
+    const height = target.naturalHeight || target.videoHeight;
+    if (width && height) {
+      setMediaAspectRatio(width / height);
     }
   };
 
@@ -303,7 +422,12 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
       >
         
         {/* Left side: Post Image/Video (hidden on small screens, shown on md+) */}
-        <div className="hidden md:flex md:w-3/5 bg-black items-center justify-center relative overflow-hidden">
+        <div 
+          className="hidden md:flex md:w-3/5 bg-black items-center justify-center relative overflow-hidden max-h-full"
+          style={{ 
+            aspectRatio: `${Math.max(9/16, Math.min(mediaAspectRatio, 1/1))}`,
+          }}
+        >
           <motion.div
             drag={(mediaList.length > 1 || onSwipeNext || onSwipePrev) ? "x" : false}
             dragConstraints={{ left: 0, right: 0 }}
@@ -326,12 +450,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                       src={currentMedia.url} 
                       controls 
                       playsInline
+                      onLoadedMetadata={onMediaLoad}
                       className="max-w-full max-h-full object-contain"
                     />
                   ) : (
                     <img 
                       src={getOptimizedImageUrl(currentMedia.url, 1200)} 
                       alt="Post content" 
+                      onLoad={onMediaLoad}
                       className="max-w-full max-h-full object-contain"
                       referrerPolicy="no-referrer"
                     />
@@ -430,9 +556,21 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
             message="Are you sure you want to delete this post? This action cannot be undone."
             confirmText="Delete"
           />
+
+          <ShareModal
+            isOpen={showShareModal}
+            onClose={() => setShowShareModal(false)}
+            post={post}
+            currentMediaIndex={currentMediaIndex}
+          />
           
           {/* Mobile Image/Video (only visible on small screens) */}
-          <div className="md:hidden w-full aspect-square bg-black flex items-center justify-center relative overflow-hidden">
+          <div 
+            className="md:hidden w-full bg-black flex items-center justify-center relative overflow-hidden max-h-full"
+            style={{ 
+              aspectRatio: `${Math.max(9/16, Math.min(mediaAspectRatio, 1/1))}`,
+            }}
+          >
             <motion.div
               drag={(mediaList.length > 1 || onSwipeNext || onSwipePrev) ? "x" : false}
               dragConstraints={{ left: 0, right: 0 }}
@@ -455,12 +593,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                         src={currentMedia.url} 
                         controls 
                         playsInline
+                        onLoadedMetadata={onMediaLoad}
                         className="max-w-full max-h-full object-contain"
                       />
                     ) : (
                       <img 
                         src={getOptimizedImageUrl(currentMedia.url, 800)} 
                         alt="Post content" 
+                        onLoad={onMediaLoad}
                         className="max-w-full max-h-full object-contain"
                         referrerPolicy="no-referrer"
                       />
@@ -580,10 +720,48 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
             ))}
           </div>
 
+          {/* Actions */}
+          <div className="px-4 py-2 border-t border-zinc-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={handleLike}
+                  disabled={isLiking}
+                  className="p-1.5 -ml-1.5 text-zinc-900 hover:text-red-500 transition-all active:scale-90"
+                >
+                  <Heart className={`w-[26px] h-[26px] transition-colors ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                </button>
+                <button 
+                  onClick={() => document.getElementById('comment-input')?.focus()}
+                  className="p-1.5 text-zinc-900 hover:text-indigo-500 transition-all active:scale-90"
+                >
+                  <MessageCircle className="w-[26px] h-[26px] transition-colors" />
+                </button>
+                <button 
+                  onClick={handleShare}
+                  className="p-1.5 text-zinc-900 hover:text-purple-500 transition-all active:scale-90"
+                >
+                  <Send className="w-[26px] h-[26px] transition-colors" />
+                </button>
+              </div>
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className="p-1.5 -mr-1.5 text-zinc-900 hover:text-zinc-600 transition-all active:scale-90"
+              >
+                <Bookmark className={`w-[26px] h-[26px] transition-colors ${isSaved ? 'fill-zinc-900' : ''}`} />
+              </button>
+            </div>
+            <div className="font-bold text-sm text-zinc-900 mb-1">
+              {likeCount.toLocaleString()} {likeCount === 1 ? 'like' : 'likes'}
+            </div>
+          </div>
+
           {/* Comment Input */}
           <div className="p-4 border-t border-zinc-200">
             <form onSubmit={handleSubmitComment} className="flex items-center gap-2">
               <input
+                id="comment-input"
                 type="text"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}

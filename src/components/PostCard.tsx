@@ -19,14 +19,15 @@ interface PostCardProps {
   key?: string | number;
   post: Post;
   onLikeToggle?: () => void;
-  onCommentClick?: () => void;
+  onCommentClick?: (index?: number) => void;
   onUserClick?: (userId: string) => void;
   onTagClick?: (tag: string) => void;
   onSwipeNext?: () => void;
   onSwipePrev?: () => void;
+  initialMediaIndex?: number;
 }
 
-export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick, onTagClick, onSwipeNext, onSwipePrev }: PostCardProps) {
+export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick, onTagClick, onSwipeNext, onSwipePrev, initialMediaIndex = 0 }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likesCount);
   const [isLiking, setIsLiking] = useState(false);
@@ -40,7 +41,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [showEditModal, setShowEditModal] = useState(false);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
-  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(initialMediaIndex);
+  const [mediaAspectRatio, setMediaAspectRatio] = useState<number>(1);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(true);
@@ -123,6 +125,20 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       mounted = false;
     };
   }, [post.id, post.authorId, auth.currentUser?.uid]);
+
+  // Reset aspect ratio when media changes
+  useEffect(() => {
+    setMediaAspectRatio(1);
+  }, [currentMediaIndex, post.id]);
+
+  const onMediaLoad = (e: React.SyntheticEvent<HTMLImageElement | HTMLVideoElement>) => {
+    const target = e.target as any;
+    const width = target.naturalWidth || target.videoWidth;
+    const height = target.naturalHeight || target.videoHeight;
+    if (width && height) {
+      setMediaAspectRatio(width / height);
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -490,11 +506,16 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
         post={post}
+        currentMediaIndex={currentMediaIndex}
       />
 
       {/* Image/Video */}
       <div 
-        className="w-full max-h-[min(500px,70vh)] bg-zinc-50 dark:bg-zinc-900 relative cursor-pointer overflow-hidden group"
+        className="w-full bg-zinc-50 dark:bg-zinc-900 relative cursor-pointer overflow-hidden group flex items-center justify-center"
+        style={{ 
+          aspectRatio: `${Math.max(9/16, Math.min(mediaAspectRatio, 1/1))}`,
+          maxHeight: 'min(500px, 70vh)'
+        }}
         onClick={handleDoubleTap}
       >
         <motion.div
@@ -522,6 +543,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                       playsInline
                       loop
                       muted={isMuted}
+                      onLoadedMetadata={onMediaLoad}
                       onClick={(e) => {
                         // Don't stop propagation so double tap works
                         if (videoRef.current && videoRef.current.paused) {
@@ -530,7 +552,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                           toggleMute();
                         }
                       }}
-                      className="w-full h-auto max-h-[min(500px,70vh)] object-contain block"
+                      className="w-full h-full max-h-[min(500px,70vh)] object-contain block"
                     />
                     
                     {/* Custom Video Controls */}
@@ -558,7 +580,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                   <img 
                     src={getOptimizedImageUrl(currentMedia.url, 800)} 
                     alt="Post content" 
-                    className="w-full h-auto max-h-[min(500px,70vh)] object-contain block"
+                    onLoad={onMediaLoad}
+                    className="w-full h-full max-h-[min(500px,70vh)] object-contain block"
                     referrerPolicy="no-referrer"
                     loading="lazy"
                   />
@@ -614,7 +637,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               <Heart className={cn('relative w-[28px] h-[28px] transition-colors', isLiked && 'fill-red-500 text-red-500')} />
             </button>
             <button 
-              onClick={onCommentClick}
+              onClick={() => onCommentClick?.(currentMediaIndex)}
               className="group relative p-1.5 text-zinc-900 hover:text-indigo-500 transition-all active:scale-90"
             >
               <div className="absolute inset-0 bg-indigo-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-200" />

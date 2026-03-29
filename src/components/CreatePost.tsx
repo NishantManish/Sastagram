@@ -3,8 +3,8 @@ import { addDoc, collection, serverTimestamp, Timestamp, writeBatch, doc } from 
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
-import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
+import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import ZoomableMedia from './ZoomableMedia';
 
 interface CreatePostProps {
@@ -16,6 +16,7 @@ type UploadType = 'post' | 'story';
 export default function CreatePost({ onSuccess }: CreatePostProps) {
   const [uploadType, setUploadType] = useState<UploadType>('post');
   const [mediaFiles, setMediaFiles] = useState<{ file: File, preview: string, type: 'image' | 'video' }[]>([]);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [caption, setCaption] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,17 +56,12 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
   };
 
   const removeMedia = (index: number) => {
-    setMediaFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const reorderMedia = (index: number, direction: 'left' | 'right') => {
     setMediaFiles(prev => {
-      const newFiles = [...prev];
-      const targetIndex = direction === 'left' ? index - 1 : index + 1;
-      if (targetIndex >= 0 && targetIndex < newFiles.length) {
-        [newFiles[index], newFiles[targetIndex]] = [newFiles[targetIndex], newFiles[index]];
+      const next = prev.filter((_, i) => i !== index);
+      if (selectedMediaIndex >= next.length) {
+        setSelectedMediaIndex(Math.max(0, next.length - 1));
       }
-      return newFiles;
+      return next;
     });
   };
 
@@ -237,104 +233,77 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
             />
             
             {mediaFiles.length > 0 ? (
-              <div className="space-y-4">
-                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'min-h-[300px] max-h-[min(500px,70vh)] overflow-y-auto custom-scrollbar'} bg-zinc-100 dark:bg-zinc-800 rounded-3xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700 shadow-sm group`}>
+              <div className="space-y-6">
+                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'min-h-[300px] max-h-[min(500px,70vh)]'} bg-zinc-100 dark:bg-zinc-800 rounded-3xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700 shadow-sm group`}>
                   <ZoomableMedia className="w-full h-full">
-                    {mediaFiles[0].type === 'video' ? (
+                    {mediaFiles[selectedMediaIndex]?.type === 'video' ? (
                       <video 
-                        src={mediaFiles[0].preview} 
+                        key={mediaFiles[selectedMediaIndex].preview}
+                        src={mediaFiles[selectedMediaIndex].preview} 
                         controls
                         className="w-full h-auto block object-contain"
                       />
                     ) : (
                       <img 
-                        src={mediaFiles[0].preview} 
+                        key={mediaFiles[selectedMediaIndex]?.preview}
+                        src={mediaFiles[selectedMediaIndex]?.preview} 
                         alt="Preview" 
                         className="w-full h-auto block object-contain"
                       />
                     )}
                   </ZoomableMedia>
-                  <div className="absolute top-4 right-4 flex gap-2 z-10">
-                    {mediaFiles.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => reorderMedia(0, 'right')}
-                        className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all"
-                        title="Move right"
-                      >
-                        <ChevronRight className="w-5 h-5" />
-                      </button>
-                    )}
+                  <div className="absolute top-4 right-4 z-10">
                     <button
                       type="button"
-                      onClick={() => removeMedia(0)}
+                      onClick={() => removeMedia(selectedMediaIndex)}
                       className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
+                  {uploadType === 'post' && selectedMediaIndex === 0 && (
+                    <div className="absolute bottom-4 left-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-white text-xs font-bold">
+                      Cover Image
+                    </div>
+                  )}
                 </div>
 
-                {uploadType === 'post' && mediaFiles.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                    {mediaFiles.slice(1).map((media, index) => {
-                      const realIndex = index + 1;
-                      return (
-                        <div key={realIndex} className="relative flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 group/thumb">
-                          {media.type === 'video' ? (
-                            <video src={media.preview} className="w-full h-full object-cover" />
-                          ) : (
-                            <img src={media.preview} alt={`Preview ${realIndex}`} className="w-full h-full object-cover" />
-                          )}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => reorderMedia(realIndex, 'left')}
-                              className="p-1 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md transition-all"
-                            >
-                              <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            {realIndex < mediaFiles.length - 1 && (
-                              <button
-                                type="button"
-                                onClick={() => reorderMedia(realIndex, 'right')}
-                                className="p-1 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md transition-all"
-                              >
-                                <ChevronRight className="w-4 h-4" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => removeMedia(realIndex)}
-                              className="p-1 bg-red-500/50 hover:bg-red-500/70 text-white rounded-full backdrop-blur-md transition-all"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {mediaFiles.length < 10 && (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex-shrink-0 w-24 h-24 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-600 flex items-center justify-center hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                      >
-                        <Upload className="w-6 h-6 text-zinc-400" />
-                      </button>
-                    )}
+                {uploadType === 'post' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400">Rearrange media (Hold to drag)</span>
+                      <span className="text-xs text-zinc-400">{mediaFiles.length}/10</span>
+                    </div>
+                    
+                    <Reorder.Group 
+                      axis="x" 
+                      values={mediaFiles} 
+                      onReorder={setMediaFiles}
+                      className="flex gap-3 overflow-x-auto pb-4 pt-1 px-1 custom-scrollbar"
+                    >
+                      {mediaFiles.map((media, index) => (
+                        <MediaItem 
+                          key={media.preview}
+                          media={media}
+                          index={index}
+                          isSelected={selectedMediaIndex === index}
+                          onSelect={() => setSelectedMediaIndex(index)}
+                          onRemove={() => removeMedia(index)}
+                        />
+                      ))}
+                      
+                      {mediaFiles.length < 10 && (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex-shrink-0 w-24 h-24 rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-indigo-300 transition-all group"
+                        >
+                          <Upload className="w-5 h-5 text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                          <span className="text-[10px] font-bold text-zinc-400 mt-1 group-hover:text-indigo-500">Add</span>
+                        </button>
+                      )}
+                    </Reorder.Group>
                   </div>
-                )}
-                
-                {uploadType === 'post' && mediaFiles.length === 1 && (
-                  <button 
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full bg-white/90 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 px-4 py-3 rounded-xl font-bold shadow-sm border border-zinc-200 dark:border-zinc-700 flex items-center justify-center gap-2 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all"
-                  >
-                    <ImagePlus className="w-5 h-5" />
-                    Add more media
-                  </button>
                 )}
               </div>
             ) : (
@@ -382,5 +351,100 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
         </motion.form>
       </AnimatePresence>
     </div>
+  );
+}
+
+interface MediaItemProps {
+  key?: React.Key;
+  media: { file: File, preview: string, type: 'image' | 'video' };
+  index: number;
+  isSelected: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}
+
+function MediaItem({ media, index, isSelected, onSelect, onRemove }: MediaItemProps) {
+  const controls = useDragControls();
+  const timerRef = useRef<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handlePointerDown = (event: React.PointerEvent) => {
+    // Prevent default to avoid system menus on long press
+    timerRef.current = setTimeout(() => {
+      setIsDragging(true);
+      controls.start(event);
+    }, 400); // Slightly shorter delay for better responsiveness
+  };
+
+  const handlePointerUp = (event: React.PointerEvent) => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      
+      // If we haven't started dragging yet, it's a tap
+      if (!isDragging) {
+        onSelect();
+      }
+    }
+    setIsDragging(false);
+  };
+
+  return (
+    <Reorder.Item
+      value={media}
+      dragListener={false}
+      dragControls={controls}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ 
+        opacity: 1, 
+        scale: 1,
+        y: isDragging ? -12 : 0,
+        zIndex: isDragging ? 50 : 1
+      }}
+      whileDrag={{ 
+        scale: 1.1, 
+        y: -15,
+        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)",
+        zIndex: 100
+      }}
+      className={`relative flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden border-2 transition-all duration-200 ${
+        isSelected ? 'border-indigo-600 dark:border-indigo-400 scale-105 shadow-md' : 'border-transparent'
+      }`}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={() => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setIsDragging(false);
+      }}
+    >
+      <div className="w-full h-full relative group/item">
+        {media.type === 'video' ? (
+          <video src={media.preview} className="w-full h-full object-cover pointer-events-none" />
+        ) : (
+          <img src={media.preview} alt={`Thumb ${index}`} className="w-full h-full object-cover pointer-events-none" />
+        )}
+        
+        <div className="absolute inset-0 bg-black/10 group-hover/item:bg-black/30 transition-colors flex items-center justify-center">
+          <GripVertical className="w-5 h-5 text-white/70 opacity-0 group-hover/item:opacity-100 transition-opacity" />
+        </div>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500 text-white rounded-full backdrop-blur-md transition-all opacity-0 group-hover/item:opacity-100"
+        >
+          <X className="w-3 h-3" />
+        </button>
+
+        <div className={`absolute top-1 left-1 text-[10px] text-white px-1.5 py-0.5 rounded-md font-bold ${
+          index === 0 ? 'bg-indigo-600' : 'bg-black/40'
+        }`}>
+          {index + 1}
+        </div>
+      </div>
+    </Reorder.Item>
   );
 }

@@ -190,7 +190,7 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
                     <motion.div 
                       key={user.uid} 
                       whileHover={{ scale: 1.01 }}
-                      whileActive={{ scale: 0.98 }}
+                      whileTap={{ scale: 0.98 }}
                       className="flex items-center gap-4 cursor-pointer hover:bg-zinc-50 p-3 rounded-2xl transition-all border border-transparent hover:border-zinc-100"
                       onClick={() => setSelectedUserId(user.uid)}
                     >

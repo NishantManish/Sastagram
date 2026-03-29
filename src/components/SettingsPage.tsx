@@ -15,6 +15,7 @@ import PostDetailsModal from './PostDetailsModal';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { unblockUser, useBlocks } from '../services/blockService';
 import UserAvatar from './UserAvatar';
+import { cn } from '../lib/utils';
 
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -50,7 +51,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
 
   const [blockedUsers, setBlockedUsers] = useState<User[]>([]);
   const { blockedIds } = useBlocks(auth.currentUser?.uid);
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (activeView !== 'blocked' || blockedIds.length === 0) {
@@ -505,26 +506,51 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
 
   if (activeView === 'theme') {
     return (
-      <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
-        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
-          <button onClick={() => setActiveView('main')} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+      <div className="max-w-md mx-auto bg-[#F9F6F1] dark:bg-zinc-950 h-[100dvh] flex flex-col overflow-hidden font-sans">
+        <div className="px-4 py-8 flex items-center shrink-0">
+          <button 
+            onClick={() => setActiveView('main')} 
+            className="w-12 h-12 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-800/50 rounded-full text-zinc-900 dark:text-zinc-100 transition-colors shadow-sm"
+          >
+            <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-lg font-bold text-zinc-900">Theme</h1>
+          <h1 className="flex-1 text-center text-4xl font-medium text-zinc-900 dark:text-zinc-100 pr-12">Appearance</h1>
         </div>
-        <div className="p-4 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium text-zinc-900">Dark Mode</h3>
-              <p className="text-sm text-zinc-500">Switch between light and dark themes.</p>
-            </div>
-            <button 
-              onClick={toggleTheme}
-              className={`w-12 h-6 rounded-full transition-colors relative ${theme === 'dark' ? 'bg-indigo-600' : 'bg-zinc-200'}`}
+        
+        <div className="mt-4 border-t border-zinc-200 dark:border-zinc-800">
+          {[
+            { id: 'light', label: 'Light Mode' },
+            { id: 'dark', label: 'Dark Mode' },
+            { id: 'system', label: 'Use device settings' }
+          ].map((option) => (
+            <button
+              key={option.id}
+              onClick={() => setTheme(option.id as any)}
+              className={cn(
+                "w-full flex items-center gap-8 px-8 py-10 border-b border-zinc-200 dark:border-zinc-800 transition-colors text-left",
+                theme === option.id && "bg-zinc-200/30 dark:bg-zinc-800/30"
+              )}
             >
-              <div className={`w-5 h-5 rounded-full absolute top-0.5 transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'}`} style={{ backgroundColor: '#ffffff' }} />
+              <div className="relative flex items-center justify-center shrink-0">
+                <div className={cn(
+                  "w-10 h-10 rounded-full border-2 transition-all flex items-center justify-center",
+                  theme === option.id 
+                    ? "border-[#E91E63]" 
+                    : "border-zinc-400 dark:border-zinc-600"
+                )}>
+                  {theme === option.id && (
+                    <div className="w-5 h-5 bg-[#E91E63] rounded-full" />
+                  )}
+                </div>
+              </div>
+              <span className={cn(
+                "text-3xl font-normal transition-colors",
+                theme === option.id ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-500 dark:text-zinc-400"
+              )}>
+                {option.label}
+              </span>
             </button>
-          </div>
+          ))}
         </div>
       </div>
     );

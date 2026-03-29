@@ -11,18 +11,41 @@ import { Camera, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 
-export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: any) => void, onTagClick?: (tag: string) => void }) {
+export default function Feed({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }: { 
+  onNavigate?: (tab: any) => void, 
+  onTagClick?: (tag: string) => void,
+  initialPostId?: string | null,
+  initialSlideIndex?: number
+}) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedPost, setSelectedPost] = useState<{ post: Post, index: number } | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [limitCount, setLimitCount] = useState(20);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const startY = useRef(0);
   const isDragging = useRef(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialPostId) {
+      const fetchInitialPost = async () => {
+        try {
+          const { doc, getDoc } = await import('firebase/firestore');
+          const postDoc = await getDoc(doc(db, 'posts', initialPostId));
+          if (postDoc.exists()) {
+            const postData = { id: postDoc.id, ...postDoc.data() } as Post;
+            setSelectedPost({ post: postData, index: initialSlideIndex });
+          }
+        } catch (err) {
+          console.error("Error fetching initial post:", err);
+        }
+      };
+      fetchInitialPost();
+    }
+  }, [initialPostId]);
 
   useEffect(() => {
     const q = query(
@@ -209,9 +232,10 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
                 >
                   <PostCard 
                     post={post} 
-                    onCommentClick={() => setSelectedPost(post)}
+                    onCommentClick={(index) => setSelectedPost({ post, index: index || 0 })}
                     onUserClick={setSelectedUserId}
                     onTagClick={onTagClick}
+                    initialMediaIndex={post.id === initialPostId ? initialSlideIndex : 0}
                     onSwipeNext={() => {
                       if (index < filteredPosts.length - 1) {
                         const nextPost = document.getElementById(`post-${filteredPosts[index + 1].id}`);
@@ -240,10 +264,11 @@ export default function Feed({ onNavigate, onTagClick }: { onNavigate?: (tab: an
       <AnimatePresence>
         {selectedPost && (
           <PostDetailsModal 
-            post={selectedPost} 
+            post={selectedPost.post} 
             onClose={() => setSelectedPost(null)} 
             onUserClick={setSelectedUserId}
             onTagClick={onTagClick}
+            initialMediaIndex={selectedPost.index}
           />
         )}
       </AnimatePresence>

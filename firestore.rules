@@ -361,7 +361,7 @@ service cloud.firestore {
     }
 
     function isValidMessage() {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'sharedPostSlideIndex', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              validStringLength('chatId', 1, 128) &&
              validStringLength('senderId', 1, 128) &&
@@ -370,6 +370,7 @@ service cloud.firestore {
              (request.resource.data.text.size() > 0 || ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0) || ('sharedPostId' in request.resource.data && request.resource.data.sharedPostId.size() > 0)) &&
              isValidOptionalString('attachmentUrl', 0, 2000) &&
              isValidOptionalString('sharedPostId', 0, 128) &&
+             isValidOptionalNumber('sharedPostSlideIndex') &&
              request.resource.data.createdAt is timestamp &&
              (!('editedAt' in request.resource.data) || request.resource.data.editedAt is timestamp) &&
              (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool) &&
@@ -617,14 +618,22 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (resource == null || request.auth.uid in resource.data.participants);
                     
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow read: if isAuthenticated() && 
+                      (exists(/databases/$(database)/documents/chats/$(chatId)) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
         
         allow create: if isAuthenticated() && 
                       isValidMessage() &&
                       request.resource.data.senderId == request.auth.uid &&
                       request.resource.data.chatId == chatId &&
-                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
-                      !isEitherBlocked(get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0], get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]);
+                      (
+                        (exists(/databases/$(database)/documents/chats/$(chatId)) && 
+                         request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+                         !isEitherBlocked(get(/databases/$(database)/documents/chats/$(chatId)).data.participants[0], get(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]))
+                        ||
+                        (existsAfter(/databases/$(database)/documents/chats/$(chatId)) && 
+                         request.auth.uid in getAfter(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+                         !isEitherBlocked(getAfter(/databases/$(database)/documents/chats/$(chatId)).data.participants[0], getAfter(/databases/$(database)/documents/chats/$(chatId)).data.participants[1]))
+                      );
 
         allow update: if isAuthenticated() &&
                       isValidMessage() &&
@@ -639,6 +648,7 @@ service cloud.firestore {
                           isUnchanged('createdAt') &&
                           isUnchanged('attachmentUrl') &&
                           isUnchanged('sharedPostId') &&
+                          isUnchanged('sharedPostSlideIndex') &&
                           isUnchanged('deletedFor')
                         )
                         ||
@@ -648,6 +658,7 @@ service cloud.firestore {
                           isUnchanged('text') &&
                           isUnchanged('attachmentUrl') &&
                           isUnchanged('sharedPostId') &&
+                          isUnchanged('sharedPostSlideIndex') &&
                           isUnchanged('createdAt') &&
                           isUnchanged('editedAt') &&
                           isUnchanged('isEdited') &&

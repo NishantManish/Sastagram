@@ -26,6 +26,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   const [chatUsers, setChatUsers] = useState<Record<string, User>>({});
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedPostSlide, setSelectedPostSlide] = useState(0);
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -162,7 +163,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           ...currentChat.readStatus,
           [auth.currentUser.uid]: true
         }
-      }, { merge: true }).catch(console.error);
+      }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `chats/${currentChat.id}`));
     }
   }, [selectedChat, chats]);
 
@@ -178,7 +179,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           typingStatus: {
             [auth.currentUser.uid]: false
           }
-        }, { merge: true }).catch(console.error);
+        }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `chats/${selectedChat.id}`));
       }
     };
   }, [selectedChat]);
@@ -191,7 +192,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       typingStatus: {
         [auth.currentUser.uid]: true
       }
-    }, { merge: true }).catch(console.error);
+    }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `chats/${selectedChat.id}`));
 
     // Clear existing timeout
     if (typingTimeoutRef.current) {
@@ -205,7 +206,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           typingStatus: {
             [auth.currentUser.uid]: false
           }
-        }, { merge: true }).catch(console.error);
+        }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `chats/${selectedChat.id}`));
       }
     }, 2000);
   };
@@ -314,8 +315,14 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         const currentMessages = [...messages];
         if (currentMessages[currentMessages.length - 1]?.id === msg.id) {
           const lastMsg = currentMessages[currentMessages.length - 2];
+          let lastMessageText = '';
+          if (lastMsg) {
+            if (lastMsg.sharedPostId) lastMessageText = 'Shared a post';
+            else if (lastMsg.attachmentUrl) lastMessageText = 'Attachment';
+            else lastMessageText = lastMsg.text || '';
+          }
           await updateDoc(doc(db, 'chats', selectedChat.id), {
-            lastMessage: lastMsg ? (lastMsg.text || 'Attachment') : '',
+            lastMessage: lastMessageText,
             updatedAt: serverTimestamp()
           });
         }
@@ -478,10 +485,11 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
     }
   };
 
-  const handlePostClick = async (postId: string) => {
+  const handlePostClick = async (postId: string, slideIndex: number = 0) => {
     try {
       const postDoc = await getDoc(doc(db, 'posts', postId));
       if (postDoc.exists()) {
+        setSelectedPostSlide(slideIndex);
         setSelectedPost({ id: postDoc.id, ...postDoc.data() } as Post);
       } else {
         alert('This post is no longer available.');
@@ -660,17 +668,37 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                       )}
                       {msg.sharedPostId && (
                         <div 
-                          onClick={() => handlePostClick(msg.sharedPostId!)}
-                          className={`mb-2 p-3 rounded-xl border cursor-pointer transition-colors flex items-center gap-3 ${
-                            isMine ? 'bg-indigo-600/50 border-indigo-400 hover:bg-indigo-600/70' : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
+                          onClick={() => handlePostClick(msg.sharedPostId!, msg.sharedPostSlideIndex || 0)}
+                          className={`mb-2 p-2 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] flex flex-col gap-2 ${
+                            isMine ? 'bg-indigo-600/50 border-indigo-400' : 'bg-zinc-50 border-zinc-200'
                           }`}
                         >
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isMine ? 'bg-indigo-500' : 'bg-zinc-200'}`}>
-                            <ImageIcon className={`w-5 h-5 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-semibold truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>Shared Post</p>
-                            <p className={`text-xs truncate ${isMine ? 'text-indigo-200' : 'text-zinc-500'}`}>Tap to view</p>
+                          {msg.sharedPostPreviewUrl ? (
+                            <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black/10">
+                              {msg.sharedPostMediaType === 'video' ? (
+                                <video 
+                                  src={msg.sharedPostPreviewUrl} 
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <img 
+                                  src={getOptimizedImageUrl(msg.sharedPostPreviewUrl, 400)} 
+                                  alt="Shared post" 
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                              )}
+                              <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                <ImageIcon className="w-8 h-8 text-white" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className={`w-full aspect-square rounded-lg flex items-center justify-center ${isMine ? 'bg-indigo-500' : 'bg-zinc-200'}`}>
+                              <ImageIcon className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
+                            </div>
+                          )}
+                          <div className="px-1">
+                            <p className={`text-xs font-bold truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>View Post</p>
                           </div>
                         </div>
                       )}
@@ -805,6 +833,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
               onClose={() => setSelectedPost(null)} 
               onUserClick={setSelectedUserId}
               onTagClick={onTagClick}
+              initialMediaIndex={selectedPostSlide}
             />
           )}
         </AnimatePresence>
@@ -908,13 +937,19 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   onClick={() => handleStartChat(user)}
                   className="p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all"
                 >
-                  <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0">
-                    {user.photoURL ? (
-                      <img src={getOptimizedImageUrl(user.photoURL, 96, 96)} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">{user.displayName?.charAt(0)}</div>
-                    )}
-                  </div>
+                <div 
+                  className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedUserId(user.uid);
+                  }}
+                >
+                  {user.photoURL ? (
+                    <img src={getOptimizedImageUrl(user.photoURL, 96, 96)} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">{user.displayName?.charAt(0)}</div>
+                  )}
+                </div>
                   <div>
                     <h3 className="font-semibold text-zinc-900">{user.displayName}</h3>
                     <p className="text-sm text-zinc-500">@{user.username}</p>
@@ -976,7 +1011,13 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                 onMouseLeave={handleTouchEnd}
                 className={`p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all relative active:scale-[0.98] ${isUnread ? 'bg-indigo-50/40' : ''}`}
               >
-                <div className="w-14 h-14 rounded-full bg-zinc-200 overflow-hidden shrink-0 relative border border-zinc-200 shadow-sm">
+                <div 
+                  className="w-14 h-14 rounded-full bg-zinc-200 overflow-hidden shrink-0 relative border border-zinc-200 shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedUserId(otherUser.uid);
+                  }}
+                >
                   {otherUser.photoURL ? (
                     <img 
                       src={getOptimizedImageUrl(otherUser.photoURL, 96, 96)} 
@@ -1035,6 +1076,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
             onClose={() => setSelectedPost(null)} 
             onUserClick={setSelectedUserId}
             onTagClick={onTagClick}
+            initialMediaIndex={selectedPostSlide}
           />
         )}
       </AnimatePresence>

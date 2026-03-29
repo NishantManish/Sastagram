@@ -11,9 +11,10 @@ interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   post: Post;
+  currentMediaIndex?: number;
 }
 
-export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
+export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 0 }: ShareModalProps) {
   const [followers, setFollowers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [sharingToStory, setSharingToStory] = useState(false);
@@ -59,13 +60,17 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
       const expiresAtDate = new Date();
       expiresAtDate.setHours(expiresAtDate.getHours() + 24);
 
+      const currentMedia = post.mediaUrls && post.mediaUrls.length > currentMediaIndex 
+        ? post.mediaUrls[currentMediaIndex] 
+        : { url: post.imageUrl || post.videoUrl || '', type: post.mediaType || 'image' };
+
       await addDoc(collection(db, 'stories'), {
         authorId: auth.currentUser.uid,
         authorName: auth.currentUser.displayName || 'Anonymous',
         authorPhoto: auth.currentUser.photoURL || '',
-        imageUrl: post.mediaUrls && post.mediaUrls.length > 0 && post.mediaUrls[0].type === 'image' ? post.mediaUrls[0].url : post.imageUrl || '',
-        videoUrl: post.mediaUrls && post.mediaUrls.length > 0 && post.mediaUrls[0].type === 'video' ? post.mediaUrls[0].url : post.videoUrl || '',
-        mediaType: post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0].type : post.mediaType || 'image',
+        imageUrl: currentMedia.type === 'image' ? currentMedia.url : '',
+        videoUrl: currentMedia.type === 'video' ? currentMedia.url : '',
+        mediaType: currentMedia.type,
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAtDate)
       });
@@ -126,11 +131,18 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
 
       // Send message with post link
       const newMessageRef = doc(collection(db, `chats/${chatId}/messages`));
+      const currentMedia = post.mediaUrls && post.mediaUrls.length > currentMediaIndex 
+        ? post.mediaUrls[currentMediaIndex] 
+        : { url: post.imageUrl || post.videoUrl || '', type: post.mediaType || 'image' };
+
       batch.set(newMessageRef, {
         chatId: chatId,
         senderId: auth.currentUser.uid,
         text: '',
         sharedPostId: post.id,
+        sharedPostSlideIndex: currentMediaIndex,
+        sharedPostPreviewUrl: currentMedia.url,
+        sharedPostMediaType: currentMedia.type,
         createdAt: serverTimestamp()
       });
 
@@ -145,9 +157,8 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
   };
 
   const handleCopyLink = () => {
-    const url = `${window.location.origin}/post/${post.id}`;
+    const url = `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`;
     navigator.clipboard.writeText(url).then(() => {
-      // alert('Link copied to clipboard!'); // Avoid alert in iframe
       onClose();
     });
   };
@@ -156,7 +167,7 @@ export default function ShareModal({ isOpen, onClose, post }: ShareModalProps) {
     const shareData = {
       title: `${post.authorName}'s post on Sastagram`,
       text: post.caption || 'Check out this post!',
-      url: `${window.location.origin}/post/${post.id}`,
+      url: `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`,
     };
 
     try {

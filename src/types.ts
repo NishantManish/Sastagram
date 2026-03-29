@@ -22,6 +22,7 @@ export interface Post {
   tags?: string[];
   mentions?: string[];
   likesCount: number;
+  commentsCount?: number;
   createdAt: any; // Firestore Timestamp
 }
 
@@ -76,6 +77,8 @@ export interface Story {
   authorName: string;
   authorPhoto?: string;
   imageUrl: string;
+  videoUrl?: string;
+  mediaType?: 'image' | 'video';
   createdAt: any; // Firestore Timestamp
   expiresAt: any; // Firestore Timestamp
   viewsCount?: number;
@@ -99,6 +102,9 @@ export interface Message {
   text: string;
   attachmentUrl?: string;
   sharedPostId?: string;
+  sharedPostSlideIndex?: number;
+  sharedPostPreviewUrl?: string;
+  sharedPostMediaType?: 'image' | 'video';
   createdAt: any; // Firestore Timestamp
   editedAt?: any; // Firestore Timestamp
   isEdited?: boolean;
