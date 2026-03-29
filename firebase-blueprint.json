@@ -32,18 +32,22 @@
     },
     "Post": {
       "title": "Post",
-      "description": "An image post created by a user.",
+      "description": "An image or video post created by a user.",
       "type": "object",
       "properties": {
         "authorId": { "type": "string", "description": "The UID of the user who created the post." },
         "authorName": { "type": "string", "description": "The display name of the author." },
         "authorPhoto": { "type": "string", "description": "The profile picture URL of the author." },
-        "imageUrl": { "type": "string", "description": "The URL of the posted image." },
+        "imageUrl": { "type": "string", "description": "The URL of the posted image (if any)." },
+        "videoUrl": { "type": "string", "description": "The URL of the posted video (if any)." },
+        "mediaType": { "type": "string", "enum": ["image", "video"], "description": "The primary media type of the post." },
+        "mediaUrls": { "type": "array", "items": { "type": "object", "properties": { "url": { "type": "string" }, "type": { "type": "string", "enum": ["image", "video"] } } }, "description": "List of all media items in the post." },
         "caption": { "type": "string", "description": "The caption for the post." },
         "likesCount": { "type": "number", "description": "The number of likes the post has received." },
+        "commentsCount": { "type": "number", "description": "The number of comments on the post." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the post was created." }
       },
-      "required": ["authorId", "authorName", "imageUrl", "likesCount", "createdAt"]
+      "required": ["authorId", "authorName", "mediaType", "mediaUrls", "likesCount", "commentsCount", "createdAt"]
     },
     "Like": {
       "title": "Like",
@@ -117,13 +121,15 @@
         "authorId": { "type": "string", "description": "The ID of the user who created the story." },
         "authorName": { "type": "string", "description": "The name of the author." },
         "authorPhoto": { "type": "string", "description": "The photo URL of the author." },
-        "imageUrl": { "type": "string", "description": "The URL of the story image." },
+        "imageUrl": { "type": "string", "description": "The URL of the story image (if any)." },
+        "videoUrl": { "type": "string", "description": "The URL of the story video (if any)." },
+        "mediaType": { "type": "string", "enum": ["image", "video"], "description": "The type of media in the story." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the story was created." },
         "expiresAt": { "type": "string", "format": "date-time", "description": "When the story expires (24h after creation)." },
         "viewsCount": { "type": "number", "description": "Number of views the story has received." },
         "viewers": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have viewed the story." }
       },
-      "required": ["authorId", "authorName", "imageUrl", "createdAt", "expiresAt"]
+      "required": ["authorId", "authorName", "mediaType", "createdAt", "expiresAt"]
     },
     "Chat": {
       "title": "Chat",

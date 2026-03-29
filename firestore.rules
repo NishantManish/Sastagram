@@ -23,12 +23,30 @@ service cloud.firestore {
     //   - authorId: string (required, immutable) - Author's UID
     //   - authorName: string (required, max 50 chars) - Author's display name
     //   - authorPhoto: string (optional, max 1000 chars) - Author's profile picture URL
-    //   - imageUrl: string (required, max 1000 chars) - Image URL
+    //   - imageUrl: string (optional, max 1000 chars) - Primary image URL
+    //   - videoUrl: string (optional, max 1000 chars) - Primary video URL
+    //   - mediaType: string (required) - 'image' or 'video'
+    //   - mediaUrls: list (required) - List of {url, type} objects
     //   - caption: string (optional, max 2200 chars) - Post caption
     //   - tags: list (optional) - Hashtags extracted from caption
     //   - mentions: list (optional) - User mentions extracted from caption
     //   - likesCount: number (required) - Number of likes
+    //   - commentsCount: number (required) - Number of comments
     //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: stories
+    // Document ID: {storyId}
+    // Fields:
+    //   - authorId: string (required, immutable) - Author's UID
+    //   - authorName: string (required, max 50 chars) - Author's display name
+    //   - authorPhoto: string (optional, max 1000 chars) - Author's profile picture URL
+    //   - imageUrl: string (optional, max 1000 chars) - Story image URL
+    //   - videoUrl: string (optional, max 1000 chars) - Story video URL
+    //   - mediaType: string (required) - 'image' or 'video'
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //   - expiresAt: timestamp (required) - Expiration time
+    //   - viewsCount: number (optional) - Number of views
+    //   - viewers: list (optional) - List of viewer UIDs
     //
     // Collection: likes
     // Document ID: {postId}_{userId}
@@ -164,12 +182,17 @@ service cloud.firestore {
     }
 
     function isValidPost() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt']) &&
-             hasRequiredFields(['authorId', 'authorName', 'imageUrl', 'createdAt']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'mediaUrls', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt']) &&
+             hasRequiredFields(['authorId', 'authorName', 'mediaType', 'mediaUrls', 'createdAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
-             validStringLength('imageUrl', 1, 2000) &&
+             isValidOptionalString('imageUrl', 0, 2000) &&
+             isValidOptionalString('videoUrl', 0, 2000) &&
+             request.resource.data.mediaType in ['image', 'video'] &&
+             request.resource.data.mediaUrls is list &&
+             request.resource.data.mediaUrls.size() > 0 &&
+             request.resource.data.mediaUrls.size() <= 10 &&
              isValidOptionalString('caption', 0, 2200) &&
              (!('tags' in request.resource.data) || request.resource.data.tags is list) &&
              (!('mentions' in request.resource.data) || request.resource.data.mentions is list) &&
@@ -237,12 +260,14 @@ service cloud.firestore {
     }
 
     function isValidStory() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'createdAt', 'expiresAt', 'viewsCount', 'viewers']) &&
-             hasRequiredFields(['authorId', 'authorName', 'imageUrl', 'createdAt', 'expiresAt']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers']) &&
+             hasRequiredFields(['authorId', 'authorName', 'mediaType', 'createdAt', 'expiresAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
-             validStringLength('imageUrl', 1, 2000) &&
+             isValidOptionalString('imageUrl', 0, 2000) &&
+             isValidOptionalString('videoUrl', 0, 2000) &&
+             request.resource.data.mediaType in ['image', 'video'] &&
              request.resource.data.createdAt is timestamp &&
              request.resource.data.expiresAt is timestamp &&
              isValidOptionalNumber('viewsCount') &&
@@ -366,6 +391,9 @@ service cloud.firestore {
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
+                       isUnchanged('videoUrl') &&
+                       isUnchanged('mediaType') &&
+                       isUnchanged('mediaUrls') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('likesCount') &&
                        isUnchanged('commentsCount'))
@@ -375,6 +403,9 @@ service cloud.firestore {
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
+                       isUnchanged('videoUrl') &&
+                       isUnchanged('mediaType') &&
+                       isUnchanged('mediaUrls') &&
                        isUnchanged('caption') &&
                        isUnchanged('tags') &&
                        isUnchanged('mentions') &&
@@ -396,6 +427,9 @@ service cloud.firestore {
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
+                       isUnchanged('videoUrl') &&
+                       isUnchanged('mediaType') &&
+                       isUnchanged('mediaUrls') &&
                        isUnchanged('caption') &&
                        isUnchanged('tags') &&
                        isUnchanged('mentions') &&
