@@ -516,51 +516,51 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
 
   if (activeView === 'theme') {
     return (
-      <div className="max-w-md mx-auto bg-[#F9F6F1] dark:bg-zinc-950 h-[100dvh] flex flex-col overflow-hidden font-sans">
-        <div className="px-4 py-8 flex items-center shrink-0">
-          <button 
-            onClick={() => setActiveView('main')} 
-            className="w-12 h-12 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-800/50 rounded-full text-zinc-900 dark:text-zinc-100 transition-colors shadow-sm"
-          >
-            <ArrowLeft className="w-6 h-6" />
+      <div className="max-w-md mx-auto bg-zinc-50 dark:bg-zinc-950 h-[100dvh] flex flex-col overflow-hidden">
+        <div className="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
+          <button onClick={() => setActiveView('main')} className="p-2 -ml-2 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
+            <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="flex-1 text-center text-4xl font-medium text-zinc-900 dark:text-zinc-100 pr-12">Appearance</h1>
+          <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Appearance</h1>
         </div>
         
-        <div className="mt-4 border-t border-zinc-200 dark:border-zinc-800">
-          {[
-            { id: 'light', label: 'Light Mode' },
-            { id: 'dark', label: 'Dark Mode' },
-            { id: 'system', label: 'Use device settings' }
-          ].map((option) => (
-            <button
-              key={option.id}
-              onClick={() => setTheme(option.id as any)}
-              className={cn(
-                "w-full flex items-center gap-8 px-8 py-10 border-b border-zinc-200 dark:border-zinc-800 transition-colors text-left",
-                theme === option.id && "bg-zinc-200/30 dark:bg-zinc-800/30"
-              )}
-            >
-              <div className="relative flex items-center justify-center shrink-0">
+        <div className="p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-100 dark:border-zinc-800 shadow-sm">
+            {[
+              { id: 'light', label: 'Light Mode' },
+              { id: 'dark', label: 'Dark Mode' },
+              { id: 'system', label: 'Use device settings' }
+            ].map((option, index, arr) => (
+              <button
+                key={option.id}
+                onClick={() => setTheme(option.id as any)}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors",
+                  index !== arr.length - 1 && "border-b border-zinc-50 dark:border-zinc-800"
+                )}
+              >
+                <span className={cn(
+                  "text-sm font-medium",
+                  theme === option.id ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-700 dark:text-zinc-300"
+                )}>
+                  {option.label}
+                </span>
                 <div className={cn(
-                  "w-10 h-10 rounded-full border-2 transition-all flex items-center justify-center",
+                  "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
                   theme === option.id 
-                    ? "border-[#E91E63]" 
-                    : "border-zinc-400 dark:border-zinc-600"
+                    ? "border-indigo-600 dark:border-indigo-400 bg-indigo-600 dark:bg-indigo-400" 
+                    : "border-zinc-300 dark:border-zinc-700"
                 )}>
                   {theme === option.id && (
-                    <div className="w-5 h-5 bg-[#E91E63] rounded-full" />
+                    <Check className="w-3 h-3 text-white dark:text-zinc-950" />
                   )}
                 </div>
-              </div>
-              <span className={cn(
-                "text-3xl font-normal transition-colors",
-                theme === option.id ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-500 dark:text-zinc-400"
-              )}>
-                {option.label}
-              </span>
-            </button>
-          ))}
+              </button>
+            ))}
+          </div>
+          <p className="mt-4 px-2 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+            Choose how you want the app to look. "Use device settings" will automatically match your phone's system theme.
+          </p>
         </div>
       </div>
     );
@@ -677,7 +677,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
                       onClick={item.onClick}
                       className={`w-full flex items-center justify-between p-4 hover:bg-zinc-50 transition-colors ${iIndex !== group.items.length - 1 ? 'border-b border-zinc-50' : ''}`}
                     >
-                      <div className={`flex items-center gap-3 ${item.color || 'text-zinc-700'}`}>
+                      <div className={`flex items-center gap-3 ${(item as any).color || 'text-zinc-700'}`}>
                         {item.icon}
                         <span className="text-sm font-medium">{item.title}</span>
                       </div>

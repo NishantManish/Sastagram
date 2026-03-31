@@ -220,10 +220,27 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
     if (!activeStory || !auth.currentUser || isLiking) return;
 
     const isLiked = activeStory.likedBy?.includes(auth.currentUser.uid);
-    setIsLiking(true);
+    const userId = auth.currentUser.uid;
 
+    // Optimistic UI update
+    const updatedStory = {
+      ...activeStory,
+      likedBy: isLiked 
+        ? (activeStory.likedBy || []).filter(id => id !== userId)
+        : [...(activeStory.likedBy || []), userId],
+      likesCount: (activeStory.likesCount || 0) + (isLiked ? -1 : 1)
+    };
+
+    // Update local state for immediate feedback
+    if (activeUserStories) {
+      const newStories = [...activeUserStories];
+      newStories[currentStoryIndex] = updatedStory;
+      setActiveUserStories(newStories);
+    }
+
+    setIsLiking(true);
     const storyRef = doc(db, 'stories', activeStory.id);
-    const likeId = `${activeStory.id}_${auth.currentUser.uid}`;
+    const likeId = `${activeStory.id}_${userId}`;
     const likeRef = doc(db, 'storyLikes', likeId);
     const batch = writeBatch(db);
 
@@ -232,28 +249,28 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
         // Unlike
         batch.delete(likeRef);
         batch.update(storyRef, {
-          likedBy: (activeStory.likedBy || []).filter(id => id !== auth.currentUser?.uid),
+          likedBy: updatedStory.likedBy,
           likesCount: increment(-1)
         });
       } else {
         // Like
         batch.set(likeRef, {
           storyId: activeStory.id,
-          userId: auth.currentUser.uid,
+          userId: userId,
           createdAt: serverTimestamp()
         });
         batch.update(storyRef, {
-          likedBy: arrayUnion(auth.currentUser.uid),
+          likedBy: arrayUnion(userId),
           likesCount: increment(1)
         });
 
         // Send notification
-        if (activeStory.authorId !== auth.currentUser.uid) {
+        if (activeStory.authorId !== userId) {
           const notificationRef = doc(collection(db, 'notifications'));
           batch.set(notificationRef, {
             userId: activeStory.authorId,
             type: 'like',
-            senderId: auth.currentUser.uid,
+            senderId: userId,
             senderName: auth.currentUser.displayName || 'Someone',
             senderPhoto: auth.currentUser.photoURL || '',
             postId: activeStory.id,
@@ -268,6 +285,12 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
       }
       await batch.commit();
     } catch (error) {
+      // Rollback on error
+      if (activeUserStories) {
+        const rollbackStories = [...activeUserStories];
+        rollbackStories[currentStoryIndex] = activeStory;
+        setActiveUserStories(rollbackStories);
+      }
       handleFirestoreError(error, OperationType.WRITE, 'story_like');
     } finally {
       setIsLiking(false);

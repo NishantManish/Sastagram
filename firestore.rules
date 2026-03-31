@@ -177,7 +177,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser() {
-      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'email']) &&
+      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role']) &&
              hasRequiredFields(['uid', 'username', 'displayName']) &&
              validStringLength('uid', 1, 128) &&
              validStringLength('username', 3, 30) &&
@@ -192,16 +192,14 @@ service cloud.firestore {
 
     function isValidPost() {
       return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'mediaUrls', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt']) &&
-             hasRequiredFields(['authorId', 'authorName', 'mediaType', 'mediaUrls', 'createdAt']) &&
+             hasRequiredFields(['authorId', 'authorName', 'createdAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
              isValidOptionalString('imageUrl', 0, 2000) &&
              isValidOptionalString('videoUrl', 0, 2000) &&
-             request.resource.data.mediaType in ['image', 'video'] &&
-             request.resource.data.mediaUrls is list &&
-             request.resource.data.mediaUrls.size() > 0 &&
-             request.resource.data.mediaUrls.size() <= 10 &&
+             (!('mediaType' in request.resource.data) || request.resource.data.mediaType in ['image', 'video']) &&
+             (!('mediaUrls' in request.resource.data) || (request.resource.data.mediaUrls is list && request.resource.data.mediaUrls.size() > 0 && request.resource.data.mediaUrls.size() <= 10)) &&
              isValidOptionalString('caption', 0, 2200) &&
              (!('tags' in request.resource.data) || request.resource.data.tags is list) &&
              (!('mentions' in request.resource.data) || request.resource.data.mentions is list) &&
@@ -344,7 +342,7 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isOwner(userId) && isValidUser() && uidUnchanged() && 
                     request.resource.data.followersCount == 0 && request.resource.data.followingCount == 0 &&
                     request.resource.data.get('role', 'user') == 'user';
@@ -357,8 +355,8 @@ service cloud.firestore {
                        isUnchanged('role'))
                       ||
                       // System/Users updating counts (Follow/Unfollow)
-                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'email']) &&
-                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role', 'email']) &&
+                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role']) &&
+                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role']) &&
                        (
                          // Update followersCount
                          (request.resource.data.get('followersCount', 0) != resource.data.get('followersCount', 0) &&
@@ -448,12 +446,12 @@ service cloud.firestore {
                        isUnchanged('mentions') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('commentsCount') &&
-                       (request.resource.data.likesCount - resource.data.likesCount == 1 || resource.data.likesCount - request.resource.data.likesCount == 1) &&
+                       math.abs(request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0)) == 1 &&
                        (
-                         (request.resource.data.likesCount > resource.data.likesCount &&
+                         (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
                           !exists(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) &&
                           getAfter(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) != null) ||
-                         (request.resource.data.likesCount < resource.data.likesCount &&
+                         (request.resource.data.get('likesCount', 0) < resource.data.get('likesCount', 0) &&
                           exists(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) &&
                           getAfter(/databases/$(database)/documents/likes/$(postId + '_' + request.auth.uid)) == null)
                        )
@@ -472,7 +470,7 @@ service cloud.firestore {
                        isUnchanged('mentions') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('likesCount') &&
-                       (request.resource.data.commentsCount - resource.data.commentsCount == 1 || resource.data.commentsCount - request.resource.data.commentsCount == 1)
+                       math.abs(request.resource.data.get('commentsCount', 0) - resource.data.get('commentsCount', 0)) == 1
                       )
                       ||
                       // Admin can update anything
@@ -487,8 +485,8 @@ service cloud.firestore {
       
       allow create: if isAuthenticated() && 
                     isValidLike() &&
-                    request.resource.data.userId == request.auth.uid &&
-                    likeId == request.resource.data.postId + '_' + request.auth.uid;
+                    (request.resource.data.userId == request.auth.uid &&
+                     likeId == request.resource.data.postId + '_' + request.auth.uid || isAdmin());
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
@@ -537,7 +535,7 @@ service cloud.firestore {
                        isUnchanged('authorPhoto') &&
                        isUnchanged('text') &&
                        isUnchanged('createdAt') &&
-                       (request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0) == 1 || request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0) == -1) &&
+                       math.abs(request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0)) == 1 &&
                        (
                          (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
                           !exists(/databases/$(database)/documents/commentLikes/$(commentId + '_' + request.auth.uid)) &&
@@ -559,8 +557,8 @@ service cloud.firestore {
       
       allow create: if isAuthenticated() && 
                     isValidCommentLike() &&
-                    request.resource.data.userId == request.auth.uid &&
-                    likeId == request.resource.data.commentId + '_' + request.auth.uid;
+                    (request.resource.data.userId == request.auth.uid &&
+                     likeId == request.resource.data.commentId + '_' + request.auth.uid || isAdmin());
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
@@ -570,7 +568,7 @@ service cloud.firestore {
       
       allow create: if isAuthenticated() && 
                     isValidNotification() &&
-                    request.resource.data.senderId == request.auth.uid;
+                    (request.resource.data.senderId == request.auth.uid || isAdmin());
                     
       allow update: if isAuthenticated() && 
                     resource.data.userId == request.auth.uid &&

@@ -13,28 +13,47 @@ Sastagram is a modern, minimal social media application inspired by Instagram. I
 - **Direct Messaging:** Connect with other users through a built-in messaging system.
 - **Search:** Discover new creators and content easily.
 - **Responsive Design:** Fully optimized for both desktop and mobile devices.
+- **AI-Powered Features:** Leveraging Google Gemini for intelligent content interactions.
 
 ## 🛠️ Tech Stack & Libraries
 
 This project is built with a robust set of modern web technologies:
 
 ### Frontend
-- **React 19:** The core library for building the user interface.
-- **Vite:** Next-generation frontend tooling for a fast development experience.
-- **Tailwind CSS:** A utility-first CSS framework for rapid UI development.
-- **Motion (Framer Motion):** For smooth, high-performance animations and transitions.
-- **Lucide React:** A beautiful and consistent icon library.
-- **React Easy Crop:** For professional-grade image cropping during profile setup.
-- **Date-fns:** For easy and accurate date formatting.
+- **React 19.2:** The core library for building the user interface.
+- **Vite 8.0:** Next-generation frontend tooling for a fast development experience.
+- **Tailwind CSS 4.2:** A utility-first CSS framework for rapid UI development.
+- **Motion (Framer Motion) 12.3:** For smooth, high-performance animations and transitions.
+- **Lucide React 1.7:** A beautiful and consistent icon library.
+- **React Easy Crop 5.5:** For professional-grade image cropping during profile setup.
+- **Date-fns 4.1:** For easy and accurate date formatting.
 
 ### Backend & Infrastructure
-- **Firebase:**
+- **Firebase 12.11:**
   - **Authentication:** Secure user sign-in with Google and Email.
   - **Firestore:** Real-time NoSQL database for storing posts, users, and interactions.
   - **Storage:** For handling file uploads (where applicable).
-- **Express:** A minimal and flexible Node.js web application framework for the backend server.
-- **Cloudinary:** For high-performance media storage, optimization, and delivery.
-- **Google Gemini AI:** Integrated for advanced AI-powered features.
+- **Express 5.2:** A minimal and flexible Node.js web application framework for the backend server.
+- **Cloudinary 2.9:** For high-performance media storage, optimization, and delivery.
+- **Google Gemini AI 1.47:** Integrated for advanced AI-powered features.
+
+## 📂 Project Structure
+
+```text
+├── src/
+│   ├── components/       # Reusable UI components
+│   ├── contexts/         # React Contexts for state management
+│   ├── hooks/            # Custom React hooks
+│   ├── services/         # API and third-party service integrations
+│   ├── utils/            # Utility functions
+│   ├── App.tsx           # Main application component
+│   └── main.tsx          # Application entry point
+├── server.ts             # Express backend server
+├── vite.config.ts        # Vite configuration
+├── tsconfig.json         # TypeScript configuration
+├── firestore.rules       # Firebase security rules
+└── metadata.json         # Application metadata
+```
 
 ## 🚀 Getting Started
 

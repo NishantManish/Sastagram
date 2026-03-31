@@ -262,7 +262,7 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
                   <span className="text-xs font-medium text-zinc-700">Copy Link</span>
                 </button>
 
-                {navigator.share && (
+                {typeof navigator.share === 'function' && (
                   <button 
                     onClick={handleNativeShare}
                     className="flex flex-col items-center gap-2 shrink-0"

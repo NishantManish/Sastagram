@@ -3,7 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, add
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, Message, User, Post } from '../types';
-import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil } from 'lucide-react';
+import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus } from 'lucide-react';
 import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
@@ -515,282 +515,333 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
     
     return (
       <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden fixed inset-0 z-50">
-        <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
-          <button onClick={() => setSelectedChat(null)} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+        {/* Chat Header */}
+        <div className="sticky top-0 z-20 bg-white/70 backdrop-blur-2xl border-b border-zinc-100/50 px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => otherUser && setSelectedUserId(otherUser.uid)}
-              className="w-9 h-9 rounded-full bg-zinc-200 overflow-hidden shrink-0 hover:opacity-80 transition-opacity border border-zinc-200"
+              onClick={() => setSelectedChat(null)} 
+              className="p-2.5 -ml-2 text-zinc-500 hover:bg-zinc-100/80 rounded-full transition-all active:scale-90"
             >
-              {otherUser?.photoURL ? (
-                <img 
-                  src={getOptimizedImageUrl(otherUser.photoURL, 64, 64)} 
-                  alt={otherUser.displayName || ''} 
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full h-full object-cover" 
-                  referrerPolicy="no-referrer" 
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-sm">
-                  {otherUser?.displayName?.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <ArrowLeft className="w-5 h-5" />
             </button>
-            <button 
+            <div 
+              className="flex items-center gap-3 cursor-pointer group"
               onClick={() => otherUser && setSelectedUserId(otherUser.uid)}
-              className="font-semibold text-zinc-900 hover:underline"
             >
-              {otherUser?.displayName}
+              <div className="relative">
+                <div className="w-10 h-10 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200 group-hover:ring-4 group-hover:ring-indigo-500/10 transition-all duration-300">
+                  {otherUser?.photoURL ? (
+                    <img 
+                      src={getOptimizedImageUrl(otherUser.photoURL, 80, 80)} 
+                      alt={otherUser.displayName || ''} 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer" 
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold text-base bg-gradient-to-br from-zinc-50 to-zinc-100">
+                      {otherUser?.displayName?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                {otherUser && (
+                  <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
+                    currentChat.typingStatus?.[otherUser.uid] ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'
+                  }`} />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-black text-zinc-900 leading-tight group-hover:text-indigo-600 transition-colors text-[15px] tracking-tight">
+                  {otherUser?.displayName}
+                </span>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                  {currentChat.typingStatus?.[otherUser?.uid || ''] ? 'typing...' : 'Active now'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button className="p-2.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all active:scale-90">
+              <Phone className="w-5 h-5" />
+            </button>
+            <button className="p-2.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all active:scale-90">
+              <Video className="w-5 h-5" />
+            </button>
+            <button className="p-2.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all active:scale-90">
+              <Info className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-zinc-50/50 relative">
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-zinc-50/50 relative scroll-smooth no-scrollbar">
           {heldMessage && (
             <div 
-              className="fixed inset-0 z-40" 
+              className="fixed inset-0 z-40 bg-black/5 backdrop-blur-[2px]" 
               onClick={() => setHeldMessage(null)} 
             />
           )}
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
-              <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mb-4">
-                <Send className="w-8 h-8 text-zinc-400 -rotate-12" />
-              </div>
-              <p className="text-zinc-500 text-sm font-medium">No messages yet. Say hello!</p>
+            <div className="flex flex-col items-center justify-center h-full text-center px-8">
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="w-20 h-20 bg-white rounded-3xl shadow-lg flex items-center justify-center mb-6"
+              >
+                <Send className="w-10 h-10 text-indigo-500 -rotate-12" />
+              </motion.div>
+              <h3 className="text-lg font-bold text-zinc-900 mb-2">Start a conversation</h3>
+              <p className="text-zinc-500 text-sm max-w-[240px]">
+                Send a message to {otherUser?.displayName} to start chatting.
+              </p>
             </div>
           ) : (
-            messages.map((msg, index) => {
-              const isMine = msg.senderId === auth.currentUser?.uid;
-              const isLastMessage = index === messages.length - 1;
-              const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
-              const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
+            <div className="flex flex-col gap-4">
+              {messages.map((msg, index) => {
+                const isMine = msg.senderId === auth.currentUser?.uid;
+                const isLastMessage = index === messages.length - 1;
+                const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
+                const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
 
-              const showDate = index === 0 || 
-                (msg.createdAt && messages[index - 1]?.createdAt && 
-                 !isSameDay(msg.createdAt.toDate(), messages[index - 1].createdAt.toDate()));
+                const showDate = index === 0 || 
+                  (msg.createdAt && messages[index - 1]?.createdAt && 
+                   !isSameDay(msg.createdAt.toDate(), messages[index - 1].createdAt.toDate()));
 
-              const isEditable = isMine && msg.createdAt && (Date.now() - msg.createdAt.toMillis() < 60 * 60 * 1000);
+                const isEditable = isMine && msg.createdAt && (Date.now() - msg.createdAt.toMillis() < 60 * 60 * 1000);
 
-              return (
-                <motion.div 
-                  key={`${msg.id}-${index}`} 
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                  className="w-full relative"
-                >
-                  {showDate && msg.createdAt && (
-                    <div className="w-full flex justify-center my-4">
-                      <span className="text-[10px] font-medium text-zinc-500 bg-zinc-200/50 px-3 py-1 rounded-full uppercase tracking-wider">
-                        {format(msg.createdAt.toDate(), 'MMMM d, yyyy')}
-                      </span>
-                    </div>
-                  )}
-                  
-                  <motion.div 
-                    drag="x"
-                    dragConstraints={{ left: -60, right: 0 }}
-                    dragElastic={0.1}
-                    onDragStart={handleMessageTouchEnd}
-                    className={`flex flex-col w-full ${isMine ? 'items-end' : 'items-start'} relative ${heldMessage?.id === msg.id ? 'z-50' : 'z-10'}`}
-                    onMouseDown={() => handleMessageTouchStart(msg)}
-                    onMouseUp={handleMessageTouchEnd}
-                    onMouseLeave={handleMessageTouchEnd}
-                    onTouchStart={() => handleMessageTouchStart(msg)}
-                    onTouchEnd={handleMessageTouchEnd}
-                  >
-                    {/* Hidden Timestamp that moves with the message */}
-                    <div className="absolute left-full top-0 bottom-0 flex items-center ml-3">
-                      <span className="text-[10px] font-medium text-zinc-400 whitespace-nowrap">
-                        {msg.createdAt && format(msg.createdAt.toDate(), 'h:mm a')}
-                      </span>
-                    </div>
-
-                    {msg.isEdited && (
-                      <span className={`text-[10px] text-zinc-400 mb-1 ${isMine ? 'mr-1' : 'ml-1'}`}>
-                        Edited
-                      </span>
+                return (
+                  <div key={`${msg.id}-${index}`} className="w-full">
+                    {showDate && msg.createdAt && (
+                      <div className="w-full flex justify-center my-6">
+                        <span className="text-[11px] font-bold text-zinc-400 bg-white px-4 py-1.5 rounded-full shadow-sm border border-zinc-100 uppercase tracking-widest">
+                          {format(msg.createdAt.toDate(), 'MMMM d, yyyy')}
+                        </span>
+                      </div>
                     )}
-
-                    <div 
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl shadow-sm relative flex flex-col ${
-                        isMine 
-                          ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm' 
-                          : 'bg-white border border-zinc-100 text-zinc-900 rounded-bl-sm'
-                      }`}
+                    
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className={`flex flex-col w-full ${isMine ? 'items-end' : 'items-start'} relative group`}
                     >
-                      <AnimatePresence>
-                        {heldMessage?.id === msg.id && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.9, y: index === 0 ? -10 : 10 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.9, y: index === 0 ? -10 : 10 }}
-                              className={`absolute z-20 ${index === 0 ? 'top-full mt-2' : 'bottom-full mb-2'} flex flex-col items-stretch bg-white rounded-2xl shadow-xl border border-zinc-100 p-1.5 min-w-[140px] ${isMine ? 'right-0' : 'left-0'}`}
-                            >
-                            {isEditable && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMessageTouchEnd();
-                                  setEditingMessage(msg);
-                                  setNewMessage(msg.text || '');
-                                  setHeldMessage(null);
-                                }}
-                                className="flex items-center gap-3 px-4 py-2.5 text-zinc-700 hover:bg-zinc-50 rounded-xl transition-colors w-full text-left"
-                              >
-                                <Pencil className="w-4 h-4 text-indigo-500" />
-                                <span className="text-sm font-medium">Edit</span>
-                              </button>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMessageTouchEnd();
-                                setMessageToDelete(msg);
-                                setHeldMessage(null);
-                              }}
-                              className="flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors w-full text-left"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span className="text-sm font-medium">Delete</span>
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                      {msg.attachmentUrl && (
-                        <img 
-                          src={getOptimizedImageUrl(msg.attachmentUrl, 400)} 
-                          alt="Attachment" 
-                          loading="lazy"
-                          decoding="async"
-                          className="rounded-xl mb-2 max-w-full border border-black/5" 
-                          referrerPolicy="no-referrer" 
-                        />
-                      )}
-                      {msg.sharedPostId && (
-                        <div 
-                          onClick={() => handlePostClick(msg.sharedPostId!, msg.sharedPostSlideIndex || 0)}
-                          className={`mb-2 p-2 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] flex flex-col gap-2 ${
-                            isMine ? 'bg-indigo-600/50 border-indigo-400' : 'bg-zinc-50 border-zinc-200'
-                          }`}
-                        >
-                          {msg.sharedPostPreviewUrl ? (
-                            <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black/10">
-                              {msg.sharedPostMediaType === 'video' ? (
-                                <video 
-                                  src={msg.sharedPostPreviewUrl} 
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <img 
-                                  src={getOptimizedImageUrl(msg.sharedPostPreviewUrl, 400)} 
-                                  alt="Shared post" 
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
-                              )}
-                              <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                <ImageIcon className="w-8 h-8 text-white" />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className={`w-full aspect-square rounded-lg flex items-center justify-center ${isMine ? 'bg-indigo-500' : 'bg-zinc-200'}`}>
-                              <ImageIcon className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
-                            </div>
-                          )}
-                          <div className="px-1">
-                            <p className={`text-xs font-bold truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>View Post</p>
-                          </div>
+                      <motion.div 
+                        drag="x"
+                        dragConstraints={{ left: -60, right: 60 }}
+                        dragElastic={0.1}
+                        onDragStart={handleMessageTouchEnd}
+                        className={`flex flex-col max-w-[85%] relative ${heldMessage?.id === msg.id ? 'z-50' : 'z-10'}`}
+                        onMouseDown={() => handleMessageTouchStart(msg)}
+                        onMouseUp={handleMessageTouchEnd}
+                        onMouseLeave={handleMessageTouchEnd}
+                        onTouchStart={() => handleMessageTouchStart(msg)}
+                        onTouchEnd={handleMessageTouchEnd}
+                      >
+                        {/* Hidden Timestamp that reveals on drag */}
+                        <div className={`absolute top-1/2 -translate-y-1/2 flex items-center transition-opacity duration-200 ${
+                          isMine ? 'left-full ml-4' : 'right-full mr-4'
+                        }`}>
+                          <span className="text-[10px] font-black text-zinc-400 whitespace-nowrap uppercase tracking-tighter">
+                            {msg.createdAt && format(msg.createdAt.toDate(), 'h:mm a')}
+                          </span>
                         </div>
-                      )}
-                      {msg.sharedStoryId && (
-                        <div 
-                          className={`mb-2 p-2 rounded-xl border flex flex-col gap-2 ${
-                            isMine ? 'bg-indigo-600/50 border-indigo-400' : 'bg-zinc-50 border-zinc-200'
-                          }`}
-                        >
-                          {msg.sharedStoryPreviewUrl ? (
-                            <div className="relative aspect-[9/16] w-32 overflow-hidden rounded-lg bg-black/10 mx-auto">
-                              {msg.sharedStoryPreviewUrl.match(/\.(mp4|webm|ogg|mov)$/i) || msg.sharedStoryPreviewUrl.includes('/video/upload/') ? (
-                                <video 
-                                  src={msg.sharedStoryPreviewUrl} 
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <img 
-                                  src={getOptimizedImageUrl(msg.sharedStoryPreviewUrl, 400)} 
-                                  alt="Shared story" 
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
-                              )}
-                            </div>
-                          ) : (
-                            <div className={`w-32 aspect-[9/16] rounded-lg flex items-center justify-center mx-auto ${isMine ? 'bg-indigo-500' : 'bg-zinc-200'}`}>
-                              <ImageIcon className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
-                            </div>
+
+                        <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+                          {msg.isEdited && (
+                            <span className={`text-[9px] font-black text-zinc-400 mb-1 uppercase tracking-[0.15em] ${isMine ? 'mr-1' : 'ml-1'}`}>
+                              Edited
+                            </span>
                           )}
-                          <div className="px-1 text-center">
-                            <p className={`text-[10px] font-bold uppercase tracking-wider ${isMine ? 'text-white' : 'text-zinc-500'}`}>Replied to story</p>
-                          </div>
-                        </div>
-                      )}
-                      {msg.sharedProfileId && (
-                        <div 
-                          onClick={() => setSelectedUserId(msg.sharedProfileId!)}
-                          className={`mb-2 p-3 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] flex flex-col gap-3 ${
-                            isMine ? 'bg-indigo-600/50 border-indigo-400' : 'bg-zinc-50 border-zinc-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0 border border-zinc-200">
-                              {chatUsers[msg.sharedProfileId]?.photoURL ? (
+
+                          <div 
+                            className={`px-4 py-3 rounded-[20px] shadow-sm relative flex flex-col transition-all duration-300 ${
+                              isMine 
+                                ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-sm shadow-indigo-200/50' 
+                                : 'bg-white border border-zinc-100 text-zinc-900 rounded-tl-sm shadow-zinc-200/50'
+                            } ${heldMessage?.id === msg.id ? 'ring-4 ring-indigo-500/20 scale-[1.02] shadow-xl' : ''}`}
+                          >
+                            <AnimatePresence>
+                              {heldMessage?.id === msg.id && (
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.9, y: index === 0 ? 10 : -10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.9, y: index === 0 ? 10 : -10 }}
+                                    className={`absolute z-30 ${index === 0 ? 'top-full mt-3' : 'bottom-full mb-3'} flex flex-col items-stretch bg-white rounded-2xl shadow-2xl border border-zinc-100 p-2 min-w-[160px] ${isMine ? 'right-0' : 'left-0'}`}
+                                  >
+                                  {isEditable && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMessageTouchEnd();
+                                        setEditingMessage(msg);
+                                        setNewMessage(msg.text || '');
+                                        setHeldMessage(null);
+                                      }}
+                                      className="flex items-center gap-3 px-4 py-3 text-zinc-700 hover:bg-zinc-50 rounded-xl transition-colors w-full text-left group/btn"
+                                    >
+                                      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover/btn:bg-indigo-100 transition-colors">
+                                        <Pencil className="w-4 h-4 text-indigo-600" />
+                                      </div>
+                                      <span className="text-sm font-bold">Edit</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleMessageTouchEnd();
+                                      setMessageToDelete(msg);
+                                      setHeldMessage(null);
+                                    }}
+                                    className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors w-full text-left group/btn"
+                                  >
+                                    <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center group-hover/btn:bg-red-100 transition-colors">
+                                      <Trash2 className="w-4 h-4 text-red-600" />
+                                    </div>
+                                    <span className="text-sm font-bold">Delete</span>
+                                  </button>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+
+                            {msg.attachmentUrl && (
+                              <div className="relative group/img mb-2 overflow-hidden rounded-xl bg-black/5">
                                 <img 
-                                  src={getOptimizedImageUrl(chatUsers[msg.sharedProfileId].photoURL, 96, 96)} 
-                                  alt={chatUsers[msg.sharedProfileId].displayName || ''} 
-                                  className="w-full h-full object-cover" 
+                                  src={getOptimizedImageUrl(msg.attachmentUrl, 600)} 
+                                  alt="Attachment" 
+                                  loading="lazy"
+                                  className="w-full h-auto object-cover max-h-[300px] transition-transform group-hover/img:scale-105" 
                                   referrerPolicy="no-referrer" 
                                 />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-lg">
-                                  {chatUsers[msg.sharedProfileId]?.displayName?.charAt(0).toUpperCase()}
+                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/10 transition-colors" />
+                              </div>
+                            )}
+
+                            {msg.sharedPostId && (
+                              <div 
+                                onClick={() => handlePostClick(msg.sharedPostId!, msg.sharedPostSlideIndex || 0)}
+                                className={`mb-2 p-2 rounded-xl border cursor-pointer transition-all hover:brightness-95 active:scale-[0.98] flex flex-col gap-2 ${
+                                  isMine ? 'bg-white/10 border-white/20' : 'bg-zinc-50 border-zinc-200'
+                                }`}
+                              >
+                                {msg.sharedPostPreviewUrl ? (
+                                  <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black/10">
+                                    {msg.sharedPostMediaType === 'video' ? (
+                                      <video 
+                                        src={msg.sharedPostPreviewUrl} 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <img 
+                                        src={getOptimizedImageUrl(msg.sharedPostPreviewUrl, 400)} 
+                                        alt="Shared post" 
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    )}
+                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                      <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30">
+                                        <ImageIcon className="w-5 h-5 text-white" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className={`w-full aspect-square rounded-lg flex items-center justify-center ${isMine ? 'bg-white/20' : 'bg-zinc-200'}`}>
+                                    <ImageIcon className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
+                                  </div>
+                                )}
+                                <div className="px-1 py-1 flex items-center justify-between">
+                                  <span className={`text-[11px] font-black uppercase tracking-widest ${isMine ? 'text-white' : 'text-zinc-900'}`}>View Post</span>
+                                  <ArrowRight className={`w-3 h-3 ${isMine ? 'text-white' : 'text-zinc-400'}`} />
                                 </div>
-                              )}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <span className={`font-bold text-sm truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>
-                                {chatUsers[msg.sharedProfileId]?.displayName}
-                              </span>
-                              <span className={`text-[10px] font-medium truncate ${isMine ? 'text-indigo-100' : 'text-zinc-400'}`}>
-                                @{chatUsers[msg.sharedProfileId]?.username || 'user'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className={`w-full py-1.5 rounded-lg text-center text-[10px] font-black uppercase tracking-widest ${
-                            isMine ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-600'
-                          }`}>
-                            View Profile
+                              </div>
+                            )}
+
+                            {msg.sharedStoryId && (
+                              <div 
+                                className={`mb-2 p-2 rounded-xl border flex flex-col gap-2 ${
+                                  isMine ? 'bg-white/10 border-white/20' : 'bg-zinc-50 border-zinc-200'
+                                }`}
+                              >
+                                {msg.sharedStoryPreviewUrl ? (
+                                  <div className="relative aspect-[9/16] w-32 overflow-hidden rounded-lg bg-black/10 mx-auto">
+                                    {msg.sharedStoryPreviewUrl.match(/\.(mp4|webm|ogg|mov)$/i) || msg.sharedStoryPreviewUrl.includes('/video/upload/') ? (
+                                      <video 
+                                        src={msg.sharedStoryPreviewUrl} 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <img 
+                                        src={getOptimizedImageUrl(msg.sharedStoryPreviewUrl, 400)} 
+                                        alt="Shared story" 
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className={`w-32 aspect-[9/16] rounded-lg flex items-center justify-center mx-auto ${isMine ? 'bg-white/20' : 'bg-zinc-200'}`}>
+                                    <ImageIcon className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
+                                  </div>
+                                )}
+                                <div className="px-1 text-center">
+                                  <p className={`text-[10px] font-black uppercase tracking-widest ${isMine ? 'text-white/60' : 'text-zinc-400'}`}>Replied to story</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {msg.sharedProfileId && (
+                              <div 
+                                onClick={() => setSelectedUserId(msg.sharedProfileId!)}
+                                className={`mb-2 p-3 rounded-xl border cursor-pointer transition-all hover:brightness-95 active:scale-[0.98] flex flex-col gap-3 ${
+                                  isMine ? 'bg-white/10 border-white/20' : 'bg-zinc-50 border-zinc-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-12 h-12 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-black/5">
+                                    {chatUsers[msg.sharedProfileId]?.photoURL ? (
+                                      <img 
+                                        src={getOptimizedImageUrl(chatUsers[msg.sharedProfileId].photoURL, 96, 96)} 
+                                        alt={chatUsers[msg.sharedProfileId].displayName || ''} 
+                                        className="w-full h-full object-cover" 
+                                        referrerPolicy="no-referrer" 
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold text-lg">
+                                        {chatUsers[msg.sharedProfileId]?.displayName?.charAt(0).toUpperCase()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className={`font-bold text-sm truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>
+                                      {chatUsers[msg.sharedProfileId]?.displayName}
+                                    </span>
+                                    <span className={`text-[11px] font-medium truncate ${isMine ? 'text-white/60' : 'text-zinc-500'}`}>
+                                      @{chatUsers[msg.sharedProfileId]?.username || 'user'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className={`w-full py-2 rounded-lg text-center text-[10px] font-black uppercase tracking-widest ${
+                                  isMine ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-600'
+                                }`}>
+                                  View Profile
+                                </div>
+                              </div>
+                            )}
+
+                            {msg.text && (
+                              <p className="text-[15px] leading-relaxed break-words font-medium">{msg.text}</p>
+                            )}
                           </div>
                         </div>
+                      </motion.div>
+                      {isRead && (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mt-1.5 mr-1">Read</span>
                       )}
-                      {msg.text && (
-                        <div className="flex items-end gap-2">
-                          <p className="text-[15px] leading-relaxed break-words">{msg.text}</p>
-                        </div>
-                      )}
-                    </div>
-                    {isRead && (
-                      <span className="text-[10px] font-medium text-zinc-400 mt-1 mr-1">Read</span>
-                    )}
-                  </motion.div>
-                </motion.div>
-              );
-            })
+                    </motion.div>
+                  </div>
+                );
+              })}
+            </div>
           )}
+          
           {Object.entries(currentChat.typingStatus || {}).map(([userId, isTyping]) => {
             if (isTyping && userId !== auth.currentUser?.uid) {
               return (
@@ -801,21 +852,21 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   exit={{ opacity: 0, y: 10 }}
                   className="flex justify-start mb-4"
                 >
-                  <div className="bg-white border border-zinc-100 text-zinc-500 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1">
+                  <div className="bg-white border border-zinc-100 text-zinc-400 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1.5">
                     <motion.div
-                      animate={{ y: [0, -5, 0] }}
-                      transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
-                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full"
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: 0 }}
+                      className="w-1.5 h-1.5 bg-zinc-300 rounded-full"
                     />
                     <motion.div
-                      animate={{ y: [0, -5, 0] }}
-                      transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
-                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full"
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: 0.2 }}
+                      className="w-1.5 h-1.5 bg-zinc-300 rounded-full"
                     />
                     <motion.div
-                      animate={{ y: [0, -5, 0] }}
-                      transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
-                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full"
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: 0.4 }}
+                      className="w-1.5 h-1.5 bg-zinc-300 rounded-full"
                     />
                   </div>
                 </motion.div>
@@ -826,40 +877,66 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="bg-white/90 backdrop-blur-md border-t border-zinc-200 p-3 pb-safe shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.05)] shrink-0">
+        {/* Input Area */}
+        <div className="bg-white/80 backdrop-blur-2xl border-t border-zinc-100/50 p-3 pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.04)] shrink-0">
           {isBlocked ? (
-            <div className="flex items-center justify-center gap-2 text-zinc-500 text-sm py-2">
-              <ShieldAlert className="w-4 h-4" />
-              <span>You cannot message this user.</span>
+            <div className="flex items-center justify-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl py-4 px-6">
+              <ShieldAlert className="w-5 h-5 text-zinc-400" />
+              <span className="text-zinc-500 text-[11px] font-black uppercase tracking-[0.2em]">Chat Disabled</span>
             </div>
           ) : (
-            <>
+            <div className="flex flex-col gap-2">
               {editingMessage && (
-                <div className="mb-2 flex items-center justify-between bg-indigo-50/50 border border-indigo-100/50 px-3 py-2 rounded-xl">
-                  <div className="flex items-center gap-2 text-indigo-600">
-                    <Pencil className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium">Editing message</span>
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center justify-between bg-indigo-50/80 backdrop-blur-md border border-indigo-100/50 px-4 py-2.5 rounded-2xl"
+                >
+                  <div className="flex items-center gap-3 text-indigo-600">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <Pencil className="w-4 h-4" />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest">Editing message</span>
                   </div>
                   <button 
                     onClick={() => {
                       setEditingMessage(null);
                       setNewMessage('');
                     }} 
-                    className="p-1 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors"
+                    className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-100 rounded-full transition-all"
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-              {attachment && (
-                <div className="mb-2 flex items-center gap-2 bg-zinc-100 p-2 rounded-lg">
-                  <span className="text-xs truncate flex-1">{attachment.name}</span>
-                  <button onClick={() => setAttachment(null)} className="text-zinc-500 hover:text-zinc-900">
                     <X className="w-4 h-4" />
                   </button>
-                </div>
+                </motion.div>
               )}
-              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+              
+              {attachment && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-3 bg-zinc-50/80 backdrop-blur-md border border-zinc-200/50 p-2.5 rounded-2xl"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-zinc-200 flex items-center justify-center overflow-hidden">
+                    {attachment.type.startsWith('image/') ? (
+                      <ImageIcon className="w-5 h-5 text-zinc-500" />
+                    ) : (
+                      <Video className="w-5 h-5 text-zinc-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-zinc-900 truncate">{attachment.name}</p>
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{(attachment.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                  <button 
+                    onClick={() => setAttachment(null)} 
+                    className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              )}
+
+              <form onSubmit={handleSendMessage} className="flex items-end gap-2">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -871,36 +948,54 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   className="hidden"
                   accept="image/*,video/*"
                 />
-                <button 
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 text-zinc-500 hover:text-zinc-900"
-                  disabled={!!editingMessage}
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => {
-                    setNewMessage(e.target.value);
-                    handleTyping();
-                  }}
-                  placeholder={editingMessage ? "Edit message..." : "Message..."}
-                  className="flex-1 bg-zinc-100/80 border border-zinc-200/50 rounded-full px-4 py-2.5 text-[15px] focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none transition-all"
-                />
+                {!editingMessage && (
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all active:scale-90"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                )}
+                <div className="flex-1 relative">
+                  <textarea
+                    rows={1}
+                    value={newMessage}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
+                      handleTyping();
+                      // Auto-resize
+                      e.target.style.height = 'auto';
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e as any);
+                      }
+                    }}
+                    placeholder={editingMessage ? "Edit message..." : "Message..."}
+                    className="w-full bg-zinc-100/80 border border-transparent rounded-[22px] px-5 py-3 text-[15px] font-medium focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500/30 focus:outline-none transition-all resize-none max-h-[120px] placeholder:text-zinc-400"
+                  />
+                </div>
                 <motion.button 
                   whileTap={{ scale: 0.9 }}
                   type="submit"
                   disabled={editingMessage ? (!newMessage.trim() && !editingMessage.attachmentUrl && !editingMessage.sharedPostId) : (!newMessage.trim() && !attachment)}
-                  className="p-2.5 bg-indigo-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors shadow-sm"
+                  className={`p-3.5 rounded-2xl transition-all shadow-lg active:scale-95 ${
+                    (newMessage.trim() || attachment) 
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-500/20' 
+                      : 'bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none'
+                  }`}
                 >
-                  <Send className="w-4 h-4 ml-0.5" />
+                  <Send className={`w-5 h-5 ${newMessage.trim() || attachment ? 'translate-x-0.5 -translate-y-0.5' : ''}`} />
                 </motion.button>
               </form>
-            </>
+            </div>
           )}
         </div>
+
+        {/* Modals */}
         <AnimatePresence>
           {selectedPost && (
             <PostDetailsModal 
@@ -919,26 +1014,29 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-zinc-900/60 backdrop-blur-md"
             >
               <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden"
               >
-                <div className="p-6">
-                  <h3 className="text-lg font-semibold text-zinc-900 mb-2">Delete Message</h3>
-                  <p className="text-zinc-500 text-sm mb-6">
-                    Are you sure you want to delete this message?
+                <div className="p-8 text-center">
+                  <div className="w-16 h-16 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                    <Trash2 className="w-8 h-8 text-red-500" />
+                  </div>
+                  <h3 className="text-xl font-black text-zinc-900 mb-3 uppercase tracking-tight">Delete Message?</h3>
+                  <p className="text-zinc-500 text-sm font-medium mb-8 leading-relaxed">
+                    This action cannot be undone. How would you like to delete this message?
                   </p>
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-3">
                     {(messageToDelete.senderId === auth.currentUser?.uid || userRole === 'admin') && 
                      (!messageToDelete.createdAt || Date.now() - messageToDelete.createdAt.toMillis() < 24 * 60 * 60 * 1000 || userRole === 'admin') && (
                       <button
                         onClick={() => handleDeleteMessage(messageToDelete, 'everyone')}
                         disabled={isDeleting}
-                        className="w-full py-3 px-4 bg-red-50 text-red-600 font-medium rounded-xl hover:bg-red-100 transition-colors disabled:opacity-50"
+                        className="w-full py-4 px-6 bg-red-600 text-white font-bold rounded-2xl hover:bg-red-700 transition-all active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-red-500/20"
                       >
                         Delete for everyone
                       </button>
@@ -946,14 +1044,14 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                     <button
                       onClick={() => handleDeleteMessage(messageToDelete, 'me')}
                       disabled={isDeleting}
-                      className="w-full py-3 px-4 bg-zinc-50 text-zinc-900 font-medium rounded-xl hover:bg-zinc-100 transition-colors disabled:opacity-50"
+                      className="w-full py-4 px-6 bg-zinc-100 text-zinc-900 font-bold rounded-2xl hover:bg-zinc-200 transition-all active:scale-[0.98] disabled:opacity-50"
                     >
                       Delete for me
                     </button>
                     <button
                       onClick={() => setMessageToDelete(null)}
                       disabled={isDeleting}
-                      className="w-full py-3 px-4 bg-white border border-zinc-200 text-zinc-700 font-medium rounded-xl hover:bg-zinc-50 transition-colors disabled:opacity-50"
+                      className="w-full py-4 px-6 text-zinc-500 font-bold hover:text-zinc-900 transition-all"
                     >
                       Cancel
                     </button>
@@ -968,67 +1066,84 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex flex-col gap-3 shadow-sm shrink-0">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Messages</h1>
+    <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden fixed inset-0 z-50">
+      {/* List Header */}
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl px-4 pt-6 pb-4 shrink-0">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onBack} 
+              className="p-2.5 -ml-2 text-zinc-900 hover:bg-zinc-100 rounded-full transition-all active:scale-90"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+            <h1 className="text-2xl font-black tracking-tighter text-zinc-900">Messages</h1>
+          </div>
+          <button className="p-2.5 bg-zinc-100 text-zinc-900 rounded-2xl hover:bg-zinc-200 transition-all active:scale-90">
+            <Search className="w-5 h-5" />
+          </button>
         </div>
-        
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+
+        <div className="relative group">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <Search className="w-4 h-4 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />
+          </div>
           <input
             type="text"
-            placeholder="Search users to chat..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-100 border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all outline-none"
+            placeholder="Search people..."
+            className="w-full bg-zinc-100 border-none rounded-[20px] py-3.5 pl-11 pr-4 text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all placeholder:text-zinc-400 font-bold"
           />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-zinc-200 rounded-full"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-zinc-200 rounded-full transition-colors"
             >
-              <X className="w-3 h-3 text-zinc-500" />
+              <X className="w-3.5 h-3.5 text-zinc-500" />
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-32">
-        {searchQuery ? (
-          <div className="px-2 py-2">
-            {isSearching ? (
-              <div className="flex justify-center p-4"><div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" /></div>
-            ) : searchResults.length > 0 ? (
-              searchResults.map((user, idx) => (
-                <div 
-                  key={`${user.uid}-${idx}`}
-                  onClick={() => handleStartChat(user)}
-                  className="p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all"
-                >
-                <div 
-                  className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedUserId(user.uid);
-                  }}
-                >
+      {/* Chat List */}
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-20 px-2">
+        {isSearching ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <div className="w-8 h-8 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Searching...</p>
+          </div>
+        ) : searchResults.length > 0 ? (
+          <div className="px-4 py-2 space-y-1">
+            <h2 className="px-2 text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-3">Search Results</h2>
+            {searchResults.map(user => (
+              <button
+                key={user.uid}
+                onClick={() => handleStartChat(user)}
+                className="w-full flex items-center gap-4 p-3 hover:bg-indigo-50/50 rounded-2xl transition-all active:scale-[0.98] group"
+              >
+                <div className="w-12 h-12 rounded-full bg-zinc-100 overflow-hidden border-2 border-white shadow-sm group-hover:border-indigo-100 transition-colors">
                   {user.photoURL ? (
-                    <img src={getOptimizedImageUrl(user.photoURL, 96, 96)} alt="" className="w-full h-full object-cover" />
+                    <img src={getOptimizedImageUrl(user.photoURL, 96, 96)} alt={user.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">{user.displayName?.charAt(0)}</div>
+                    <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold text-lg">
+                      {user.displayName?.charAt(0).toUpperCase()}
+                    </div>
                   )}
                 </div>
-                  <div>
-                    <h3 className="font-semibold text-zinc-900">{user.displayName}</h3>
-                    <p className="text-sm text-zinc-500">@{user.username}</p>
-                  </div>
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="font-bold text-zinc-900 text-[15px] group-hover:text-indigo-600 transition-colors">{user.displayName}</span>
+                  <span className="text-xs text-zinc-400 font-medium">@{user.username}</span>
                 </div>
-              ))
-            ) : (
-              <p className="text-center text-zinc-500 p-4">No users found</p>
-            )}
+              </button>
+            ))}
+          </div>
+        ) : searchQuery.trim() ? (
+          <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
+            <div className="w-16 h-16 bg-zinc-50 rounded-3xl flex items-center justify-center mb-4">
+              <Search className="w-8 h-8 text-zinc-200" />
+            </div>
+            <p className="text-zinc-400 text-sm font-medium">No users found matching "{searchQuery}"</p>
           </div>
         ) : loading ? (
           <div className="flex justify-center items-center h-40">
@@ -1038,7 +1153,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center h-full px-8 text-center"
+            className="flex flex-col items-center justify-center h-full px-8 text-center py-20"
           >
             <div className="relative mb-8">
               <div className="w-24 h-24 bg-indigo-50 rounded-[32px] flex items-center justify-center border border-indigo-100/50 shadow-sm rotate-3">
@@ -1060,72 +1175,77 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
             </button>
           </motion.div>
         ) : (
-          <div className="divide-y divide-zinc-100/50 px-2">
+          <div className="px-2">
             {filteredChats.map((chat, index) => {
-            const otherUser = getOtherUser(chat);
-            if (!otherUser) return null;
-            
-            const isUnread = auth.currentUser && chat.readStatus?.[auth.currentUser.uid] === false;
-
-            return (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: index * 0.05 }}
-                key={`chat-${chat.id}-${index}`} 
-                onClick={() => !chatToDelete && setSelectedChat(chat)}
-                onTouchStart={() => handleTouchStart(chat)}
-                onTouchEnd={handleTouchEnd}
-                onMouseDown={() => handleTouchStart(chat)}
-                onMouseUp={handleTouchEnd}
-                onMouseLeave={handleTouchEnd}
-                className={`p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all relative active:scale-[0.98] ${isUnread ? 'bg-indigo-50/40' : ''}`}
-              >
-                <div 
-                  className="w-14 h-14 rounded-full bg-zinc-200 overflow-hidden shrink-0 relative border border-zinc-200 shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedUserId(otherUser.uid);
-                  }}
+              const otherUser = getOtherUser(chat);
+              if (!otherUser) return null;
+              const isUnread = auth.currentUser && chat.readStatus?.[auth.currentUser.uid] === false;
+              
+              return (
+                <motion.button
+                  key={chat.id}
+                  layout
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2, delay: index * 0.05 }}
+                  onClick={() => !chatToDelete && setSelectedChat(chat)}
+                  onMouseDown={() => handleTouchStart(chat)}
+                  onMouseUp={handleTouchEnd}
+                  onMouseLeave={handleTouchEnd}
+                  onTouchStart={() => handleTouchStart(chat)}
+                  onTouchEnd={handleTouchEnd}
+                  className={`w-full flex items-center gap-4 p-4 rounded-[28px] transition-all active:scale-[0.97] group relative mb-2 ${
+                    isUnread ? 'bg-indigo-50/50 shadow-sm shadow-indigo-100/20' : 'hover:bg-zinc-50'
+                  }`}
                 >
-                  {otherUser.photoURL ? (
-                    <img 
-                      src={getOptimizedImageUrl(otherUser.photoURL, 96, 96)} 
-                      alt={otherUser.displayName || ''} 
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover" 
-                      referrerPolicy="no-referrer" 
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium">
-                      {otherUser.displayName?.charAt(0).toUpperCase()}
+                  <div className="relative shrink-0">
+                    <div className={`w-14 h-14 rounded-full bg-zinc-100 overflow-hidden border-2 transition-all duration-300 ${
+                      isUnread ? 'border-indigo-500 shadow-lg shadow-indigo-200' : 'border-white shadow-sm'
+                    }`}>
+                      {otherUser?.photoURL ? (
+                        <img 
+                          src={getOptimizedImageUrl(otherUser.photoURL, 112, 112)} 
+                          alt={otherUser.displayName || ''} 
+                          className="w-full h-full object-cover" 
+                          referrerPolicy="no-referrer" 
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-zinc-400 font-black text-xl bg-gradient-to-br from-zinc-50 to-zinc-100">
+                          {otherUser?.displayName?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    <h3 className={`truncate text-[15px] ${isUnread ? 'font-bold text-zinc-900' : 'font-semibold text-zinc-800'}`}>{otherUser.displayName}</h3>
-                    {chat.updatedAt && (
-                      <span className={`text-[11px] shrink-0 ml-2 ${isUnread ? 'text-indigo-600 font-bold' : 'text-zinc-400 font-medium'}`}>
-                        {formatDistanceToNow(chat.updatedAt.toDate(), { addSuffix: false }).replace('about ', '')}
+                    {/* Mock Online Status */}
+                    <div className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-sm" />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0 flex flex-col items-start">
+                    <div className="w-full flex justify-between items-center mb-0.5">
+                      <span className={`text-[15px] truncate transition-colors tracking-tight ${
+                        isUnread ? 'font-black text-zinc-900' : 'font-bold text-zinc-900 group-hover:text-indigo-600'
+                      }`}>
+                        {otherUser?.displayName}
                       </span>
-                    )}
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                        {chat.updatedAt?.toDate ? formatDistanceToNow(chat.updatedAt.toDate(), { addSuffix: false }).replace('about ', '') : 'now'}
+                      </span>
+                    </div>
+                    <div className="w-full flex items-center justify-between gap-2">
+                      <p className={`text-[13px] truncate tracking-tight ${
+                        isUnread ? 'font-bold text-indigo-600' : 'text-zinc-500 font-medium'
+                      }`}>
+                        {chat.lastMessage || 'Start a conversation'}
+                      </p>
+                      {isUnread && (
+                        <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full shadow-lg shadow-indigo-200 shrink-0 animate-pulse" />
+                      )}
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <p className={`text-[14px] truncate pr-4 ${isUnread ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
-                      {chat.lastMessage || 'Started a chat'}
-                    </p>
-                    {isUnread && (
-                      <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full shrink-0 shadow-sm" />
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Modals */}

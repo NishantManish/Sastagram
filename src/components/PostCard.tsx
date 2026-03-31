@@ -232,13 +232,14 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
 
   const handleLike = async () => {
     if (!auth.currentUser || isLiking) return;
-    setIsLiking(true);
     
-    // Optimistic UI
     const newIsLiked = !isLiked;
+    
+    // Optimistic UI update
     setIsLiked(newIsLiked);
-    setLikeCount((prev) => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
-
+    setLikeCount(prev => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
+    
+    setIsLiking(true);
     const likeId = `${post.id}_${auth.currentUser.uid}`;
     const likeRef = doc(db, 'likes', likeId);
     const postRef = doc(db, 'posts', post.id);
@@ -251,7 +252,6 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         batch.update(postRef, {
           likesCount: increment(-1),
         });
-        await batch.commit();
       } else {
         // Like
         batch.set(likeRef, {
@@ -277,14 +277,14 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
             createdAt: serverTimestamp()
           });
         }
-        
-        await batch.commit();
       }
+      
+      await batch.commit();
       onLikeToggle?.();
     } catch (err) {
       // Rollback on error
       setIsLiked(!newIsLiked);
-      setLikeCount((prev) => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
+      setLikeCount(prev => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
       handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}/likes`);
     } finally {
       setIsLiking(false);
@@ -634,7 +634,6 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           <div className="flex items-center gap-4">
             <button 
               onClick={handleLike}
-              disabled={isLiking}
               className="group relative p-1.5 -ml-1.5 text-zinc-900 hover:text-red-500 transition-all active:scale-90"
             >
               <div className="absolute inset-0 bg-red-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-200" />

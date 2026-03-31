@@ -64,12 +64,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
 
   const handleLike = async () => {
     if (!auth.currentUser || isLiking) return;
-    setIsLiking(true);
     
     const newIsLiked = !isLiked;
+    
+    // Optimistic UI update
     setIsLiked(newIsLiked);
     setLikeCount((prev) => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
-
+    
+    setIsLiking(true);
     const likeId = `${post.id}_${auth.currentUser.uid}`;
     const likeRef = doc(db, 'likes', likeId);
     const postRef = doc(db, 'posts', post.id);
@@ -77,9 +79,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
 
     try {
       if (!newIsLiked) {
+        // Unlike
         batch.delete(likeRef);
         batch.update(postRef, { likesCount: increment(-1) });
       } else {
+        // Like
         batch.set(likeRef, {
           postId: post.id,
           userId: auth.currentUser.uid,
@@ -87,6 +91,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         });
         batch.update(postRef, { likesCount: increment(1) });
         
+        // Create notification for like
         if (post.authorId !== auth.currentUser.uid) {
           const notificationRef = doc(collection(db, 'notifications'));
           batch.set(notificationRef, {
@@ -103,6 +108,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
       }
       await batch.commit();
     } catch (err) {
+      // Rollback on error
       setIsLiked(!newIsLiked);
       setLikeCount((prev) => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
       handleFirestoreError(err, OperationType.WRITE, `posts/${post.id}/likes`);
@@ -270,9 +276,24 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
   const handleLikeComment = async (commentId: string) => {
     if (!auth.currentUser || processingLikes.has(commentId)) return;
     
-    setProcessingLikes(prev => new Set(prev).add(commentId));
     const isLiked = likedComments.has(commentId);
     const likeId = `${commentId}_${auth.currentUser.uid}`;
+    
+    // Optimistically update UI
+    setLikedComments(prev => {
+      const next = new Set(prev);
+      if (isLiked) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+
+    setComments(prev => prev.map(c => 
+      c.id === commentId 
+        ? { ...c, likesCount: (c.likesCount || 0) + (isLiked ? -1 : 1) }
+        : c
+    ));
+
+    setProcessingLikes(prev => new Set(prev).add(commentId));
     
     try {
       const batch = writeBatch(db);
@@ -285,12 +306,6 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         batch.update(commentRef, {
           likesCount: increment(-1)
         });
-        // Optimistically update UI
-        setLikedComments(prev => {
-          const next = new Set(prev);
-          next.delete(commentId);
-          return next;
-        });
       } else {
         // Like
         batch.set(likeRef, {
@@ -302,22 +317,24 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         batch.update(commentRef, {
           likesCount: increment(1)
         });
-        // Optimistically update UI
-        setLikedComments(prev => new Set(prev).add(commentId));
       }
 
       await batch.commit();
     } catch (error) {
       // Revert optimistic update on error
-      if (isLiked) {
-        setLikedComments(prev => new Set(prev).add(commentId));
-      } else {
-        setLikedComments(prev => {
-          const next = new Set(prev);
-          next.delete(commentId);
-          return next;
-        });
-      }
+      setLikedComments(prev => {
+        const next = new Set(prev);
+        if (isLiked) next.add(commentId);
+        else next.delete(commentId);
+        return next;
+      });
+
+      setComments(prev => prev.map(c => 
+        c.id === commentId 
+          ? { ...c, likesCount: (c.likesCount || 0) + (isLiked ? 1 : -1) }
+          : c
+      ));
+      
       handleFirestoreError(error, OperationType.WRITE, `comments/${commentId}/likes`);
     } finally {
       setProcessingLikes(prev => {
