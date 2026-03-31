@@ -10,11 +10,12 @@ import { handleFirestoreError, OperationType } from '../utils/firestore';
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  post: Post;
+  post?: Post;
+  profile?: User;
   currentMediaIndex?: number;
 }
 
-export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 0 }: ShareModalProps) {
+export default function ShareModal({ isOpen, onClose, post, profile, currentMediaIndex = 0 }: ShareModalProps) {
   const [followers, setFollowers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [sharingToStory, setSharingToStory] = useState(false);
@@ -53,7 +54,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
   }, [isOpen]);
 
   const handleShareToStory = async () => {
-    if (!auth.currentUser || sharingToStory) return;
+    if (!auth.currentUser || sharingToStory || !post) return;
     setSharingToStory(true);
     
     try {
@@ -87,6 +88,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
     if (!auth.currentUser || sharingToUser) return;
     setSharingToUser(user.uid);
 
+    let chatId: string | null = null;
     try {
       // Find or create chat
       const chatsQuery = query(
@@ -95,7 +97,6 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
       );
       const chatsSnap = await getDocs(chatsQuery);
       
-      let chatId = null;
       for (const doc of chatsSnap.docs) {
         const data = doc.data();
         if (data.participants.includes(user.uid) && data.participants.length === 2) {
@@ -105,6 +106,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
       }
 
       const batch = writeBatch(db);
+      const lastMessageText = post ? 'Shared a post' : `Shared ${profile?.displayName}'s profile`;
 
       if (!chatId) {
         const newChatRef = doc(collection(db, 'chats'));
@@ -112,7 +114,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
         batch.set(newChatRef, {
           participants: [auth.currentUser.uid, user.uid],
           updatedAt: serverTimestamp(),
-          lastMessage: 'Shared a post',
+          lastMessage: lastMessageText,
           readStatus: {
             [auth.currentUser.uid]: true,
             [user.uid]: false
@@ -121,7 +123,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
       } else {
         batch.set(doc(db, 'chats', chatId), {
           updatedAt: serverTimestamp(),
-          lastMessage: 'Shared a post',
+          lastMessage: lastMessageText,
           readStatus: {
             [auth.currentUser.uid]: true,
             [user.uid]: false
@@ -129,46 +131,74 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
         }, { merge: true });
       }
 
-      // Send message with post link
+      // Send message with post or profile link
       const newMessageRef = doc(collection(db, `chats/${chatId}/messages`));
-      const currentMedia = post.mediaUrls && post.mediaUrls.length > currentMediaIndex 
-        ? post.mediaUrls[currentMediaIndex] 
-        : { url: post.imageUrl || post.videoUrl || '', type: post.mediaType || 'image' };
+      
+      if (post) {
+        const currentMedia = post.mediaUrls && post.mediaUrls.length > currentMediaIndex 
+          ? post.mediaUrls[currentMediaIndex] 
+          : { url: post.imageUrl || post.videoUrl || '', type: post.mediaType || 'image' };
 
-      batch.set(newMessageRef, {
-        chatId: chatId,
-        senderId: auth.currentUser.uid,
-        text: '',
-        sharedPostId: post.id,
-        sharedPostSlideIndex: currentMediaIndex,
-        sharedPostPreviewUrl: currentMedia.url,
-        sharedPostMediaType: currentMedia.type,
-        createdAt: serverTimestamp()
-      });
+        batch.set(newMessageRef, {
+          chatId: chatId,
+          senderId: auth.currentUser.uid,
+          text: '',
+          sharedPostId: post.id,
+          sharedPostSlideIndex: currentMediaIndex,
+          sharedPostPreviewUrl: currentMedia.url,
+          sharedPostMediaType: currentMedia.type,
+          createdAt: serverTimestamp()
+        });
+      } else if (profile) {
+        batch.set(newMessageRef, {
+          chatId: chatId,
+          senderId: auth.currentUser.uid,
+          text: '',
+          sharedProfileId: profile.uid,
+          createdAt: serverTimestamp()
+        });
+      }
 
       await batch.commit();
 
       onClose();
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'chats/messages');
+      handleFirestoreError(err, OperationType.WRITE, `chats/${chatId || 'new'}/messages`);
     } finally {
       setSharingToUser(null);
     }
   };
 
   const handleCopyLink = () => {
-    const url = `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`;
-    navigator.clipboard.writeText(url).then(() => {
-      onClose();
-    });
+    let url = '';
+    if (post) {
+      url = `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`;
+    } else if (profile) {
+      url = `${window.location.origin}/profile/${profile.uid}`;
+    }
+    
+    if (url) {
+      navigator.clipboard.writeText(url).then(() => {
+        onClose();
+      });
+    }
   };
 
   const handleNativeShare = async () => {
-    const shareData = {
-      title: `${post.authorName}'s post on Sastagram`,
-      text: post.caption || 'Check out this post!',
-      url: `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`,
-    };
+    let shareData = {};
+    if (post) {
+      shareData = {
+        title: `${post.authorName}'s post on Sastagram`,
+        text: post.caption || 'Check out this post!',
+        url: `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`,
+      };
+    } else if (profile) {
+      shareData = {
+        title: `${profile.displayName}'s profile on Sastagram`,
+        text: `Check out ${profile.displayName}'s profile!`,
+        url: `${window.location.origin}/profile/${profile.uid}`,
+      };
+    }
 
     try {
       if (navigator.share) {
@@ -180,7 +210,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
       if (err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('cancel'))) {
         return;
       }
-      console.error('Error sharing post:', err);
+      console.error('Error sharing:', err);
     }
   };
 
@@ -201,7 +231,7 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
             className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
           >
             <div className="p-4 border-b border-zinc-100 flex items-center justify-between">
-              <h3 className="font-bold text-lg text-zinc-900">Share</h3>
+              <h3 className="font-bold text-lg text-zinc-900">Share {profile ? 'Profile' : 'Post'}</h3>
               <button onClick={onClose} className="p-2 bg-zinc-100 rounded-full hover:bg-zinc-200 transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -209,16 +239,18 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
             
             <div className="p-4">
               <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                <button 
-                  onClick={handleShareToStory}
-                  disabled={sharingToStory}
-                  className="flex flex-col items-center gap-2 shrink-0 disabled:opacity-50"
-                >
-                  <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
-                    <PlusCircle className="w-6 h-6" />
-                  </div>
-                  <span className="text-xs font-medium text-zinc-700">Add to Story</span>
-                </button>
+                {post && (
+                  <button 
+                    onClick={handleShareToStory}
+                    disabled={sharingToStory}
+                    className="flex flex-col items-center gap-2 shrink-0 disabled:opacity-50"
+                  >
+                    <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                      <PlusCircle className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-medium text-zinc-700">Add to Story</span>
+                  </button>
+                )}
                 
                 <button 
                   onClick={handleCopyLink}
@@ -253,8 +285,8 @@ export default function ShareModal({ isOpen, onClose, post, currentMediaIndex = 
                   <p className="text-sm text-zinc-500 text-center py-4">No followers yet to share with.</p>
                 ) : (
                   <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-                    {followers.map(user => (
-                      <div key={user.uid} className="flex items-center justify-between group">
+                    {followers.map((user, idx) => (
+                      <div key={`${user.uid}-${idx}`} className="flex items-center justify-between group">
                         <div className="flex items-center gap-3">
                           <UserAvatar userId={user.uid} size={40} className="border border-zinc-100" />
                           <div className="flex flex-col">

@@ -186,9 +186,9 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
                     <Users className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Users</span>
                   </div>
-                  {filteredResults.map(user => (
+                  {filteredResults.map((user, idx) => (
                     <motion.div 
-                      key={user.uid} 
+                      key={`search-user-${user.uid}-${idx}`} 
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
                       className="flex items-center gap-4 cursor-pointer hover:bg-zinc-50 p-3 rounded-2xl transition-all border border-transparent hover:border-zinc-100"
@@ -215,9 +215,9 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
                     <Hash className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Posts with #{searchQuery.replace(/^#/, '')}</span>
                   </div>
-                  {filteredPostResults.map(post => (
+                  {filteredPostResults.map((post, idx) => (
                     <PostCard 
-                      key={post.id} 
+                      key={`search-post-${post.id}-${idx}`} 
                       post={post} 
                       onUserClick={setSelectedUserId}
                       onTagClick={(tag) => setSearchQuery(`#${tag}`)}
@@ -255,9 +255,9 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {suggestedUsers.map(user => (
+                  {suggestedUsers.map((user, idx) => (
                     <div 
-                      key={user.uid} 
+                      key={`suggested-user-${user.uid}-${idx}`} 
                       className="flex items-center justify-between p-3 rounded-2xl hover:bg-zinc-50 transition-colors cursor-pointer"
                       onClick={() => setSelectedUserId(user.uid)}
                     >

@@ -63,23 +63,31 @@ export default class ErrorBoundary extends Component<Props, State> {
             animate={{ opacity: 1, y: 0 }}
             className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-800 p-8 text-center"
           >
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center shrink-0">
+                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="text-left">
+                <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
+                  Application Error
+                </h1>
+                <p className="text-sm text-zinc-500">
+                  An unexpected error occurred during execution.
+                </p>
+              </div>
             </div>
             
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mb-3">
-              Oops! Something went wrong
-            </h1>
-            
-            <p className="text-zinc-600 dark:text-zinc-400 mb-8">
-              {friendlyMessage}
-            </p>
+            <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-2xl p-4 mb-6 text-left">
+              <p className="text-red-700 dark:text-red-400 font-medium text-sm">
+                {friendlyMessage}
+              </p>
+            </div>
 
-            {process.env.NODE_ENV === 'development' && detailedError && (
+            {detailedError && (
               <div className="mb-8 text-left">
-                <p className="text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">Error Details</p>
+                <p className="text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">Technical Details</p>
                 <div className="bg-zinc-100 dark:bg-zinc-800 rounded-xl p-4 overflow-auto max-h-40 text-[10px] font-mono text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                  <pre>{detailedError}</pre>
+                  <pre className="whitespace-pre-wrap break-all">{detailedError}</pre>
                 </div>
               </div>
             )}
@@ -90,14 +98,14 @@ export default class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center justify-center gap-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-3 rounded-2xl font-semibold hover:opacity-90 transition-opacity"
               >
                 <RotateCcw className="w-4 h-4" />
-                <span>Retry</span>
+                <span>Reload App</span>
               </button>
               <button
                 onClick={this.handleGoHome}
                 className="flex items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white px-4 py-3 rounded-2xl font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
               >
                 <Home className="w-4 h-4" />
-                <span>Home</span>
+                <span>Go Home</span>
               </button>
             </div>
           </motion.div>

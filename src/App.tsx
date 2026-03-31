@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
+import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore';
+import { auth, db } from './firebase';
 import AuthScreen from './components/AuthScreen';
-import Feed from './components/Feed';
+import Feed, { FeedRef } from './components/Feed';
 import CreatePost from './components/CreatePost';
 import Profile from './components/Profile';
 import BottomNav, { TabType } from './components/BottomNav';
@@ -10,7 +11,8 @@ import Notifications from './components/Notifications';
 import Search from './components/Search';
 import Messages from './components/Messages';
 import MessageNotification from './components/MessageNotification';
-import { MessageSquare, ArrowLeft, Camera, Bell } from 'lucide-react';
+import AdminDashboard from './components/AdminDashboard';
+import { Send, ArrowLeft, Camera, Bell, PlusSquare } from 'lucide-react';
 import { cn } from './utils';
 import { useTheme } from './contexts/ThemeContext';
 
@@ -18,14 +20,19 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [user, setUser] = useState(auth.currentUser);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
+  const [createInitialType, setCreateInitialType] = useState<'post' | 'story'>('post');
   const [initialSearchQuery, setInitialSearchQuery] = useState('');
   const [initialPostId, setInitialPostId] = useState<string | null>(null);
   const [initialSlideIndex, setInitialSlideIndex] = useState(0);
   const [showHeader, setShowHeader] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const lastScrollY = useRef(0);
+  const feedRef = useRef<FeedRef>(null);
 
   const handleNavigateToSearch = (query: string) => {
     setInitialSearchQuery(query);
@@ -33,8 +40,23 @@ export default function App() {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            setIsAdmin(userDoc.data().role === 'admin' || currentUser.email === 'nishantmanish4@gmail.com');
+          } else {
+            setIsAdmin(currentUser.email === 'nishantmanish4@gmail.com');
+          }
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+          setIsAdmin(currentUser.email === 'nishantmanish4@gmail.com');
+        }
+      } else {
+        setIsAdmin(false);
+      }
       setLoading(false);
     });
 
@@ -56,6 +78,38 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Notifications count
+    const qNotifications = query(
+      collection(db, 'notifications'),
+      where('userId', '==', user.uid),
+      where('read', '==', false)
+    );
+    const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
+      setUnreadNotifications(snapshot.size);
+    });
+
+    // Messages count (unread chats)
+    const qMessages = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', user.uid)
+    );
+    const unsubscribeMessages = onSnapshot(qMessages, (snapshot) => {
+      const unreadCount = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return data.readStatus?.[user.uid] === false;
+      }).length;
+      setUnreadMessages(unreadCount);
+    });
+
+    return () => {
+      unsubscribeNotifications();
+      unsubscribeMessages();
+    };
+  }, [user]);
 
   useEffect(() => {
     if (activeTab !== 'feed') {
@@ -91,10 +145,17 @@ export default function App() {
     return <AuthScreen />;
   }
 
+  const handleNavigate = (tab: TabType, initialType?: 'post' | 'story') => {
+    if (tab === 'create' && initialType) {
+      setCreateInitialType(initialType);
+    }
+    setActiveTab(tab);
+  };
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-zinc-50">
-        <MessageNotification onNavigate={setActiveTab} activeTab={activeTab} />
+        <MessageNotification onNavigate={handleNavigate} activeTab={activeTab} />
         {/* Header */}
         {activeTab === 'feed' ? (
           <header className={cn(
@@ -102,7 +163,16 @@ export default function App() {
             !showHeader && "-translate-y-full shadow-none",
             showHeader && "shadow-sm shadow-zinc-200/20"
           )}>
-            <div className="flex items-center gap-2.5">
+            <div 
+              className="flex items-center gap-2.5 cursor-pointer active:scale-95 transition-transform"
+              onClick={() => {
+                if (activeTab === 'feed') {
+                  feedRef.current?.scrollToTop();
+                } else {
+                  handleNavigate('feed');
+                }
+              }}
+            >
               <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 -rotate-3">
                 <Camera className="w-5 h-5 text-white rotate-3" />
               </div>
@@ -110,27 +180,33 @@ export default function App() {
                 Sasta<span className="text-indigo-600 dark:text-indigo-400">gram</span>
               </h1>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button 
-                onClick={() => setActiveTab('notifications')}
-                className="relative p-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 rounded-xl transition-all active:scale-95"
+                onClick={() => handleNavigate('create')}
+                className="p-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 rounded-2xl transition-all active:scale-90 group"
               >
-                <Bell className="w-6 h-6" />
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 border-2 border-white dark:border-zinc-950 rounded-full" />
+                <PlusSquare className="w-6 h-6 transition-all duration-300 group-hover:scale-110" />
               </button>
               <button 
-                onClick={() => setActiveTab('messages')}
-                className="relative p-2 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 rounded-xl transition-all active:scale-95"
+                onClick={() => handleNavigate('notifications')}
+                className="relative p-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 rounded-2xl transition-all active:scale-90 group"
               >
-                <MessageSquare className="w-6 h-6" />
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-indigo-500 border-2 border-white dark:border-zinc-950 rounded-full" />
+                <Bell className={cn(
+                  "w-6 h-6 transition-all duration-300",
+                  unreadNotifications > 0 ? "text-indigo-600 dark:text-indigo-400 fill-indigo-600/10" : "group-hover:rotate-12"
+                )} />
+                {unreadNotifications > 0 && (
+                  <span className="absolute top-1.5 right-1.5 flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ring-2 ring-white dark:ring-zinc-950 animate-in zoom-in duration-300 shadow-lg shadow-red-500/20">
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </span>
+                )}
               </button>
             </div>
           </header>
-        ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications' && activeTab !== 'create') ? (
+        ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications' && activeTab !== 'create' && activeTab !== 'admin') ? (
           <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-4 h-16 flex items-center max-w-md mx-auto">
             <button 
-              onClick={() => setActiveTab('feed')}
+              onClick={() => handleNavigate('feed')}
               className="p-2.5 -ml-2 text-zinc-500 hover:bg-zinc-100/80 rounded-2xl transition-all active:scale-95"
             >
               <ArrowLeft className="w-6 h-6" />
@@ -143,26 +219,39 @@ export default function App() {
         <main className={cn(
           "max-w-md mx-auto min-h-[calc(100vh-4rem)] transition-all duration-300",
           activeTab === 'feed' && "pt-16",
-          activeTab !== 'messages' && "pb-32"
+          "pb-32"
         )}>
           {activeTab === 'feed' && (
             <Feed 
-              onNavigate={setActiveTab} 
+              ref={feedRef}
+              onNavigate={handleNavigate} 
               onTagClick={handleNavigateToSearch} 
               initialPostId={initialPostId}
               initialSlideIndex={initialSlideIndex}
             />
           )}
-          {activeTab === 'search' && <Search onNavigate={setActiveTab} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
-          {activeTab === 'create' && <CreatePost onSuccess={() => setActiveTab('feed')} />}
-          {activeTab === 'notifications' && <Notifications onBack={() => setActiveTab('feed')} />}
-          {activeTab === 'profile' && <Profile onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
-          {activeTab === 'messages' && <Messages onBack={() => setActiveTab('feed')} onNavigate={setActiveTab} onTagClick={handleNavigateToSearch} />}
+          {activeTab === 'search' && <Search onNavigate={handleNavigate} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
+          {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
+          {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
+          {activeTab === 'profile' && <Profile onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
+          {activeTab === 'messages' && <Messages onBack={() => handleNavigate('feed')} onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} />}
+          {activeTab === 'admin' && isAdmin && <AdminDashboard />}
         </main>
 
         {/* Navigation */}
-        {activeTab !== 'messages' && !isSettingsOpen && (
-          <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+        {!isSettingsOpen && (
+          <BottomNav 
+            activeTab={activeTab} 
+            onChange={(tab) => {
+              if (tab === 'feed' && activeTab === 'feed') {
+                feedRef.current?.scrollToTop();
+              } else {
+                handleNavigate(tab);
+              }
+            }} 
+            unreadMessages={unreadMessages}
+            isAdmin={isAdmin}
+          />
         )}
       </div>
     </ErrorBoundary>

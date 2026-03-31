@@ -1,7 +1,7 @@
 import React, { useState, FormEvent, useRef, useCallback } from 'react';
 import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { User } from '../types';
 import { Loader2, X, Camera, Upload, Check, Scissors } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -136,7 +136,7 @@ export default function EditProfileModal({ userProfile, onClose }: EditProfileMo
       onClose();
     } catch (err: any) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser?.uid}`);
-      setError(err.message || 'Failed to update profile');
+      setError(parseFirestoreError(err));
     } finally {
       setLoading(false);
     }

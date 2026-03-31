@@ -47,6 +47,15 @@ service cloud.firestore {
     //   - expiresAt: timestamp (required) - Expiration time
     //   - viewsCount: number (optional) - Number of views
     //   - viewers: list (optional) - List of viewer UIDs
+    //   - likesCount: number (optional) - Number of likes
+    //   - likedBy: list (optional) - List of user UIDs who liked the story
+    //
+    // Collection: storyLikes
+    // Document ID: {storyId}_{userId}
+    // Fields:
+    //   - storyId: string (required, immutable) - Liked story ID
+    //   - userId: string (required, immutable) - Liking user ID
+    //   - createdAt: timestamp (required, immutable) - Creation time
     //
     // Collection: likes
     // Document ID: {postId}_{userId}
@@ -239,7 +248,7 @@ service cloud.firestore {
     }
 
     function isValidNotification() {
-      return hasOnlyAllowedFields(['userId', 'type', 'senderId', 'senderName', 'senderPhoto', 'postId', 'read', 'createdAt']) &&
+      return hasOnlyAllowedFields(['userId', 'type', 'senderId', 'senderName', 'senderPhoto', 'postId', 'chatId', 'storyId', 'commentId', 'contentPreview', 'read', 'createdAt']) &&
              hasRequiredFields(['userId', 'type', 'senderId', 'senderName', 'read', 'createdAt']) &&
              validStringLength('userId', 1, 128) &&
              validStringLength('type', 1, 20) &&
@@ -247,6 +256,10 @@ service cloud.firestore {
              validStringLength('senderName', 1, 100) &&
              isValidOptionalString('senderPhoto', 0, 2000) &&
              isValidOptionalString('postId', 0, 128) &&
+             isValidOptionalString('chatId', 0, 128) &&
+             isValidOptionalString('storyId', 0, 128) &&
+             isValidOptionalString('commentId', 0, 128) &&
+             isValidOptionalString('contentPreview', 0, 1000) &&
              request.resource.data.read is bool &&
              request.resource.data.createdAt is timestamp;
     }
@@ -260,7 +273,7 @@ service cloud.firestore {
     }
 
     function isValidStory() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers', 'likesCount', 'likedBy']) &&
              hasRequiredFields(['authorId', 'authorName', 'mediaType', 'createdAt', 'expiresAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
@@ -271,26 +284,39 @@ service cloud.firestore {
              request.resource.data.createdAt is timestamp &&
              request.resource.data.expiresAt is timestamp &&
              isValidOptionalNumber('viewsCount') &&
-             (!('viewers' in request.resource.data) || request.resource.data.viewers is list);
+             (!('viewers' in request.resource.data) || request.resource.data.viewers is list) &&
+             isValidOptionalNumber('likesCount') &&
+             (!('likedBy' in request.resource.data) || request.resource.data.likedBy is list);
+    }
+
+    function isValidStoryLike() {
+      return hasOnlyAllowedFields(['storyId', 'userId', 'createdAt']) &&
+             hasRequiredFields(['storyId', 'userId', 'createdAt']) &&
+             validStringLength('storyId', 1, 128) &&
+             validStringLength('userId', 1, 128) &&
+             request.resource.data.createdAt is timestamp;
     }
 
     function isValidHighlight() {
-      return hasOnlyAllowedFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt']) &&
+      return hasOnlyAllowedFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt', 'viewsCount', 'viewers']) &&
              hasRequiredFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt']) &&
              validStringLength('userId', 1, 128) &&
              validStringLength('label', 1, 50) &&
              validStringLength('imageUrl', 1, 2000) &&
              request.resource.data.mediaUrls is list &&
              request.resource.data.mediaUrls.size() <= 100 &&
-             request.resource.data.createdAt is timestamp;
+             request.resource.data.createdAt is timestamp &&
+             isValidOptionalNumber('viewsCount') &&
+             (!('viewers' in request.resource.data) || request.resource.data.viewers is list);
     }
 
     function isValidChat() {
-      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'updatedAt', 'readStatus', 'typingStatus']) &&
+      return hasOnlyAllowedFields(['participants', 'lastMessage', 'lastMessageTime', 'lastMessageSenderId', 'updatedAt', 'readStatus', 'typingStatus']) &&
              hasRequiredFields(['participants', 'updatedAt']) &&
              request.resource.data.participants is list &&
              request.resource.data.participants.size() == 2 &&
              isValidOptionalString('lastMessage', 0, 1000) &&
+             isValidOptionalString('lastMessageSenderId', 0, 128) &&
              (request.resource.data.lastMessageTime is timestamp || !('lastMessageTime' in request.resource.data)) &&
              (request.resource.data.readStatus is map || !('readStatus' in request.resource.data)) &&
              (request.resource.data.typingStatus is map || !('typingStatus' in request.resource.data)) &&
@@ -361,16 +387,26 @@ service cloud.firestore {
     }
 
     function isValidMessage() {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'sharedPostSlideIndex', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'sharedPostSlideIndex', 'sharedPostPreviewUrl', 'sharedPostMediaType', 'sharedProfileId', 'sharedStoryId', 'sharedStoryPreviewUrl', 'sharedStoryMediaType', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              validStringLength('chatId', 1, 128) &&
              validStringLength('senderId', 1, 128) &&
              request.resource.data.text is string &&
              request.resource.data.text.size() <= 1000 &&
-             (request.resource.data.text.size() > 0 || ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0) || ('sharedPostId' in request.resource.data && request.resource.data.sharedPostId.size() > 0)) &&
+             (request.resource.data.text.size() > 0 || 
+              ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0) || 
+              ('sharedPostId' in request.resource.data && request.resource.data.sharedPostId.size() > 0) ||
+              ('sharedProfileId' in request.resource.data && request.resource.data.sharedProfileId.size() > 0) ||
+              ('sharedStoryId' in request.resource.data && request.resource.data.sharedStoryId.size() > 0)) &&
              isValidOptionalString('attachmentUrl', 0, 2000) &&
              isValidOptionalString('sharedPostId', 0, 128) &&
              isValidOptionalNumber('sharedPostSlideIndex') &&
+             isValidOptionalString('sharedPostPreviewUrl', 0, 2000) &&
+             isValidOptionalString('sharedPostMediaType', 0, 20) &&
+             isValidOptionalString('sharedProfileId', 0, 128) &&
+             isValidOptionalString('sharedStoryId', 0, 128) &&
+             isValidOptionalString('sharedStoryPreviewUrl', 0, 2000) &&
+             isValidOptionalString('sharedStoryMediaType', 0, 20) &&
              request.resource.data.createdAt is timestamp &&
              (!('editedAt' in request.resource.data) || request.resource.data.editedAt is timestamp) &&
              (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool) &&
@@ -530,7 +566,7 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       
       allow create: if isAuthenticated() && 
                     isValidNotification() &&
@@ -550,14 +586,14 @@ service cloud.firestore {
     }
 
     match /savedPosts/{savedPostId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       
       allow create: if isAuthenticated() && 
                     isValidSavedPost() &&
                     request.resource.data.userId == request.auth.uid &&
                     savedPostId == request.auth.uid + '_' + request.resource.data.postId;
                     
-      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /highlights/{highlightId} {
@@ -567,11 +603,26 @@ service cloud.firestore {
                     isValidHighlight() &&
                     request.resource.data.userId == request.auth.uid;
                     
-      allow update: if isAuthenticated() && 
-                    isValidHighlight() &&
-                    resource.data.userId == request.auth.uid &&
-                    isUnchanged('userId') &&
-                    isUnchanged('createdAt');
+      allow update: if isAuthenticated() && isValidHighlight() && (
+                      // Owner updating highlight
+                      (resource.data.userId == request.auth.uid &&
+                       isUnchanged('userId') &&
+                       isUnchanged('createdAt'))
+                      ||
+                      // Anyone updating views
+                      (isUnchanged('userId') &&
+                       isUnchanged('label') &&
+                       isUnchanged('imageUrl') &&
+                       isUnchanged('mediaUrls') &&
+                       isUnchanged('createdAt') &&
+                       request.resource.data.viewsCount == resource.data.get('viewsCount', 0) + 1 &&
+                       request.resource.data.viewers.hasAll(resource.data.get('viewers', [])) &&
+                       request.resource.data.viewers.hasAll([request.auth.uid]) &&
+                       request.resource.data.viewers.size() == resource.data.get('viewers', []).size() + 1
+                      )
+                      ||
+                      isAdmin()
+                    );
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
@@ -584,26 +635,66 @@ service cloud.firestore {
                     request.resource.data.authorId == request.auth.uid;
                     
       allow update: if isAuthenticated() && isValidStory() && (
+                      // Views update
                       (isUnchanged('authorId') &&
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('expiresAt') &&
+                       isUnchanged('likesCount') &&
+                       isUnchanged('likedBy') &&
                        request.resource.data.viewsCount == resource.data.get('viewsCount', 0) + 1 &&
                        request.resource.data.viewers.hasAll(resource.data.get('viewers', [])) &&
                        request.resource.data.viewers.hasAll([request.auth.uid]) &&
                        request.resource.data.viewers.size() == resource.data.get('viewers', []).size() + 1
                       )
                       ||
+                      // Likes update
+                      (isUnchanged('authorId') &&
+                       isUnchanged('authorName') &&
+                       isUnchanged('authorPhoto') &&
+                       isUnchanged('imageUrl') &&
+                       isUnchanged('createdAt') &&
+                       isUnchanged('expiresAt') &&
+                       isUnchanged('viewsCount') &&
+                       isUnchanged('viewers') &&
+                       (request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0) == 1 || resource.data.get('likesCount', 0) - request.resource.data.get('likesCount', 0) == 1) &&
+                       (
+                         (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
+                          !exists(/databases/$(database)/documents/storyLikes/$(storyId + '_' + request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/storyLikes/$(storyId + '_' + request.auth.uid)) != null &&
+                          request.resource.data.likedBy.hasAll(resource.data.get('likedBy', [])) &&
+                          request.resource.data.likedBy.hasAll([request.auth.uid]) &&
+                          request.resource.data.likedBy.size() == resource.data.get('likedBy', []).size() + 1) ||
+                         (request.resource.data.get('likesCount', 0) < resource.data.get('likesCount', 0) &&
+                          exists(/databases/$(database)/documents/storyLikes/$(storyId + '_' + request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/storyLikes/$(storyId + '_' + request.auth.uid)) == null &&
+                          resource.data.get('likedBy', []).hasAll(request.resource.data.likedBy) &&
+                          !request.resource.data.likedBy.hasAny([request.auth.uid]) &&
+                          request.resource.data.likedBy.size() == resource.data.get('likedBy', []).size() - 1)
+                       )
+                      )
+                      ||
                       isAdmin()
                     );
                     
-      allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid);
+      allow delete: if isAuthenticated() && (resource == null || resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    match /storyLikes/{likeId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && 
+                    isValidStoryLike() &&
+                    request.resource.data.userId == request.auth.uid &&
+                    likeId == request.resource.data.storyId + '_' + request.auth.uid;
+                    
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /chats/{chatId} {
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow read: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
       
       allow create: if isAuthenticated() && 
                     isValidChat() &&
@@ -611,15 +702,15 @@ service cloud.firestore {
                     !isEitherBlocked(request.resource.data.participants[0], request.resource.data.participants[1]);
                     
       allow update: if isAuthenticated() && 
-                    request.auth.uid in resource.data.participants &&
+                    (request.auth.uid in resource.data.participants || isAdmin()) &&
                     isValidChat() &&
                     request.resource.data.participants == resource.data.participants;
                     
-      allow delete: if isAuthenticated() && (resource == null || request.auth.uid in resource.data.participants);
+      allow delete: if isAuthenticated() && (resource == null || request.auth.uid in resource.data.participants || isAdmin());
                     
       match /messages/{messageId} {
         allow read: if isAuthenticated() && 
-                      (exists(/databases/$(database)/documents/chats/$(chatId)) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
+                      ((exists(/databases/$(database)/documents/chats/$(chatId)) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants) || isAdmin());
         
         allow create: if isAuthenticated() && 
                       isValidMessage() &&
@@ -677,9 +768,9 @@ service cloud.firestore {
     }
 
     match /blocks/{blockId} {
-      allow read: if isAuthenticated() && (resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid);
+      allow read: if isAuthenticated() && (resource == null || resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && isValidBlock() && request.resource.data.blockerId == request.auth.uid && blockId == request.auth.uid + '_' + request.resource.data.blockedId;
-      allow delete: if isAuthenticated() && (resource == null || resource.data.blockerId == request.auth.uid);
+      allow delete: if isAuthenticated() && (resource == null || resource.data.blockerId == request.auth.uid || isAdmin());
     }
   }
 }

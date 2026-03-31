@@ -1,23 +1,28 @@
-import { Home, PlusSquare, User, Search, Bell } from 'lucide-react';
+import { Home, PlusSquare, User, Search, Send, ShieldAlert } from 'lucide-react';
 import { cn } from '../utils';
 import { motion } from 'motion/react';
 
-export type TabType = 'feed' | 'search' | 'create' | 'notifications' | 'profile' | 'messages';
+export type TabType = 'feed' | 'search' | 'create' | 'notifications' | 'profile' | 'messages' | 'admin';
 
 interface BottomNavProps {
   activeTab: TabType;
   onChange: (tab: TabType) => void;
+  unreadMessages?: number;
+  isAdmin?: boolean;
 }
 
-const tabs = [
+const baseTabs = [
   { id: 'feed', icon: Home, label: 'Home' },
   { id: 'search', icon: Search, label: 'Search' },
-  { id: 'create', icon: PlusSquare, label: 'Create' },
-  { id: 'notifications', icon: Bell, label: 'Activity' },
+  { id: 'messages', icon: Send, label: 'Messages' },
   { id: 'profile', icon: User, label: 'Profile' },
 ] as const;
 
-export default function BottomNav({ activeTab, onChange }: BottomNavProps) {
+export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isAdmin = false }: BottomNavProps) {
+  const tabs = isAdmin 
+    ? [...baseTabs, { id: 'admin', icon: ShieldAlert, label: 'Admin' }] 
+    : baseTabs;
+
   return (
     <div className="fixed bottom-6 left-0 right-0 flex justify-center z-40 px-4 pointer-events-none">
       <motion.div 
@@ -25,14 +30,14 @@ export default function BottomNav({ activeTab, onChange }: BottomNavProps) {
         animate={{ y: 0, opacity: 1 }}
         className="bg-white/90 backdrop-blur-xl border border-zinc-200/50 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[2.5rem] px-2 py-1.5 flex items-center gap-1 max-w-md w-full pointer-events-auto"
       >
-        {tabs.map((tab) => {
+        {tabs.map((tab, idx) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           
           return (
             <button
-              key={tab.id}
-              onClick={() => onChange(tab.id)}
+              key={`${tab.id}-${idx}`}
+              onClick={() => onChange(tab.id as TabType)}
               className="relative flex-1 flex flex-col items-center justify-center py-3 group outline-none"
             >
               {isActive && (
@@ -57,18 +62,16 @@ export default function BottomNav({ activeTab, onChange }: BottomNavProps) {
                 <Icon 
                   className={cn(
                     "w-6 h-6 transition-all duration-300",
-                    isActive ? "stroke-[2.5px]" : "stroke-[2px]"
+                    isActive ? "stroke-[2.5px]" : "stroke-[2px]",
+                    tab.id === 'messages' && "-rotate-12"
                   )} 
                 />
+                {tab.id === 'messages' && unreadMessages > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-indigo-500 text-[9px] font-black text-white ring-2 ring-white animate-in zoom-in duration-300">
+                    {unreadMessages > 9 ? '9+' : unreadMessages}
+                  </span>
+                )}
               </motion.div>
-              
-              {isActive && (
-                <motion.div 
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="absolute bottom-1 w-1 h-1 bg-indigo-600 rounded-full"
-                />
-              )}
             </button>
           );
         })}

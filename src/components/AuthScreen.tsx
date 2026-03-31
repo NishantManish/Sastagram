@@ -3,7 +3,7 @@ import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, si
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { Camera, Mail, Lock, User as UserIcon, AtSign, ArrowRight, ChevronLeft, Eye, EyeOff } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function AuthScreen() {
@@ -65,7 +65,7 @@ export default function AuthScreen() {
       }
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user') return;
-      setError(err.message || 'Failed to sign in');
+      setError(parseFirestoreError(err));
     } finally {
       setLoading(false);
     }
@@ -126,17 +126,7 @@ export default function AuthScreen() {
         }
       }
     } catch (err: any) {
-      let errorMessage = 'Authentication failed';
-      if (err.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid email or password.';
-      } else if (err.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already registered.';
-      } else if (err.code === 'auth/weak-password') {
-        errorMessage = 'Password should be at least 6 characters.';
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      setError(errorMessage);
+      setError(parseFirestoreError(err));
     } finally {
       setLoading(false);
     }

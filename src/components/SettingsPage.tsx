@@ -4,13 +4,15 @@ import {
   ChevronRight, ShieldAlert, Lock, Bookmark, Archive, Clock, 
   Star, ShieldOff, Eye, EyeOff, MessageCircle, AtSign, MessageSquare, 
   Repeat, Ban, Type, UserPlus, History, Settings as SettingsIcon,
-  HelpCircle, Info, Moon, Globe, CreditCard
+  HelpCircle, Info, Moon, Globe, CreditCard, Check
 } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut, deleteUser, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, writeBatch, onSnapshot, orderBy, getDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { Post, User } from '../types';
+import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
+import { AlertCircle } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { unblockUser, useBlocks } from '../services/blockService';
@@ -28,6 +30,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteCountdown, setDeleteCountdown] = useState(10);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
   
   const [activeView, setActiveView] = useState<'main' | 'password' | 'notifications' | 'privacy' | 'saved' | 'liked' | 'blocked' | 'theme'>('main');
@@ -171,7 +174,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
       await deleteUser(auth.currentUser);
     } catch (error: any) {
       console.error('Error deleting account:', error);
-      alert(error.message || 'Failed to delete account. Please check your password.');
+      setDeleteError(parseFirestoreError(error));
     } finally {
       setIsDeleting(false);
     }
@@ -190,7 +193,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
       setNewPassword('');
       setCurrentPassword('');
     } catch (error: any) {
-      setPasswordMessage(error.message || 'Failed to update password. Please check your current password.');
+      setPasswordMessage(parseFirestoreError(error));
     } finally {
       setIsChangingPassword(false);
     }
@@ -255,7 +258,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
       return (
         <div className="grid grid-cols-3 gap-0.5 p-0.5">
           {[...Array(9)].map((_, i) => (
-            <div key={i} className="aspect-square bg-zinc-100 animate-pulse rounded-sm" />
+            <div key={`skeleton-${i}`} className="aspect-square bg-zinc-100 animate-pulse rounded-sm" />
           ))}
         </div>
       );
@@ -275,9 +278,9 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
 
     return (
       <div className="grid grid-cols-3 gap-0.5 p-0.5">
-        {posts.map((post) => (
+        {posts.map((post, index) => (
           <motion.div
-            key={post.id}
+            key={`${post.id}-${index}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="aspect-square relative group cursor-pointer"
@@ -396,9 +399,16 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
               </div>
             </div>
             {passwordMessage && (
-              <p className={`text-sm ${passwordMessage.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
-                {passwordMessage}
-              </p>
+              <div className={`p-3 rounded-xl flex items-start gap-2 ${passwordMessage.includes('successfully') ? 'bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/20' : 'bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20'}`}>
+                {passwordMessage.includes('successfully') ? (
+                  <Check className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                )}
+                <p className={`text-xs font-medium leading-relaxed ${passwordMessage.includes('successfully') ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                  {passwordMessage}
+                </p>
+              </div>
             )}
             <button
               type="submit"
@@ -573,7 +583,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
             {isPostsLoading ? (
               <div className="space-y-4">
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between">
+                  <div key={`skeleton-user-${i}`} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 bg-zinc-100 rounded-full animate-pulse" />
                       <div className="space-y-2">
@@ -595,8 +605,8 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
               </div>
             ) : (
               <div className="space-y-4">
-                {blockedUsers.map((user) => (
-                  <div key={user.uid} className="flex items-center justify-between group">
+                {blockedUsers.map((user, idx) => (
+                  <div key={`${user.uid}-${idx}`} className="flex items-center justify-between group">
                     <div className="flex items-center gap-3">
                       <UserAvatar userId={user.uid} size={44} className="rounded-full" />
                       <div>
@@ -658,12 +668,12 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
           {/* Grouped Settings */}
           <div className="space-y-6">
             {settingsGroups.map((group, gIndex) => (
-              <div key={gIndex} className="space-y-3">
+              <div key={`group-${gIndex}`} className="space-y-3">
                 <h2 className="px-2 text-xs font-bold text-zinc-400 uppercase tracking-widest">{group.title}</h2>
                 <div className="bg-white rounded-2xl overflow-hidden border border-zinc-100 shadow-sm">
                   {group.items.map((item, iIndex) => (
                     <button
-                      key={iIndex}
+                      key={`item-${gIndex}-${iIndex}`}
                       onClick={item.onClick}
                       className={`w-full flex items-center justify-between p-4 hover:bg-zinc-50 transition-colors ${iIndex !== group.items.length - 1 ? 'border-b border-zinc-50' : ''}`}
                     >
@@ -718,6 +728,14 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
                       {showDeletePassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
+                  {deleteError && (
+                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700 dark:text-red-400 font-medium leading-relaxed">
+                        {deleteError}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-3">
                   <button

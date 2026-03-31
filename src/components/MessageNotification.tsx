@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/fire
 import { db, auth } from '../firebase';
 import { Chat, User } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import UserAvatar from './UserAvatar';
 
 // Global cache to survive component remounts

@@ -19,6 +19,7 @@ import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
+import ShareModal from './ShareModal';
 
 interface ProfileProps {
   userId?: string;
@@ -64,6 +65,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   const [deleteAccountCountdown, setDeleteAccountCountdown] = useState(10);
   const [isCopied, setIsCopied] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -354,40 +356,9 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   };
 
   const handleShareProfile = async () => {
-    const shareData = {
-      title: `${userProfile?.displayName} on Social App`,
-      text: `Check out ${userProfile?.displayName}'s profile!`,
-      url: window.location.href,
-    };
-
-    try {
-      if (navigator.share) {
-        try {
-          await navigator.share(shareData);
-        } catch (shareErr: any) {
-          // If the user canceled, don't do anything
-          if (shareErr.name === 'AbortError' || (shareErr.message && shareErr.message.toLowerCase().includes('cancel'))) {
-            return;
-          }
-          // For other errors (like iframe restrictions), fallback to clipboard
-          throw shareErr;
-        }
-      } else {
-        throw new Error('Share not supported');
-      }
-    } catch (err) {
-      try {
-        await navigator.clipboard.writeText(window.location.href);
-        // We avoid alert() as per guidelines for iframes, 
-        // the user will see the link is copied if they check their clipboard
-        // or we could add a temporary "Copied" state to the UI.
-      } catch (clipboardErr) {
-        console.error('Error copying to clipboard:', clipboardErr);
-      }
-    } finally {
-      setShowOptionsMenu(false);
-      setShowProfileMenu(false);
-    }
+    setIsShareModalOpen(true);
+    setShowOptionsMenu(false);
+    setShowProfileMenu(false);
   };
 
   if (!targetUserId) return null;
@@ -418,7 +389,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
           {/* Stats Skeleton */}
           <div className="flex items-center gap-8 mb-6">
             {[1, 2, 3].map(i => (
-              <div key={i} className="flex flex-col items-center gap-2">
+              <div key={`stat-skeleton-${i}`} className="flex flex-col items-center gap-2">
                 <div className="w-8 h-6 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
                 <div className="w-12 h-3 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
               </div>
@@ -434,7 +405,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
           {/* Highlights Skeleton */}
           <div className="w-full flex gap-4 overflow-hidden px-2">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex flex-col items-center gap-2 flex-shrink-0">
+              <div key={`highlight-skeleton-${i}`} className="flex flex-col items-center gap-2 flex-shrink-0">
                 <div className="w-14 h-14 bg-zinc-200 dark:bg-zinc-800 rounded-[1.5rem]" />
                 <div className="w-10 h-2 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
               </div>
@@ -455,7 +426,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
         {/* Grid Content Skeleton */}
         <div className="grid grid-cols-3 gap-1.5 px-2 pt-2">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+            <div key={`grid-skeleton-${i}`} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
           ))}
         </div>
       </div>
@@ -744,9 +715,9 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
         {/* Highlights Section */}
         {!isBlockedByMe && (
           <div className="mb-6 overflow-x-auto no-scrollbar flex gap-4 px-2 relative">
-            {highlights.map((highlight) => (
+            {highlights.map((highlight, idx) => (
               <div 
-                key={highlight.id} 
+                key={`highlight-${highlight.id}-${idx}`} 
                 className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer relative"
                 onClick={() => setViewingHighlight(highlight)}
               >
@@ -806,13 +777,13 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
             <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
               <ShieldAlert className="w-10 h-10 text-zinc-300" />
             </div>
-            <p className="text-xl font-black text-zinc-900 mb-2">Account Restricted</p>
+            <p className="text-xl font-black text-zinc-900 mb-2">User not found</p>
             <p className="text-sm text-zinc-400 font-medium leading-relaxed">Unblock this creator to view their editorial feed and interactions.</p>
           </div>
         ) : loading ? (
           <div className="grid grid-cols-3 gap-1.5 animate-pulse">
             {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+              <div key={`post-skeleton-${i}`} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
             ))}
           </div>
         ) : (activeGridTab === 'posts' ? posts : taggedPosts).length === 0 ? (
@@ -832,7 +803,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
           <div className="grid grid-cols-3 gap-1.5">
             {(activeGridTab === 'posts' ? posts : taggedPosts).map((post, index) => (
               <motion.div 
-                key={post.id}
+                key={`post-${post.id}-${index}`}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.03 }}
@@ -1100,6 +1071,9 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
             if (postToDelete.imageUrl) {
               await deleteFromCloudinary(postToDelete.imageUrl);
             }
+            if (postToDelete.mediaUrls && postToDelete.mediaUrls.length > 0) {
+              await Promise.all(postToDelete.mediaUrls.map(media => deleteFromCloudinary(media.url)));
+            }
             setPostToDelete(null);
           } catch (err) {
             handleFirestoreError(err, OperationType.DELETE, `posts/${postToDelete.id}`);
@@ -1136,16 +1110,18 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
 
       <AnimatePresence>
         {isCreatingHighlight && (
-          <CreateHighlightModal onClose={() => setIsCreatingHighlight(false)} />
+          <CreateHighlightModal key="create-highlight" onClose={() => setIsCreatingHighlight(false)} />
         )}
         {editingHighlight && (
           <EditHighlightModal 
+            key="edit-highlight"
             highlight={editingHighlight} 
             onClose={() => setEditingHighlight(null)} 
           />
         )}
         {viewingHighlight && (
           <HighlightViewerModal
+            key="view-highlight"
             highlight={viewingHighlight}
             onClose={() => setViewingHighlight(null)}
             isOwnProfile={isOwnProfile}
@@ -1155,6 +1131,12 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
             }}
           />
         )}
+        <ShareModal 
+          key="share-modal"
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          profile={userProfile}
+        />
       </AnimatePresence>
     </div>
   );

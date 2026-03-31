@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
@@ -7,16 +7,20 @@ import PostCard from './PostCard';
 import PostDetailsModal from './PostDetailsModal';
 import Profile from './Profile';
 import Stories from './Stories';
-import { Camera, RefreshCw } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Camera, RefreshCw, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence, useScroll, useSpring, useTransform } from 'motion/react';
 import { useBlocks } from '../services/blockService';
 
-export default function Feed({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }: { 
+export interface FeedRef {
+  scrollToTop: () => void;
+}
+
+const Feed = forwardRef<FeedRef, { 
   onNavigate?: (tab: any) => void, 
   onTagClick?: (tag: string) => void,
   initialPostId?: string | null,
   initialSlideIndex?: number
-}) {
+}>(({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }, ref) => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,6 +32,12 @@ export default function Feed({ onNavigate, onTagClick, initialPostId, initialSli
   const startY = useRef(0);
   const isDragging = useRef(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }));
 
   useEffect(() => {
     if (initialPostId) {
@@ -146,7 +156,7 @@ export default function Feed({ onNavigate, onTagClick, initialPostId, initialSli
       <div className="max-w-md mx-auto pb-24 relative min-h-screen">
         <div className="mt-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800 sm:border sm:rounded-xl sm:mb-4 overflow-hidden animate-pulse">
+            <div key={`feed-skeleton-${i}`} className="bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800 sm:border sm:rounded-xl sm:mb-4 overflow-hidden animate-pulse">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -188,26 +198,48 @@ export default function Feed({ onNavigate, onTagClick, initialPostId, initialSli
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <motion.div 
-        className="absolute top-0 left-0 right-0 flex justify-center items-center overflow-hidden z-20"
-        animate={{ height: pullDistance > 0 || refreshing ? 80 : 0 }}
-        style={{ height: 0 }}
-      >
-        <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-zinc-100">
-          <motion.div
-            animate={{ rotate: refreshing ? 360 : pullDistance * 2 }}
-            transition={refreshing ? { repeat: Infinity, duration: 1, ease: "linear" } : { type: "spring", bounce: 0 }}
-          >
-            <RefreshCw className="w-6 h-6 text-indigo-600" />
-          </motion.div>
-        </div>
-      </motion.div>
+      {/* Redesigned Pull to Refresh */}
+      <div className="absolute top-0 left-0 right-0 pointer-events-none z-50 overflow-hidden h-40">
+        <motion.div 
+          className="flex flex-col items-center justify-center w-full h-full"
+          animate={{ 
+            y: refreshing ? 0 : pullDistance - 80,
+            opacity: refreshing ? 1 : Math.min(pullDistance / 60, 1)
+          }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+        >
+          <div className="bg-white/90 backdrop-blur-xl p-2.5 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-white/50 ring-1 ring-black/5">
+            <motion.div
+              animate={{ 
+                rotate: refreshing ? 360 : pullDistance * 3,
+                scale: refreshing ? 1 : Math.min(pullDistance / 40, 1)
+              }}
+              transition={refreshing ? { repeat: Infinity, duration: 0.8, ease: "linear" } : { type: "spring", bounce: 0 }}
+            >
+              {refreshing ? (
+                <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+              ) : (
+                <RefreshCw className="w-6 h-6 text-indigo-600" />
+              )}
+            </motion.div>
+          </div>
+          {!refreshing && pullDistance > 20 && (
+            <motion.span 
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-2"
+            >
+              {pullDistance > 60 ? "Release to refresh" : "Pull to refresh"}
+            </motion.span>
+          )}
+        </motion.div>
+      </div>
 
       <motion.div
-        animate={{ y: pullDistance }}
+        animate={{ y: refreshing ? 60 : pullDistance }}
         transition={{ type: "spring", stiffness: 300, damping: 25 }}
       >
-        <Stories />
+        <Stories onNavigate={onNavigate} />
         
         <div className="mt-2">
           {filteredPosts.length === 0 ? (
@@ -224,7 +256,7 @@ export default function Feed({ onNavigate, onTagClick, initialPostId, initialSli
             <AnimatePresence mode="popLayout">
               {filteredPosts.map((post, index) => (
                 <motion.div
-                  key={post.id}
+                  key={`${post.id}-${index}`}
                   id={`post-${post.id}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -274,4 +306,6 @@ export default function Feed({ onNavigate, onTagClick, initialPostId, initialSli
       </AnimatePresence>
     </div>
   );
-}
+});
+
+export default Feed;

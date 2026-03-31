@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { Post } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { AlertCircle } from 'lucide-react';
 
 interface EditPostModalProps {
   post: Post;
@@ -15,10 +16,12 @@ interface EditPostModalProps {
 export default function EditPostModal({ post, isOpen, onClose }: EditPostModalProps) {
   const [caption, setCaption] = useState(post.caption);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setCaption(post.caption);
+      setError(null);
     }
   }, [isOpen, post.caption]);
 
@@ -27,6 +30,7 @@ export default function EditPostModal({ post, isOpen, onClose }: EditPostModalPr
     if (!auth.currentUser || auth.currentUser.uid !== post.authorId) return;
 
     setIsSubmitting(true);
+    setError(null);
     try {
       // Extract tags and mentions
       const tags = caption.match(/#[a-zA-Z0-9_]+/g)?.map(tag => tag.slice(1).toLowerCase()) || [];
@@ -41,6 +45,7 @@ export default function EditPostModal({ post, isOpen, onClose }: EditPostModalPr
       onClose();
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `posts/${post.id}`);
+      setError(parseFirestoreError(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -76,6 +81,14 @@ export default function EditPostModal({ post, isOpen, onClose }: EditPostModalPr
           </div>
 
           <form onSubmit={handleSubmit} className="p-4 overflow-y-auto">
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 dark:text-red-400 font-medium leading-relaxed">
+                  {error}
+                </p>
+              </div>
+            )}
             <div className="mb-4">
               <label htmlFor="caption" className="block text-sm font-medium text-zinc-700 mb-2">
                 Caption

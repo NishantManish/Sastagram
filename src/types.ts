@@ -55,11 +55,14 @@ export interface CommentLike {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'like' | 'comment' | 'follow' | 'message';
+  type: 'like' | 'comment' | 'follow' | 'message' | 'admin_delete';
   senderId: string;
   senderName: string;
   senderPhoto?: string;
   postId?: string;
+  commentId?: string;
+  storyId?: string;
+  contentPreview?: string;
   read: boolean;
   createdAt: any; // Firestore Timestamp
 }
@@ -83,6 +86,8 @@ export interface Story {
   expiresAt: any; // Firestore Timestamp
   viewsCount?: number;
   viewers?: string[];
+  likesCount?: number;
+  likedBy?: string[];
 }
 
 export interface Chat {
@@ -105,6 +110,9 @@ export interface Message {
   sharedPostSlideIndex?: number;
   sharedPostPreviewUrl?: string;
   sharedPostMediaType?: 'image' | 'video';
+  sharedProfileId?: string;
+  sharedStoryId?: string;
+  sharedStoryPreviewUrl?: string;
   createdAt: any; // Firestore Timestamp
   editedAt?: any; // Firestore Timestamp
   isEdited?: boolean;
@@ -118,4 +126,6 @@ export interface Highlight {
   imageUrl: string;
   mediaUrls: string[];
   createdAt: any; // Firestore Timestamp
+  viewsCount?: number;
+  viewers?: string[];
 }

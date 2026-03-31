@@ -127,9 +127,22 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "When the story was created." },
         "expiresAt": { "type": "string", "format": "date-time", "description": "When the story expires (24h after creation)." },
         "viewsCount": { "type": "number", "description": "Number of views the story has received." },
-        "viewers": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have viewed the story." }
+        "viewers": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have viewed the story." },
+        "likesCount": { "type": "number", "description": "Number of likes the story has received." },
+        "likedBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have liked the story." }
       },
       "required": ["authorId", "authorName", "mediaType", "createdAt", "expiresAt"]
+    },
+    "StoryLike": {
+      "title": "StoryLike",
+      "description": "A record of a user liking a story.",
+      "type": "object",
+      "properties": {
+        "storyId": { "type": "string", "description": "The ID of the liked story." },
+        "userId": { "type": "string", "description": "The ID of the user who liked the story." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the like was created." }
+      },
+      "required": ["storyId", "userId", "createdAt"]
     },
     "Chat": {
       "title": "Chat",
@@ -218,6 +231,10 @@
     "/stories/{storyId}": {
       "schema": { "$ref": "#/entities/Story" },
       "description": "Stores temporary stories."
+    },
+    "/storyLikes/{likeId}": {
+      "schema": { "$ref": "#/entities/StoryLike" },
+      "description": "Stores like records for stories."
     },
     "/chats/{chatId}": {
       "schema": { "$ref": "#/entities/Chat" },

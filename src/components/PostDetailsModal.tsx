@@ -38,6 +38,10 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
   const [isSaving, setIsSaving] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -243,8 +247,15 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
       await batch.commit();
 
       // Delete from Cloudinary
-      if (post.imageUrl) {
-        await deleteFromCloudinary(post.imageUrl);
+      const mediaToDelete = [];
+      if (post.imageUrl) mediaToDelete.push(post.imageUrl);
+      if (post.videoUrl) mediaToDelete.push(post.videoUrl);
+      if (post.mediaUrls && post.mediaUrls.length > 0) {
+        post.mediaUrls.forEach(media => mediaToDelete.push(media.url));
+      }
+      
+      if (mediaToDelete.length > 0) {
+        await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url).catch(console.error)));
       }
       
       setShowDeleteConfirm(false);
@@ -361,6 +372,45 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
     }
   };
 
+  const handleUpdateComment = async (commentId: string) => {
+    if (!editingText.trim() || !auth.currentUser) return;
+    
+    try {
+      const commentRef = doc(db, 'comments', commentId);
+      await updateDoc(commentRef, {
+        text: editingText.trim(),
+        updatedAt: serverTimestamp()
+      });
+      setEditingCommentId(null);
+      setEditingText('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `comments/${commentId}`);
+    }
+  };
+
+  const handleDeleteComment = async () => {
+    if (!commentToDelete || !auth.currentUser || isDeletingComment) return;
+    
+    setIsDeletingComment(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete comment
+      batch.delete(doc(db, 'comments', commentToDelete));
+      
+      // Update post comment count
+      const postRef = doc(db, 'posts', post.id);
+      batch.update(postRef, { commentsCount: increment(-1) });
+      
+      await batch.commit();
+      setCommentToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `comments/${commentToDelete}`);
+    } finally {
+      setIsDeletingComment(false);
+    }
+  };
+
   const renderCaption = (text: string) => {
     if (!text) return null;
     const parts = text.split(/(\s+)/);
@@ -369,7 +419,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         const tag = part.slice(1).replace(/[^\w]/g, '');
         return (
           <button
-            key={i}
+            key={`tag-${i}-${tag}`}
             onClick={(e) => {
               e.stopPropagation();
               onTagClick?.(tag);
@@ -385,7 +435,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         const username = part.slice(1).replace(/[^\w]/g, '');
         return (
           <button
-            key={i}
+            key={`mention-${i}-${username}`}
             onClick={async (e) => {
               e.stopPropagation();
               try {
@@ -407,7 +457,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
           </button>
         );
       }
-      return <span key={i}>{part}</span>;
+      return <span key={`text-${i}`}>{part}</span>;
     });
   };
 
@@ -472,7 +522,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
             <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
               {mediaList.map((_, idx) => (
                 <div 
-                  key={idx} 
+                  key={`${post.id}-${idx}`} 
                   className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
                     idx === currentMediaIndex 
                       ? "bg-white scale-125" 
@@ -557,6 +607,16 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
             confirmText="Delete"
           />
 
+          <ConfirmationModal
+            isOpen={!!commentToDelete}
+            onClose={() => setCommentToDelete(null)}
+            onConfirm={handleDeleteComment}
+            isLoading={isDeletingComment}
+            title="Delete Comment?"
+            message="Are you sure you want to delete this comment? This action cannot be undone."
+            confirmText="Delete"
+          />
+
           <ShareModal
             isOpen={showShareModal}
             onClose={() => setShowShareModal(false)}
@@ -615,7 +675,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
               <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
                 {mediaList.map((_, idx) => (
                   <div 
-                    key={idx} 
+                    key={`${idx}-${post.id}`} 
                     className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
                       idx === currentMediaIndex 
                         ? "bg-white scale-125" 
@@ -667,8 +727,8 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
             )}
 
             {/* Actual Comments */}
-            {comments.map((comment) => (
-              <div key={comment.id} className="flex gap-3">
+            {comments.map((comment, index) => (
+              <div key={`${comment.id}-${index}`} className="flex gap-3 group/comment">
                 <button 
                   onClick={() => {
                     onUserClick?.(comment.authorId);
@@ -684,8 +744,8 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                   />
                 </button>
                 <div className="flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
                       <button 
                         onClick={() => {
                           onUserClick?.(comment.authorId);
@@ -695,15 +755,66 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                       >
                         {comment.authorName}
                       </button>
-                      <span className="text-sm text-zinc-800">{comment.text}</span>
+                      {editingCommentId === comment.id ? (
+                        <div className="mt-1 flex flex-col gap-2">
+                          <textarea
+                            autoFocus
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            className="w-full p-2 text-sm border border-zinc-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+                            rows={2}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setEditingCommentId(null)}
+                              className="px-3 py-1 text-xs font-medium text-zinc-500 hover:text-zinc-700"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleUpdateComment(comment.id)}
+                              className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-zinc-800">{comment.text}</span>
+                      )}
                     </div>
-                    <button 
-                      onClick={() => handleLikeComment(comment.id)}
-                      disabled={processingLikes.has(comment.id)}
-                      className={`transition-colors p-1 ${likedComments.has(comment.id) ? 'text-red-500' : 'text-zinc-400 hover:text-red-500'} ${processingLikes.has(comment.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <Heart className={`w-4 h-4 ${likedComments.has(comment.id) ? 'fill-current' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {editingCommentId !== comment.id && (
+                        <div className="flex items-center">
+                          {auth.currentUser?.uid === comment.authorId && (
+                            <button 
+                              onClick={() => {
+                                setEditingCommentId(comment.id);
+                                setEditingText(comment.text);
+                              }}
+                              className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {(auth.currentUser?.uid === comment.authorId || auth.currentUser?.uid === post.authorId) && (
+                            <button 
+                              onClick={() => setCommentToDelete(comment.id)}
+                              className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <button 
+                        onClick={() => handleLikeComment(comment.id)}
+                        disabled={processingLikes.has(comment.id)}
+                        className={`transition-colors p-1 ${likedComments.has(comment.id) ? 'text-red-500' : 'text-zinc-400 hover:text-red-500'} ${processingLikes.has(comment.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <Heart className={`w-4 h-4 ${likedComments.has(comment.id) ? 'fill-current' : ''}`} />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 mt-1">
                     <div className="text-xs text-zinc-500">

@@ -1,7 +1,7 @@
 import React, { useState, FormEvent, useRef } from 'react';
 import { addDoc, collection, serverTimestamp, Timestamp, writeBatch, doc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { handleFirestoreError, OperationType } from '../utils/firestore';
+import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
 import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
@@ -9,18 +9,26 @@ import ZoomableMedia from './ZoomableMedia';
 
 interface CreatePostProps {
   onSuccess: () => void;
+  onBack?: () => void;
+  initialType?: UploadType;
 }
 
 type UploadType = 'post' | 'story';
 
-export default function CreatePost({ onSuccess }: CreatePostProps) {
-  const [uploadType, setUploadType] = useState<UploadType>('post');
+export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: CreatePostProps) {
+  const [uploadType, setUploadType] = useState<UploadType>(initialType);
   const [mediaFiles, setMediaFiles] = useState<{ file: File, preview: string, type: 'image' | 'video' }[]>([]);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [caption, setCaption] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (initialType) {
+      setUploadType(initialType);
+    }
+  }, [initialType]);
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -162,7 +170,7 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
       onSuccess();
     } catch (err: any) {
       console.error(`Error creating ${uploadType}:`, err);
-      setError(err.message || `Failed to create ${uploadType}. Please try again.`);
+      setError(parseFirestoreError(err));
     } finally {
       setLoading(false);
     }
@@ -181,7 +189,17 @@ export default function CreatePost({ onSuccess }: CreatePostProps) {
   return (
     <div className="max-w-md mx-auto p-4 pt-6 pb-24">
       <div className="flex items-center justify-between mb-8">
-        <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">Create new</h2>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-all active:scale-90"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">Create new</h2>
+        </div>
         <div className="flex bg-zinc-100/80 dark:bg-zinc-800 p-1 rounded-2xl backdrop-blur-sm">
           <button
             onClick={() => handleTabSwitch('post')}

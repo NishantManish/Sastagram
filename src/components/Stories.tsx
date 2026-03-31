@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, Timestamp, updateDoc, arrayUnion, increment } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, Timestamp, updateDoc, arrayUnion, increment, getDocs, setDoc, writeBatch } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Story } from '../types';
-import { Plus, X, Trash2, Send, Eye } from 'lucide-react';
+import { Plus, X, Trash2, Send, Eye, Heart } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
@@ -12,8 +12,9 @@ import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
 import { getDoc } from 'firebase/firestore';
+import { cn } from '../utils';
 
-function ViewerItem({ userId }: { userId: string }) {
+function ViewerItem({ userId, isLiked }: { userId: string, isLiked?: boolean }) {
   const [name, setName] = useState('User');
   
   useEffect(() => {
@@ -25,14 +26,17 @@ function ViewerItem({ userId }: { userId: string }) {
   }, [userId]);
 
   return (
-    <div className="flex items-center gap-3">
-      <UserAvatar userId={userId} size={40} />
-      <span className="font-medium text-zinc-900">{name}</span>
+    <div className="flex items-center justify-between w-full">
+      <div className="flex items-center gap-3">
+        <UserAvatar userId={userId} size={40} />
+        <span className="font-medium text-zinc-900">{name}</span>
+      </div>
+      {isLiked && <Heart className="w-5 h-5 text-red-500 fill-red-500" />}
     </div>
   );
 }
 
-export default function Stories() {
+export default function Stories({ onNavigate }: { onNavigate?: (tab: string, initialType?: 'post' | 'story') => void }) {
   const [groupedStories, setGroupedStories] = useState<Record<string, Story[]>>({});
   const [activeUserStories, setActiveUserStories] = useState<Story[] | null>(null);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
@@ -40,10 +44,11 @@ export default function Stories() {
   const [isPaused, setIsPaused] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
   const [storyToDelete, setStoryToDelete] = useState<{ id: string, imageUrl: string } | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   
-  const [previewFile, setPreviewFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
 
   useEffect(() => {
@@ -103,72 +108,6 @@ export default function Stories() {
 
     return () => unsubscribe();
   }, []);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const isVideo = file.type.startsWith('video/');
-    if (isVideo && file.size > 50 * 1024 * 1024) {
-      alert('Video is too large. Max size is 50MB.');
-      return;
-    } else if (!isVideo && file.size > 5 * 1024 * 1024) {
-      alert('Image is too large. Max size is 5MB.');
-      return;
-    }
-
-    setPreviewFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
-
-  const handleUpload = async () => {
-    if (!previewFile || !auth.currentUser) return;
-
-    setIsUploading(true);
-    try {
-      const isVideo = previewFile.type.startsWith('video/');
-      const resourceType = isVideo ? 'video' : 'image';
-
-      // Upload media to Cloudinary
-      const formData = new FormData();
-      formData.append('file', previewFile);
-      formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
-      formData.append('tags', `user_${auth.currentUser.uid},story`);
-      
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-        { method: 'POST', body: formData }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Failed to upload ${resourceType} to Cloudinary`);
-      }
-      
-      const data = await response.json();
-      const downloadURL = data.secure_url;
-      
-      const expiresAtDate = new Date();
-      expiresAtDate.setHours(expiresAtDate.getHours() + 24);
-
-      await addDoc(collection(db, 'stories'), {
-        authorId: auth.currentUser.uid,
-        authorName: auth.currentUser.displayName || 'Anonymous',
-        authorPhoto: auth.currentUser.photoURL || '',
-        imageUrl: !isVideo ? downloadURL : '',
-        videoUrl: isVideo ? downloadURL : '',
-        mediaType: isVideo ? 'video' : 'image',
-        createdAt: serverTimestamp(),
-        expiresAt: Timestamp.fromDate(expiresAtDate)
-      });
-      
-      setPreviewFile(null);
-      setPreviewUrl(null);
-      setIsUploading(false);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'stories');
-      setIsUploading(false);
-    }
-  };
 
   const holdTimer = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -277,6 +216,148 @@ export default function Stories() {
     setIsPaused(false);
   };
 
+  const handleToggleLike = async () => {
+    if (!activeStory || !auth.currentUser || isLiking) return;
+
+    const isLiked = activeStory.likedBy?.includes(auth.currentUser.uid);
+    setIsLiking(true);
+
+    const storyRef = doc(db, 'stories', activeStory.id);
+    const likeId = `${activeStory.id}_${auth.currentUser.uid}`;
+    const likeRef = doc(db, 'storyLikes', likeId);
+    const batch = writeBatch(db);
+
+    try {
+      if (isLiked) {
+        // Unlike
+        batch.delete(likeRef);
+        batch.update(storyRef, {
+          likedBy: (activeStory.likedBy || []).filter(id => id !== auth.currentUser?.uid),
+          likesCount: increment(-1)
+        });
+      } else {
+        // Like
+        batch.set(likeRef, {
+          storyId: activeStory.id,
+          userId: auth.currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+        batch.update(storyRef, {
+          likedBy: arrayUnion(auth.currentUser.uid),
+          likesCount: increment(1)
+        });
+
+        // Send notification
+        if (activeStory.authorId !== auth.currentUser.uid) {
+          const notificationRef = doc(collection(db, 'notifications'));
+          batch.set(notificationRef, {
+            userId: activeStory.authorId,
+            type: 'like',
+            senderId: auth.currentUser.uid,
+            senderName: auth.currentUser.displayName || 'Someone',
+            senderPhoto: auth.currentUser.photoURL || '',
+            postId: activeStory.id,
+            storyId: activeStory.id,
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        }
+
+        setShowHeartAnimation(true);
+        setTimeout(() => setShowHeartAnimation(false), 1000);
+      }
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'story_like');
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyText.trim() || !activeStory || !auth.currentUser || isSendingReply) return;
+
+    setIsSendingReply(true);
+    const batch = writeBatch(db);
+    try {
+      // Find or create chat
+      const q = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', auth.currentUser.uid)
+      );
+      const snap = await getDocs(q);
+      
+      // Look for a 1:1 chat with the author
+      let chat = snap.docs.find(doc => {
+        const data = doc.data();
+        return data.participants.length === 2 && data.participants.includes(activeStory.authorId);
+      });
+      
+      let chatId: string;
+      if (!chat) {
+        const newChatRef = doc(collection(db, 'chats'));
+        chatId = newChatRef.id;
+        batch.set(newChatRef, {
+          participants: [auth.currentUser.uid, activeStory.authorId],
+          updatedAt: serverTimestamp(),
+          lastMessage: replyText.trim(),
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: auth.currentUser.uid,
+          readStatus: {
+            [auth.currentUser.uid]: true,
+            [activeStory.authorId]: false
+          }
+        });
+      } else {
+        chatId = chat.id;
+        batch.update(doc(db, 'chats', chatId), {
+          lastMessage: replyText.trim(),
+          lastMessageTime: serverTimestamp(),
+          lastMessageSenderId: auth.currentUser.uid,
+          updatedAt: serverTimestamp(),
+          [`readStatus.${activeStory.authorId}`]: false,
+          [`readStatus.${auth.currentUser.uid}`]: true
+        });
+      }
+
+      // Send message
+      const newMessageRef = doc(collection(db, `chats/${chatId}/messages`));
+      batch.set(newMessageRef, {
+        chatId,
+        senderId: auth.currentUser.uid,
+        text: replyText.trim(),
+        sharedStoryId: activeStory.id,
+        sharedStoryPreviewUrl: activeStory.imageUrl || activeStory.videoUrl,
+        sharedStoryMediaType: activeStory.mediaType,
+        createdAt: serverTimestamp()
+      });
+
+      // Send notification
+      const notificationRef = doc(collection(db, 'notifications'));
+      batch.set(notificationRef, {
+        userId: activeStory.authorId,
+        type: 'message',
+        senderId: auth.currentUser.uid,
+        senderName: auth.currentUser.displayName || 'Someone',
+        senderPhoto: auth.currentUser.photoURL || '',
+        chatId: chatId,
+        storyId: activeStory.id,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      await batch.commit();
+      setReplyText('');
+      setIsPaused(false);
+    } catch (error) {
+      console.error('Error in handleSendReply:', error);
+      handleFirestoreError(error, OperationType.WRITE, 'chats/messages');
+    } finally {
+      setIsSendingReply(false);
+    }
+  };
+
   useEffect(() => {
     if (activeStory && auth.currentUser && activeStory.authorId !== auth.currentUser.uid) {
       const hasViewed = activeStory.viewers?.includes(auth.currentUser.uid);
@@ -297,23 +378,39 @@ export default function Stories() {
       <div className="flex gap-4 items-center">
         {/* Add Story Button */}
         <div className="flex flex-col items-center gap-1.5 shrink-0 group">
-          <div className="relative w-16 h-16 rounded-full p-[2px] bg-zinc-200 group-hover:bg-gradient-to-tr group-hover:from-indigo-600 group-hover:to-purple-600 transition-all duration-300">
+          <div 
+            className={cn(
+              "relative w-16 h-16 rounded-full p-[2px] transition-all duration-300 cursor-pointer",
+              groupedStories[auth.currentUser?.uid || ''] 
+                ? "bg-gradient-to-tr from-indigo-600 to-purple-600 active:scale-95" 
+                : "bg-zinc-200 group-hover:bg-zinc-300"
+            )}
+            onClick={() => {
+              const myStories = groupedStories[auth.currentUser?.uid || ''];
+              if (myStories) {
+                setActiveUserStories(myStories);
+                setCurrentStoryIndex(0);
+              } else {
+                onNavigate?.('create', 'story');
+              }
+            }}
+          >
             <div className="w-full h-full rounded-full bg-white p-[2px]">
               <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden relative">
                 <UserAvatar 
                   userId={auth.currentUser?.uid || ''} 
                   className="w-full h-full"
                 />
-                <label className="absolute inset-0 bg-black/10 flex items-center justify-center cursor-pointer hover:bg-black/20 transition-colors">
-                  <Plus className="w-5 h-5 text-white" />
-                  <input 
-                    type="file" 
-                    accept="image/*,video/*" 
-                    className="hidden" 
-                    onChange={handleFileSelect}
-                  />
-                </label>
               </div>
+            </div>
+            <div 
+              className="absolute bottom-0 right-0 w-5 h-5 bg-indigo-600 rounded-full border-2 border-white flex items-center justify-center cursor-pointer hover:bg-indigo-700 transition-colors z-20"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate?.('create', 'story');
+              }}
+            >
+              <Plus className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
           <span className="text-[11px] text-zinc-500 font-medium">Your Story</span>
@@ -323,13 +420,14 @@ export default function Stories() {
         {Object.values(groupedStories)
           .filter(userStories => {
             const authorId = userStories[0].authorId;
-            return !blockedIds.includes(authorId) && !blockedByIds.includes(authorId);
+            // Don't show current user's story here as it's shown in the "Add Story" slot
+            return authorId !== auth.currentUser?.uid && !blockedIds.includes(authorId) && !blockedByIds.includes(authorId);
           })
-          .map(userStories => {
+          .map((userStories, uIdx) => {
             const firstStory = userStories[0];
           return (
             <div 
-              key={firstStory.authorId} 
+              key={`${firstStory.authorId}-${uIdx}`} 
               className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group"
               onClick={() => {
                 setActiveUserStories(userStories);
@@ -354,56 +452,11 @@ export default function Stories() {
         })}
       </div>
 
-      {/* Preview Modal */}
-      <AnimatePresence>
-        {previewUrl && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed inset-0 z-[100] bg-black flex flex-col"
-          >
-            <div className="absolute top-4 left-0 right-0 p-4 flex items-center justify-between z-10">
-              <button 
-                onClick={() => {
-                  setPreviewFile(null);
-                  setPreviewUrl(null);
-                }}
-                className="p-2 text-white bg-black/50 rounded-full hover:bg-black/70 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="flex-1 flex items-center justify-center bg-black">
-              {previewFile?.type.startsWith('video/') ? (
-                <video src={previewUrl} controls className="max-w-full max-h-full object-contain" />
-              ) : (
-                <img src={previewUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
-              )}
-            </div>
-            <div className="p-4 bg-black flex justify-end">
-              <button
-                onClick={handleUpload}
-                disabled={isUploading}
-                className="py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-full flex items-center gap-2 disabled:opacity-70"
-              >
-                {isUploading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    Share Story <Send className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Story Viewer Modal */}
       <AnimatePresence>
         {activeStory && activeUserStories && (
           <motion.div
+            key="story-viewer"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -412,7 +465,7 @@ export default function Stories() {
             {/* Progress Bars */}
             <div className="absolute top-0 left-0 right-0 p-2 flex gap-1 z-20 pt-safe">
               {activeUserStories.map((s, idx) => (
-                <div key={s.id} className="h-1 bg-white/30 rounded-full flex-1 overflow-hidden">
+                <div key={`${s.id}-${idx}`} className="h-1 bg-white/30 rounded-full flex-1 overflow-hidden">
                   {idx === currentStoryIndex ? (
                     <div 
                       className="h-full bg-white transition-all duration-75 ease-linear"
@@ -467,6 +520,15 @@ export default function Stories() {
               className="flex-1 flex items-center justify-center relative touch-none"
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (!activeStory?.likedBy?.includes(auth.currentUser?.uid || '')) {
+                  handleToggleLike();
+                } else {
+                  setShowHeartAnimation(true);
+                  setTimeout(() => setShowHeartAnimation(false), 1000);
+                }
+              }}
             >
               {activeStory.mediaType === 'video' || activeStory.videoUrl || (activeStory.imageUrl && (activeStory.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || activeStory.imageUrl.includes('/video/upload/'))) ? (
                 <video 
@@ -490,7 +552,61 @@ export default function Stories() {
                   className="max-w-full max-h-full object-contain pointer-events-none"
                 />
               )}
+
+              {/* Heart Animation */}
+              <AnimatePresence>
+                {showHeartAnimation && (
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1.5, opacity: 1 }}
+                    exit={{ scale: 2, opacity: 0 }}
+                    className="absolute z-50 pointer-events-none"
+                  >
+                    <Heart className="w-24 h-24 text-white fill-white drop-shadow-2xl" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+
+            {/* Reply Input */}
+            {activeStory.authorId !== auth.currentUser?.uid && (
+              <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20">
+                <form onSubmit={handleSendReply} className="flex items-center gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onFocus={() => setIsPaused(true)}
+                      onBlur={() => setIsPaused(false)}
+                      placeholder="Send message..."
+                      className="w-full bg-white/10 border border-white/30 rounded-full py-3 px-6 text-white text-sm placeholder:text-white/60 focus:outline-none focus:bg-white/20 focus:border-white/50 transition-all backdrop-blur-md"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleLike}
+                    className="p-2 text-white active:scale-90 transition-all"
+                  >
+                    <Heart 
+                      className={cn(
+                        "w-7 h-7 transition-colors",
+                        activeStory.likedBy?.includes(auth.currentUser?.uid || '') 
+                          ? "fill-red-500 text-red-500" 
+                          : "text-white"
+                      )} 
+                    />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!replyText.trim() || isSendingReply}
+                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black active:scale-90 transition-all disabled:opacity-50 shadow-lg"
+                  >
+                    <Send className="w-6 h-6" />
+                  </button>
+                </form>
+              </div>
+            )}
 
             {/* Viewers Button (Only for author) */}
             {activeStory.authorId === auth.currentUser?.uid && (
@@ -512,6 +628,7 @@ export default function Stories() {
             <AnimatePresence>
               {showViewers && (
                 <motion.div
+                  key="viewers-modal"
                   initial={{ opacity: 0, y: '100%' }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: '100%' }}
@@ -538,9 +655,9 @@ export default function Stories() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {activeStory.viewers.map(viewerId => (
-                          <div key={viewerId}>
-                            <ViewerItem userId={viewerId} />
+                        {Array.from(new Set(activeStory.viewers || [])).map((viewerId, idx) => (
+                          <div key={`${viewerId}-${idx}`}>
+                            <ViewerItem userId={viewerId} isLiked={activeStory.likedBy?.includes(viewerId)} />
                           </div>
                         ))}
                       </div>
@@ -554,6 +671,7 @@ export default function Stories() {
             <AnimatePresence>
               {storyToDelete && (
                 <motion.div
+                  key="delete-modal"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}

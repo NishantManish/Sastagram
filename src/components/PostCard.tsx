@@ -317,8 +317,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       // Delete notifications related to this post
       const notificationsQuery = query(
         collection(db, 'notifications'), 
-        where('postId', '==', post.id),
-        where('userId', '==', auth.currentUser.uid)
+        where('postId', '==', post.id)
       );
       const notificationsSnap = await getDocs(notificationsQuery);
       notificationsSnap.forEach(doc => batch.delete(doc.ref));
@@ -326,9 +325,14 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       await batch.commit();
 
       // Delete from Cloudinary
-      if (post.imageUrl) {
-        await deleteFromCloudinary(post.imageUrl);
+      const mediaToDelete = [];
+      if (post.imageUrl) mediaToDelete.push(post.imageUrl);
+      if (post.videoUrl) mediaToDelete.push(post.videoUrl);
+      if (post.mediaUrls && post.mediaUrls.length > 0) {
+        post.mediaUrls.forEach(m => mediaToDelete.push(m.url));
       }
+
+      await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url)));
       
       setShowDeleteConfirm(false);
       // The parent component (Feed) should handle the removal from UI via onSnapshot or a refresh
@@ -384,7 +388,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         const tag = part.slice(1).replace(/[^\w]/g, '');
         return (
           <button
-            key={i}
+            key={`tag-${i}-${tag}`}
             onClick={(e) => {
               e.stopPropagation();
               onTagClick?.(tag);
@@ -400,7 +404,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         const username = part.slice(1).replace(/[^\w]/g, '');
         return (
           <button
-            key={i}
+            key={`mention-${i}-${username}`}
             onClick={async (e) => {
               e.stopPropagation();
               // Try to find user by username
@@ -424,7 +428,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         );
       }
       
-      return <span key={i}>{part}</span>;
+      return <span key={`text-${i}`}>{part}</span>;
     });
   };
 
@@ -596,7 +600,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
             {mediaList.map((_, idx) => (
               <div 
-                key={idx} 
+                key={`${idx}-${post.id}`} 
                 className={cn(
                   "w-1.5 h-1.5 rounded-full transition-all duration-300",
                   idx === currentMediaIndex 

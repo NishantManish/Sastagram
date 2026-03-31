@@ -52,6 +52,31 @@ export function getPublicIdFromUrl(url: string): { publicId: string, resourceTyp
  * Since this is a pure client-side app, we cannot securely delete from the frontend.
  */
 export async function deleteFromCloudinary(url: string | null | undefined): Promise<boolean> {
-  console.warn('Cloudinary deletion skipped: Secure deletion requires a server-side signature which is not available in this pure client-side architecture.');
-  return false;
+  if (!url) return false;
+  
+  const parsed = getPublicIdFromUrl(url);
+  if (!parsed) return false;
+
+  try {
+    const response = await fetch('/api/cloudinary/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        publicId: parsed.publicId,
+        resourceType: parsed.resourceType,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete from Cloudinary');
+    }
+
+    const data = await response.json();
+    return data.success;
+  } catch (error) {
+    console.error('Error deleting from Cloudinary:', error);
+    return false;
+  }
 }

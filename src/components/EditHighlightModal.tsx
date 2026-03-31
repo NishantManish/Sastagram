@@ -314,7 +314,7 @@ export default function EditHighlightModal({ highlight, onClose }: EditHighlight
               
               <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                 {mediaPreviews.map((media, idx) => (
-                  <div key={idx} className="relative w-16 h-16 flex-shrink-0 rounded-xl overflow-hidden border border-zinc-200 group">
+                  <div key={`${media.url}-${idx}`} className="relative w-16 h-16 flex-shrink-0 rounded-xl overflow-hidden border border-zinc-200 group">
                     {media.type === 'video' ? (
                       <video src={media.url} className="w-full h-full object-cover" />
                     ) : (

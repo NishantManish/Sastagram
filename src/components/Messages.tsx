@@ -3,7 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, add
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, Message, User, Post } from '../types';
-import { Send, ArrowLeft, MessageSquare, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil } from 'lucide-react';
+import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil } from 'lucide-react';
 import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
@@ -86,16 +86,21 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
     return () => unsubscribe();
   }, []);
 
-  // Fetch user details for chats
+  // Fetch user details for chats and shared profiles
   useEffect(() => {
     const fetchUsers = async () => {
-      if (chats.length === 0) return;
-
       const userIds = new Set<string>();
+      
+      // Participants
       chats.forEach(chat => {
         chat.participants.forEach(id => {
           if (id !== auth.currentUser?.uid) userIds.add(id);
         });
+      });
+
+      // Shared profiles in messages
+      messages.forEach(msg => {
+        if (msg.sharedProfileId) userIds.add(msg.sharedProfileId);
       });
 
       const missingIds = Array.from(userIds).filter(id => !chatUsers[id]);
@@ -124,7 +129,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
     };
 
     fetchUsers();
-  }, [chats]);
+  }, [chats, messages]);
 
   // Handle messages subscription
   useEffect(() => {
@@ -509,7 +514,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
     const isBlocked = otherUser ? (blockedIds.includes(otherUser.uid) || blockedByIds.includes(otherUser.uid)) : false;
     
     return (
-      <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
+      <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden fixed inset-0 z-50">
         <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex items-center gap-3 shadow-sm shrink-0">
           <button onClick={() => setSelectedChat(null)} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -553,7 +558,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8 opacity-60">
               <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mb-4">
-                <MessageSquare className="w-8 h-8 text-zinc-400" />
+                <Send className="w-8 h-8 text-zinc-400 -rotate-12" />
               </div>
               <p className="text-zinc-500 text-sm font-medium">No messages yet. Say hello!</p>
             </div>
@@ -572,7 +577,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
 
               return (
                 <motion.div 
-                  key={msg.id} 
+                  key={`${msg.id}-${index}`} 
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: 'spring', stiffness: 260, damping: 20 }}
@@ -699,6 +704,76 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                           )}
                           <div className="px-1">
                             <p className={`text-xs font-bold truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>View Post</p>
+                          </div>
+                        </div>
+                      )}
+                      {msg.sharedStoryId && (
+                        <div 
+                          className={`mb-2 p-2 rounded-xl border flex flex-col gap-2 ${
+                            isMine ? 'bg-indigo-600/50 border-indigo-400' : 'bg-zinc-50 border-zinc-200'
+                          }`}
+                        >
+                          {msg.sharedStoryPreviewUrl ? (
+                            <div className="relative aspect-[9/16] w-32 overflow-hidden rounded-lg bg-black/10 mx-auto">
+                              {msg.sharedStoryPreviewUrl.match(/\.(mp4|webm|ogg|mov)$/i) || msg.sharedStoryPreviewUrl.includes('/video/upload/') ? (
+                                <video 
+                                  src={msg.sharedStoryPreviewUrl} 
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <img 
+                                  src={getOptimizedImageUrl(msg.sharedStoryPreviewUrl, 400)} 
+                                  alt="Shared story" 
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <div className={`w-32 aspect-[9/16] rounded-lg flex items-center justify-center mx-auto ${isMine ? 'bg-indigo-500' : 'bg-zinc-200'}`}>
+                              <ImageIcon className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
+                            </div>
+                          )}
+                          <div className="px-1 text-center">
+                            <p className={`text-[10px] font-bold uppercase tracking-wider ${isMine ? 'text-white' : 'text-zinc-500'}`}>Replied to story</p>
+                          </div>
+                        </div>
+                      )}
+                      {msg.sharedProfileId && (
+                        <div 
+                          onClick={() => setSelectedUserId(msg.sharedProfileId!)}
+                          className={`mb-2 p-3 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] flex flex-col gap-3 ${
+                            isMine ? 'bg-indigo-600/50 border-indigo-400' : 'bg-zinc-50 border-zinc-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-full bg-zinc-200 overflow-hidden shrink-0 border border-zinc-200">
+                              {chatUsers[msg.sharedProfileId]?.photoURL ? (
+                                <img 
+                                  src={getOptimizedImageUrl(chatUsers[msg.sharedProfileId].photoURL, 96, 96)} 
+                                  alt={chatUsers[msg.sharedProfileId].displayName || ''} 
+                                  className="w-full h-full object-cover" 
+                                  referrerPolicy="no-referrer" 
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-zinc-500 font-medium text-lg">
+                                  {chatUsers[msg.sharedProfileId]?.displayName?.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className={`font-bold text-sm truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>
+                                {chatUsers[msg.sharedProfileId]?.displayName}
+                              </span>
+                              <span className={`text-[10px] font-medium truncate ${isMine ? 'text-indigo-100' : 'text-zinc-400'}`}>
+                                @{chatUsers[msg.sharedProfileId]?.username || 'user'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className={`w-full py-1.5 rounded-lg text-center text-[10px] font-black uppercase tracking-widest ${
+                            isMine ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-600'
+                          }`}>
+                            View Profile
                           </div>
                         </div>
                       )}
@@ -895,12 +970,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   return (
     <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden">
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-zinc-100 px-4 py-3 flex flex-col gap-3 shadow-sm shrink-0">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <button onClick={onBack} className="p-2 -ml-2 text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
+        <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Messages</h1>
         </div>
         
@@ -925,15 +995,15 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-20">
+      <div className="flex-1 overflow-y-auto pb-32">
         {searchQuery ? (
           <div className="px-2 py-2">
             {isSearching ? (
               <div className="flex justify-center p-4"><div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" /></div>
             ) : searchResults.length > 0 ? (
-              searchResults.map(user => (
+              searchResults.map((user, idx) => (
                 <div 
-                  key={user.uid}
+                  key={`${user.uid}-${idx}`}
                   onClick={() => handleStartChat(user)}
                   className="p-3 my-1 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-zinc-50 transition-all"
                 >
@@ -972,7 +1042,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           >
             <div className="relative mb-8">
               <div className="w-24 h-24 bg-indigo-50 rounded-[32px] flex items-center justify-center border border-indigo-100/50 shadow-sm rotate-3">
-                <MessageSquare className="w-10 h-10 text-indigo-500" />
+                <Send className="w-10 h-10 text-indigo-500 -rotate-12" />
               </div>
               <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center border border-purple-100/50 shadow-sm -rotate-6">
                 <Send className="w-5 h-5 text-purple-500" />
@@ -1002,7 +1072,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: index * 0.05 }}
-                key={chat.id} 
+                key={`chat-${chat.id}-${index}`} 
                 onClick={() => !chatToDelete && setSelectedChat(chat)}
                 onTouchStart={() => handleTouchStart(chat)}
                 onTouchEnd={handleTouchEnd}

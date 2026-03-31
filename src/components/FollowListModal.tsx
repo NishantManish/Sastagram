@@ -81,9 +81,9 @@ export default function FollowListModal({ userId, type, onClose, onUserClick }: 
             </div>
           ) : (
             <div className="space-y-1">
-              {users.map(user => (
+              {users.map((user, idx) => (
                 <div 
-                  key={user.uid}
+                  key={`${user.uid}-${idx}`}
                   onClick={() => {
                     onUserClick(user.uid);
                     onClose();

@@ -227,13 +227,13 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
         </motion.div>
       ) : (
         <div className="px-4 py-4 space-y-8">
-          {groupedNotifications.map(([title, items]) => (
-            <div key={title} className="space-y-4">
+          {groupedNotifications.map(([title, items], gIdx) => (
+            <div key={`group-${title}-${gIdx}`} className="space-y-4">
               <h3 className="px-2 text-sm font-bold text-zinc-400 uppercase tracking-widest">{title}</h3>
               <div className="space-y-1">
-                {items.map((notification) => (
+                {items.map((notification, nIdx) => (
                   <motion.div 
-                    key={notification.id} 
+                    key={`notification-${notification.id}-${nIdx}`} 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     onClick={() => {
@@ -262,10 +262,12 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                         ${notification.type === 'like' ? 'bg-red-500' : ''}
                         ${notification.type === 'comment' ? 'bg-blue-500' : ''}
                         ${notification.type === 'follow' ? 'bg-indigo-600' : ''}
+                        ${notification.type === 'message' ? 'bg-green-500' : ''}
                       `}>
                         {notification.type === 'like' && <Heart className="w-3 h-3 text-white fill-white" />}
                         {notification.type === 'comment' && <MessageCircle className="w-3 h-3 text-white fill-white" />}
                         {notification.type === 'follow' && <UserPlus className="w-3 h-3 text-white" />}
+                        {notification.type === 'message' && <MessageCircle className="w-3 h-3 text-white" />}
                       </div>
                     </div>
                     
@@ -273,9 +275,10 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                       <p className="text-[14px] text-zinc-900 leading-tight">
                         <span className="font-bold hover:underline cursor-pointer">{notification.senderName}</span>{' '}
                         <span className="text-zinc-600">
-                          {notification.type === 'like' && 'liked your post.'}
+                          {notification.type === 'like' && (notification.storyId ? 'liked your story.' : 'liked your post.')}
                           {notification.type === 'comment' && 'commented on your post.'}
                           {notification.type === 'follow' && 'started following you.'}
+                          {notification.type === 'message' && 'replied to your story.'}
                         </span>
                       </p>
                       <p className="text-xs font-medium text-zinc-400 mt-1">
