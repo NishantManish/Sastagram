@@ -23,6 +23,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
+  const [messagesViewKey, setMessagesViewKey] = useState(0);
   const [createInitialType, setCreateInitialType] = useState<'post' | 'story'>('post');
   const [initialSearchQuery, setInitialSearchQuery] = useState('');
   const [initialPostId, setInitialPostId] = useState<string | null>(null);
@@ -234,7 +235,14 @@ export default function App() {
           {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
           {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
           {activeTab === 'profile' && <Profile onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
-          {activeTab === 'messages' && <Messages onBack={() => handleNavigate('feed')} onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} />}
+          {activeTab === 'messages' && (
+            <Messages 
+              key={`messages-${messagesViewKey}`}
+              onBack={() => handleNavigate('feed')} 
+              onNavigate={handleNavigate} 
+              onTagClick={handleNavigateToSearch} 
+            />
+          )}
           {activeTab === 'admin' && isAdmin && <AdminDashboard />}
         </main>
 
@@ -245,6 +253,8 @@ export default function App() {
             onChange={(tab) => {
               if (tab === 'feed' && activeTab === 'feed') {
                 feedRef.current?.scrollToTop();
+              } else if (tab === 'messages' && activeTab === 'messages') {
+                setMessagesViewKey(prev => prev + 1);
               } else {
                 handleNavigate(tab);
               }

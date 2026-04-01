@@ -878,7 +878,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         </div>
 
         {/* Input Area */}
-        <div className="bg-white/80 backdrop-blur-2xl border-t border-zinc-100/50 p-3 pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.04)] shrink-0">
+        <div className="bg-white/80 backdrop-blur-2xl border-t border-zinc-100/50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.04)] shrink-0">
           {isBlocked ? (
             <div className="flex items-center justify-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl py-4 px-6">
               <ShieldAlert className="w-5 h-5 text-zinc-400" />
@@ -936,7 +936,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                 </motion.div>
               )}
 
-              <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -952,7 +952,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   <button 
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-3 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all active:scale-90"
+                    className="w-11 h-11 flex items-center justify-center text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all active:scale-90 shrink-0"
                   >
                     <Paperclip className="w-5 h-5" />
                   </button>
@@ -982,7 +982,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                   whileTap={{ scale: 0.9 }}
                   type="submit"
                   disabled={editingMessage ? (!newMessage.trim() && !editingMessage.attachmentUrl && !editingMessage.sharedPostId) : (!newMessage.trim() && !attachment)}
-                  className={`p-3.5 rounded-2xl transition-all shadow-lg active:scale-95 ${
+                  className={`w-11 h-11 flex items-center justify-center rounded-2xl transition-all shadow-lg active:scale-95 shrink-0 ${
                     (newMessage.trim() || attachment) 
                       ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-500/20' 
                       : 'bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none'
@@ -1066,17 +1066,11 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden fixed inset-0 z-50">
+    <div className="max-w-md mx-auto bg-white h-[100dvh] flex flex-col overflow-hidden fixed inset-0 z-30">
       {/* List Header */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl px-4 pt-6 pb-4 shrink-0">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={onBack} 
-              className="p-2.5 -ml-2 text-zinc-900 hover:bg-zinc-100 rounded-full transition-all active:scale-90"
-            >
-              <ArrowLeft className="w-6 h-6" />
-            </button>
             <h1 className="text-2xl font-black tracking-tighter text-zinc-900">Messages</h1>
           </div>
           <button className="p-2.5 bg-zinc-100 text-zinc-900 rounded-2xl hover:bg-zinc-200 transition-all active:scale-90">
