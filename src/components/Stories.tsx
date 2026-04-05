@@ -43,7 +43,7 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
-  const [storyToDelete, setStoryToDelete] = useState<{ id: string, imageUrl: string } | null>(null);
+  const [storyToDelete, setStoryToDelete] = useState<{ id: string, imageUrl?: string, videoUrl?: string } | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
@@ -80,6 +80,9 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
               deleteObject(imageRef).catch(console.error);
             } else if (story.imageUrl && story.imageUrl.includes('cloudinary.com')) {
               deleteFromCloudinary(story.imageUrl).catch(console.error);
+            }
+            if (story.videoUrl && story.videoUrl.includes('cloudinary.com')) {
+              deleteFromCloudinary(story.videoUrl).catch(console.error);
             }
           }
           return false;
@@ -184,9 +187,9 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
     }
   };
 
-  const handleDeleteStory = (storyId: string, imageUrl: string) => {
+  const handleDeleteStory = (storyId: string, imageUrl?: string, videoUrl?: string) => {
     setIsPaused(true);
-    setStoryToDelete({ id: storyId, imageUrl });
+    setStoryToDelete({ id: storyId, imageUrl, videoUrl });
   };
 
   const confirmDeleteStory = async () => {
@@ -199,6 +202,9 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
           await deleteObject(imageRef);
         } else if (storyToDelete.imageUrl && storyToDelete.imageUrl.includes('cloudinary.com')) {
           await deleteFromCloudinary(storyToDelete.imageUrl);
+        }
+        if (storyToDelete.videoUrl && storyToDelete.videoUrl.includes('cloudinary.com')) {
+          await deleteFromCloudinary(storyToDelete.videoUrl);
         }
       } catch (storageError) {
         console.error('Error deleting story image from storage:', storageError);
@@ -520,7 +526,7 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
               <div className="flex items-center gap-2">
                 {activeStory.authorId === auth.currentUser?.uid && (
                   <button 
-                    onClick={() => handleDeleteStory(activeStory.id, activeStory.imageUrl)}
+                    onClick={() => handleDeleteStory(activeStory.id, activeStory.imageUrl, activeStory.videoUrl)}
                     className="p-2 text-white/80 hover:text-red-500 transition-colors"
                   >
                     <Trash2 className="w-6 h-6" />

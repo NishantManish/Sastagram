@@ -492,7 +492,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         <div 
           className="hidden md:flex md:w-3/5 bg-black items-center justify-center relative overflow-hidden max-h-full"
           style={{ 
-            aspectRatio: `${Math.max(9/16, Math.min(mediaAspectRatio, 1/1))}`,
+            aspectRatio: `${Math.max(4/5, Math.min(mediaAspectRatio, 1.91))}`,
           }}
         >
           <motion.div
@@ -645,7 +645,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
           <div 
             className="md:hidden w-full bg-black flex items-center justify-center relative overflow-hidden max-h-full"
             style={{ 
-              aspectRatio: `${Math.max(9/16, Math.min(mediaAspectRatio, 1/1))}`,
+              aspectRatio: `${Math.max(4/5, Math.min(mediaAspectRatio, 1.91))}`,
             }}
           >
             <motion.div

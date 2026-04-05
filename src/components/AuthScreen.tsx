@@ -92,12 +92,6 @@ export default function AuthScreen() {
         setLoading(false);
         return;
       }
-      const isUnique = await checkUsernameUnique(username);
-      if (!isUnique) {
-        setError('Username is already taken. Please choose another one.');
-        setLoading(false);
-        return;
-      }
     }
 
     try {
@@ -107,10 +101,18 @@ export default function AuthScreen() {
         const result = await createUserWithEmailAndPassword(auth, email, password);
         const user = result.user;
         
-        await updateProfile(user, { displayName: name });
-
-        const userRef = doc(db, 'users', user.uid);
         try {
+          const isUnique = await checkUsernameUnique(username);
+          if (!isUnique) {
+            await user.delete();
+            setError('Username is already taken. Please choose another one.');
+            setLoading(false);
+            return;
+          }
+          
+          await updateProfile(user, { displayName: name });
+
+          const userRef = doc(db, 'users', user.uid);
           await setDoc(userRef, {
             uid: user.uid,
             username: username.toLowerCase(),
@@ -122,7 +124,8 @@ export default function AuthScreen() {
             createdAt: serverTimestamp(),
           });
         } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+          await user.delete().catch(console.error);
+          throw err;
         }
       }
     } catch (err: any) {

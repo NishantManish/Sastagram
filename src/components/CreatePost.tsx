@@ -3,9 +3,11 @@ import { addDoc, collection, serverTimestamp, Timestamp, writeBatch, doc } from 
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
-import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
+import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight, GripVertical, Maximize, RectangleHorizontal, RectangleVertical } from 'lucide-react';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import ZoomableMedia from './ZoomableMedia';
+import Cropper, { Area, Point } from 'react-easy-crop';
+import getCroppedImg from '../utils/cropImage';
 
 interface CreatePostProps {
   onSuccess: () => void;
@@ -15,13 +17,40 @@ interface CreatePostProps {
 
 type UploadType = 'post' | 'story';
 
+interface MediaFile {
+  file: File;
+  preview: string;
+  type: 'image' | 'video';
+  crop: Point;
+  zoom: number;
+  croppedAreaPixels: Area | null;
+  naturalAspectRatio: number;
+}
+
+const getMediaDimensions = (preview: string, type: 'image' | 'video'): Promise<number> => {
+  return new Promise((resolve) => {
+    if (type === 'image') {
+      const img = new Image();
+      img.onload = () => resolve(img.width / img.height);
+      img.onerror = () => resolve(1);
+      img.src = preview;
+    } else {
+      const vid = document.createElement('video');
+      vid.onloadedmetadata = () => resolve(vid.videoWidth / vid.videoHeight);
+      vid.onerror = () => resolve(1);
+      vid.src = preview;
+    }
+  });
+};
+
 export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: CreatePostProps) {
   const [uploadType, setUploadType] = useState<UploadType>(initialType);
-  const [mediaFiles, setMediaFiles] = useState<{ file: File, preview: string, type: 'image' | 'video' }[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [caption, setCaption] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aspectRatioMode, setAspectRatioMode] = useState<'square' | 'portrait' | 'landscape' | 'original'>('original');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -30,10 +59,10 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
     }
   }, [initialType]);
 
-  const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files) as File[];
-      const validFiles: { file: File, preview: string, type: 'image' | 'video' }[] = [];
+      const validFiles: MediaFile[] = [];
       
       for (const file of newFiles) {
         const isVideo = file.type.startsWith('video/');
@@ -46,10 +75,18 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
           continue;
         }
 
+        const preview = URL.createObjectURL(file);
+        const type = isVideo ? 'video' : 'image';
+        const naturalAspectRatio = await getMediaDimensions(preview, type);
+
         validFiles.push({
           file,
-          preview: URL.createObjectURL(file),
-          type: isVideo ? 'video' : 'image'
+          preview,
+          type,
+          crop: { x: 0, y: 0 },
+          zoom: 1,
+          croppedAreaPixels: null,
+          naturalAspectRatio
         });
       }
 
@@ -91,8 +128,21 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
       const uploadedUrls: { url: string, type: 'image' | 'video' }[] = [];
 
       for (const media of mediaFiles) {
+        let fileToUpload = media.file;
+        
+        if (media.type === 'image' && media.croppedAreaPixels) {
+          try {
+            const croppedBlob = await getCroppedImg(media.preview, media.croppedAreaPixels);
+            if (croppedBlob) {
+              fileToUpload = new File([croppedBlob], media.file.name, { type: 'image/jpeg' });
+            }
+          } catch (e) {
+            console.error('Failed to crop image before upload', e);
+          }
+        }
+
         const formData = new FormData();
-        formData.append('file', media.file);
+        formData.append('file', fileToUpload);
         formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
         
         const resourceType = media.type === 'video' ? 'video' : 'image';
@@ -181,10 +231,49 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
     setMediaFiles([]);
     setCaption('');
     setError(null);
+    setAspectRatioMode('original');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  const updateMediaState = (index: number, updates: Partial<MediaFile>) => {
+    setMediaFiles(prev => {
+      const newFiles = [...prev];
+      newFiles[index] = { ...newFiles[index], ...updates };
+      return newFiles;
+    });
+  };
+
+  const cycleAspectRatio = () => {
+    setAspectRatioMode(prev => {
+      if (prev === 'original') return 'square';
+      if (prev === 'square') return 'portrait';
+      if (prev === 'portrait') return 'landscape';
+      return 'original';
+    });
+  };
+
+  const getAspectRatioIcon = () => {
+    if (aspectRatioMode === 'original') return <ImagePlus className="w-4 h-4" />;
+    if (aspectRatioMode === 'square') return <Maximize className="w-4 h-4" />;
+    if (aspectRatioMode === 'portrait') return <RectangleVertical className="w-4 h-4" />;
+    return <RectangleHorizontal className="w-4 h-4" />;
+  };
+
+  const getCurrentAspect = () => {
+    if (uploadType === 'story') return 9/16;
+    switch (aspectRatioMode) {
+      case 'square': return 1;
+      case 'portrait': return 4/5;
+      case 'landscape': return 16/9;
+      case 'original': 
+        // Bound the original aspect ratio to prevent extreme layouts (like Instagram does)
+        return mediaFiles.length > 0 ? Math.max(0.8, Math.min(1.91, mediaFiles[0].naturalAspectRatio)) : 1;
+    }
+  };
+
+  const currentAspect = getCurrentAspect();
 
   return (
     <div className="max-w-md mx-auto p-4 pt-6 pb-24">
@@ -252,25 +341,50 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
             
             {mediaFiles.length > 0 ? (
               <div className="space-y-6">
-                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : 'min-h-[300px] max-h-[min(500px,70vh)]'} bg-zinc-100 dark:bg-zinc-800 rounded-3xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700 shadow-sm group`}>
-                  <ZoomableMedia className="w-full h-full">
-                    {mediaFiles[selectedMediaIndex]?.type === 'video' ? (
+                <div className={`relative w-full ${uploadType === 'story' ? 'aspect-[9/16]' : ''} bg-zinc-100 dark:bg-zinc-800 rounded-3xl overflow-hidden border border-zinc-200/50 dark:border-zinc-700 shadow-sm group`} style={{ aspectRatio: currentAspect, maxHeight: '70vh' }}>
+                  {mediaFiles[selectedMediaIndex]?.type === 'video' ? (
+                    <ZoomableMedia className="w-full h-full">
                       <video 
                         key={mediaFiles[selectedMediaIndex].preview}
                         src={mediaFiles[selectedMediaIndex].preview} 
                         controls
-                        className="w-full h-auto block object-contain"
+                        className="w-full h-full block object-contain"
                       />
-                    ) : (
-                      <img 
-                        key={mediaFiles[selectedMediaIndex]?.preview}
-                        src={mediaFiles[selectedMediaIndex]?.preview} 
-                        alt="Preview" 
-                        className="w-full h-auto block object-contain"
+                    </ZoomableMedia>
+                  ) : (
+                    <div className="w-full h-full relative">
+                      <Cropper
+                        image={mediaFiles[selectedMediaIndex]?.preview}
+                        crop={mediaFiles[selectedMediaIndex]?.crop || { x: 0, y: 0 }}
+                        zoom={mediaFiles[selectedMediaIndex]?.zoom || 1}
+                        aspect={currentAspect}
+                        onCropChange={(crop) => updateMediaState(selectedMediaIndex, { crop })}
+                        onCropComplete={(_croppedArea, croppedAreaPixels) => updateMediaState(selectedMediaIndex, { croppedAreaPixels })}
+                        onZoomChange={(zoom) => updateMediaState(selectedMediaIndex, { zoom })}
+                        showGrid={true}
+                        classes={{
+                          containerClassName: 'w-full h-full',
+                        }}
                       />
+                    </div>
+                  )}
+                  <div className="absolute top-4 right-4 z-10 flex gap-2">
+                    {uploadType === 'post' && mediaFiles[selectedMediaIndex]?.type === 'image' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          cycleAspectRatio();
+                        }}
+                        className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-all flex items-center justify-center gap-1.5 px-3"
+                        title="Change Aspect Ratio"
+                      >
+                        {getAspectRatioIcon()}
+                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                          {aspectRatioMode}
+                        </span>
+                      </button>
                     )}
-                  </ZoomableMedia>
-                  <div className="absolute top-4 right-4 z-10">
                     <button
                       type="button"
                       onClick={() => removeMedia(selectedMediaIndex)}
@@ -280,7 +394,7 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
                     </button>
                   </div>
                   {uploadType === 'post' && selectedMediaIndex === 0 && (
-                    <div className="absolute bottom-4 left-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-white text-xs font-bold">
+                    <div className="absolute bottom-4 left-4 z-10 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-white text-xs font-bold pointer-events-none">
                       Cover Image
                     </div>
                   )}
@@ -374,7 +488,7 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
 
 interface MediaItemProps {
   key?: React.Key;
-  media: { file: File, preview: string, type: 'image' | 'video' };
+  media: MediaFile;
   index: number;
   isSelected: boolean;
   onSelect: () => void;

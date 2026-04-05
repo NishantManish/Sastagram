@@ -99,6 +99,10 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
       postsSnap.docs.forEach(d => {
         const data = d.data() as Post;
         if (data.imageUrl) mediaToDelete.push(data.imageUrl);
+        if (data.videoUrl) mediaToDelete.push(data.videoUrl);
+        if (data.mediaUrls) {
+          data.mediaUrls.forEach(m => mediaToDelete.push(m.url));
+        }
         batch.delete(d.ref);
       });
 
@@ -118,6 +122,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
       storiesSnap.docs.forEach(d => {
         const data = d.data() as Story;
         if (data.imageUrl) mediaToDelete.push(data.imageUrl);
+        if (data.videoUrl) mediaToDelete.push(data.videoUrl);
         batch.delete(d.ref);
       });
 
@@ -1070,6 +1075,9 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
             // Delete from Cloudinary
             if (postToDelete.imageUrl) {
               await deleteFromCloudinary(postToDelete.imageUrl);
+            }
+            if (postToDelete.videoUrl) {
+              await deleteFromCloudinary(postToDelete.videoUrl);
             }
             if (postToDelete.mediaUrls && postToDelete.mediaUrls.length > 0) {
               await Promise.all(postToDelete.mediaUrls.map(media => deleteFromCloudinary(media.url)));

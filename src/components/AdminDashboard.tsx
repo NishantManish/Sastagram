@@ -357,18 +357,27 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeletePost = async (postId: string, imageUrl?: string) => {
+  const handleDeletePost = async (postId: string, postData?: PostData) => {
     if (!fullControl || !selectedUser) return;
     confirmAction('Delete Post', 'Are you sure you want to delete this post? This action cannot be undone.', async () => {
       try {
         const postSnap = await getDoc(doc(db, 'posts', postId));
-        const postData = postSnap.exists() ? postSnap.data() : null;
-        const authorId = postData?.authorId || selectedUser.uid;
-        const caption = postData?.caption || '';
+        const fetchedPostData = postSnap.exists() ? postSnap.data() as PostData : null;
+        const finalPostData = postData || fetchedPostData;
+        const authorId = finalPostData?.authorId || selectedUser.uid;
+        const caption = finalPostData?.caption || '';
 
         await deleteDoc(doc(db, 'posts', postId));
-        if (imageUrl) {
-          await deleteFromCloudinary(imageUrl);
+        
+        // Delete all media
+        if (finalPostData) {
+          const mediaToDelete: string[] = [];
+          if (finalPostData.imageUrl) mediaToDelete.push(finalPostData.imageUrl);
+          if (finalPostData.videoUrl) mediaToDelete.push(finalPostData.videoUrl);
+          if (finalPostData.mediaUrls) {
+            finalPostData.mediaUrls.forEach(m => mediaToDelete.push(m.url));
+          }
+          await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url)));
         }
 
         // Send notification to user
@@ -401,7 +410,14 @@ export default function AdminDashboard() {
         const label = hData?.label || 'Highlight';
 
         await deleteDoc(doc(db, 'highlights', highlightId));
-        await deleteFromCloudinary(imageUrl);
+        
+        const mediaToDelete: string[] = [];
+        if (imageUrl) mediaToDelete.push(imageUrl);
+        if (hData?.imageUrl && hData.imageUrl !== imageUrl) mediaToDelete.push(hData.imageUrl);
+        if (hData?.mediaUrls) {
+          hData.mediaUrls.forEach((url: string) => mediaToDelete.push(url));
+        }
+        await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url)));
 
         // Send notification
         await sendAdminDeleteNotification(
@@ -418,13 +434,16 @@ export default function AdminDashboard() {
     });
   };
 
-  const handleDeleteStory = async (storyId: string, imageUrl?: string) => {
+  const handleDeleteStory = async (storyId: string, imageUrl?: string, videoUrl?: string) => {
     if (!fullControl || !selectedUser) return;
     confirmAction('Delete Story', 'Are you sure you want to delete this story?', async () => {
       try {
         await deleteDoc(doc(db, 'stories', storyId));
         if (imageUrl) {
           await deleteFromCloudinary(imageUrl);
+        }
+        if (videoUrl) {
+          await deleteFromCloudinary(videoUrl);
         }
 
         // Send notification
@@ -554,10 +573,13 @@ export default function AdminDashboard() {
           const postsSnapshot = await getDocs(postsQ);
           for (const postDoc of postsSnapshot.docs) {
             const postData = postDoc.data() as PostData;
-            const displayUrl = postData.mediaUrls?.[0]?.url || postData.imageUrl || postData.videoUrl;
-            if (displayUrl) {
-              await deleteFromCloudinary(displayUrl);
+            const mediaToDelete: string[] = [];
+            if (postData.imageUrl) mediaToDelete.push(postData.imageUrl);
+            if (postData.videoUrl) mediaToDelete.push(postData.videoUrl);
+            if (postData.mediaUrls) {
+              postData.mediaUrls.forEach(m => mediaToDelete.push(m.url));
             }
+            await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url)));
             await deleteDoc(doc(db, 'posts', postDoc.id));
           }
 
@@ -565,6 +587,13 @@ export default function AdminDashboard() {
           const highlightsQ = query(collection(db, 'highlights'), where('userId', '==', user.uid));
           const highlightsSnapshot = await getDocs(highlightsQ);
           for (const highlightDoc of highlightsSnapshot.docs) {
+            const hData = highlightDoc.data();
+            const mediaToDelete: string[] = [];
+            if (hData.imageUrl) mediaToDelete.push(hData.imageUrl);
+            if (hData.mediaUrls) {
+              hData.mediaUrls.forEach((url: string) => mediaToDelete.push(url));
+            }
+            await Promise.all(mediaToDelete.map(url => deleteFromCloudinary(url)));
             await deleteDoc(doc(db, 'highlights', highlightDoc.id));
           }
 
@@ -593,6 +622,9 @@ export default function AdminDashboard() {
             const storyData = storyDoc.data() as StoryData;
             if (storyData.imageUrl) {
               await deleteFromCloudinary(storyData.imageUrl);
+            }
+            if (storyData.videoUrl) {
+              await deleteFromCloudinary(storyData.videoUrl);
             }
             await deleteDoc(doc(db, 'stories', storyDoc.id));
           }
@@ -682,7 +714,7 @@ export default function AdminDashboard() {
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (type === 'posts') handleDeletePost(post.id, displayUrl);
+                      if (type === 'posts') handleDeletePost(post.id, post);
                       else if (type === 'saved') handleRemoveSaved(post.id);
                       else if (type === 'liked') handleRemoveLiked(post.id);
                     }}
@@ -1320,7 +1352,7 @@ export default function AdminDashboard() {
                         const mediaList = selectedPost.mediaUrls && selectedPost.mediaUrls.length > 0 
                           ? selectedPost.mediaUrls 
                           : [{ url: selectedPost.imageUrl || selectedPost.videoUrl, type: selectedPost.videoUrl ? 'video' : 'image' }];
-                        handleDeletePost(selectedPost.id, mediaList[0]?.url);
+                        handleDeletePost(selectedPost.id, selectedPost);
                       }}
                       className="w-full py-4 px-6 bg-red-50 text-red-600 font-bold rounded-2xl flex items-center justify-center gap-3 hover:bg-red-100 transition-all active:scale-95 border border-red-100"
                     >
@@ -1440,7 +1472,7 @@ export default function AdminDashboard() {
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDeleteStory(story.id, mediaUrl);
+                                handleDeleteStory(story.id, story.imageUrl, story.videoUrl);
                               }}
                               className="absolute -top-1 -right-1 p-2 bg-red-500 text-white rounded-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 shadow-lg scale-75 group-hover:scale-100"
                             >

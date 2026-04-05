@@ -517,8 +517,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       <div 
         className="w-full bg-zinc-50 dark:bg-zinc-900 relative cursor-pointer overflow-hidden group flex items-center justify-center"
         style={{ 
-          aspectRatio: `${Math.max(9/16, Math.min(mediaAspectRatio, 1/1))}`,
-          maxHeight: 'min(500px, 70vh)'
+          aspectRatio: `${Math.max(4/5, Math.min(mediaAspectRatio, 1.91))}`,
+          maxHeight: 'min(600px, 70vh)'
         }}
         onClick={handleDoubleTap}
       >
