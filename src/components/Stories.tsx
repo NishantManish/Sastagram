@@ -387,15 +387,19 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
     }
   };
 
+  const viewedStories = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (activeStory && auth.currentUser && activeStory.authorId !== auth.currentUser.uid) {
       const hasViewed = activeStory.viewers?.includes(auth.currentUser.uid);
-      if (!hasViewed) {
+      if (!hasViewed && !viewedStories.current.has(activeStory.id)) {
+        viewedStories.current.add(activeStory.id);
         const storyRef = doc(db, 'stories', activeStory.id);
         updateDoc(storyRef, {
           viewers: arrayUnion(auth.currentUser.uid),
           viewsCount: increment(1)
         }).catch(err => {
+          viewedStories.current.delete(activeStory.id);
           console.error('Failed to update story views:', err);
         });
       }

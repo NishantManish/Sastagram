@@ -37,6 +37,7 @@ interface MessageData {
 
 interface PostData {
   id: string;
+  authorId: string;
   imageUrl?: string;
   videoUrl?: string;
   mediaUrls?: { url: string; type: string }[];

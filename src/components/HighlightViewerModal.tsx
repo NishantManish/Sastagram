@@ -147,15 +147,19 @@ export default function HighlightViewerModal({ highlight, onClose, onEdit, isOwn
     if (videoRef.current) videoRef.current.play();
   };
 
+  const hasUpdatedView = useRef(false);
+
   useEffect(() => {
     if (highlight && auth.currentUser && highlight.userId !== auth.currentUser.uid && !isAdminView) {
       const hasViewed = highlight.viewers?.includes(auth.currentUser.uid);
-      if (!hasViewed) {
+      if (!hasViewed && !hasUpdatedView.current) {
+        hasUpdatedView.current = true;
         const highlightRef = doc(db, 'highlights', highlight.id);
         updateDoc(highlightRef, {
           viewers: arrayUnion(auth.currentUser.uid),
           viewsCount: increment(1)
         }).catch(err => {
+          hasUpdatedView.current = false;
           console.error('Failed to update highlight views:', err);
         });
       }

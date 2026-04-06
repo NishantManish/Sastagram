@@ -297,12 +297,11 @@ service cloud.firestore {
 
     function isValidHighlight() {
       return hasOnlyAllowedFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt', 'viewsCount', 'viewers']) &&
-             hasRequiredFields(['userId', 'label', 'imageUrl', 'mediaUrls', 'createdAt']) &&
+             hasRequiredFields(['userId', 'label', 'imageUrl', 'createdAt']) &&
              validStringLength('userId', 1, 128) &&
              validStringLength('label', 1, 50) &&
              validStringLength('imageUrl', 1, 2000) &&
-             request.resource.data.mediaUrls is list &&
-             request.resource.data.mediaUrls.size() <= 100 &&
+             (!('mediaUrls' in request.resource.data) || (request.resource.data.mediaUrls is list && request.resource.data.mediaUrls.size() <= 100)) &&
              request.resource.data.createdAt is timestamp &&
              isValidOptionalNumber('viewsCount') &&
              (!('viewers' in request.resource.data) || request.resource.data.viewers is list);
@@ -638,6 +637,8 @@ service cloud.firestore {
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
+                       isUnchanged('videoUrl') &&
+                       isUnchanged('mediaType') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('expiresAt') &&
                        isUnchanged('likesCount') &&
@@ -653,6 +654,8 @@ service cloud.firestore {
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('imageUrl') &&
+                       isUnchanged('videoUrl') &&
+                       isUnchanged('mediaType') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('expiresAt') &&
                        isUnchanged('viewsCount') &&

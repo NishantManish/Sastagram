@@ -317,7 +317,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
       // Delete notifications related to this post
       const notificationsQuery = query(
         collection(db, 'notifications'), 
-        where('postId', '==', post.id)
+        where('postId', '==', post.id),
+        where('userId', '==', auth.currentUser.uid)
       );
       const notificationsSnap = await getDocs(notificationsQuery);
       notificationsSnap.forEach(doc => batch.delete(doc.ref));
