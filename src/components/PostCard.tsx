@@ -480,15 +480,21 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         </div>
         
         <div className="flex items-center gap-2">
-          {auth.currentUser?.uid !== post.authorId && isFollowing === false && (
-            <button 
-              onClick={handleFollow}
-              disabled={isFollowLoading}
-              className="px-4 py-1.5 bg-indigo-600 text-white text-[13px] font-bold rounded-full hover:bg-indigo-700 transition-all disabled:opacity-50 active:scale-95 shadow-sm shadow-indigo-100"
-            >
-              {isFollowLoading ? '...' : 'Follow'}
-            </button>
-          )}
+          <AnimatePresence>
+            {auth.currentUser?.uid !== post.authorId && isFollowing === false && (
+              <motion.button 
+                initial={{ opacity: 0, scale: 0.8, width: 0 }}
+                animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                exit={{ opacity: 0, scale: 0.5, width: 0, padding: 0, margin: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                onClick={handleFollow}
+                disabled={isFollowLoading}
+                className="px-4 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[13px] font-bold rounded-full hover:from-indigo-600 hover:to-purple-600 transition-all disabled:opacity-50 active:scale-95 shadow-sm shadow-indigo-100 whitespace-nowrap overflow-hidden"
+              >
+                {isFollowLoading ? '...' : 'Follow'}
+              </motion.button>
+            )}
+          </AnimatePresence>
 
           {auth.currentUser?.uid === post.authorId && (
             <div className="flex items-center gap-1">

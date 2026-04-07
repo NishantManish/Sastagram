@@ -690,26 +690,38 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
               </button>
             ) : (
               <div className="flex gap-2 flex-1">
+              <AnimatePresence mode="wait">
                 {isFollowing === false && !isBlockedByMe && (
-                  <button 
+                  <motion.button 
+                    key="follow"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2 }}
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
-                    className="flex-1 h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs shadow-xl shadow-indigo-50 disabled:opacity-70"
+                    className="flex-1 h-11 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs shadow-xl shadow-indigo-50 disabled:opacity-70"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
                     {isFollowedBy ? 'Follow Back' : 'Follow'}
-                  </button>
+                  </motion.button>
                 )}
                 {isFollowing === true && !isBlockedByMe && (
-                  <button 
+                  <motion.button 
+                    key="following"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2 }}
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
                     className="flex-1 h-11 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs disabled:opacity-70"
                   >
                     <UserMinus className="w-3.5 h-3.5" />
                     Following
-                  </button>
+                  </motion.button>
                 )}
+              </AnimatePresence>
                 {!isBlockedByMe && (
                   <button 
                     onClick={async () => {

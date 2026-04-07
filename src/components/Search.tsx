@@ -6,6 +6,7 @@ import { User, Post } from '../types';
 import { Search as SearchIcon, User as UserIcon, ArrowLeft, TrendingUp, Sparkles, Users, Hash, Layout } from 'lucide-react';
 import Profile from './Profile';
 import { useBlocks } from '../services/blockService';
+import { cacheService } from '../services/cacheService';
 import UserAvatar from './UserAvatar';
 import PostCard from './PostCard';
 import PostDetailsModal from './PostDetailsModal';
@@ -18,10 +19,11 @@ interface SearchProps {
 }
 
 export default function Search({ onNavigate, initialQuery, onClearInitialQuery }: SearchProps) {
-  const [searchQuery, setSearchQuery] = useState(initialQuery || '');
-  const [results, setResults] = useState<User[]>([]);
-  const [postResults, setPostResults] = useState<Post[]>([]);
-  const [suggestedUsers, setSuggestedUsers] = useState<User[]>([]);
+  const cache = cacheService.getSearchCache();
+  const [searchQuery, setSearchQuery] = useState(initialQuery || cache.lastSearchQuery || '');
+  const [results, setResults] = useState<User[]>(cache.lastResults);
+  const [postResults, setPostResults] = useState<Post[]>(cache.lastPostResults);
+  const [suggestedUsers, setSuggestedUsers] = useState<User[]>(cache.suggestedUsers);
   const [loading, setLoading] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -43,6 +45,7 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
           .map(doc => ({ uid: doc.id, ...doc.data() } as User))
           .filter(u => u.uid !== auth.currentUser?.uid);
         setSuggestedUsers(users);
+        cacheService.setSearchCache({ suggestedUsers: users });
       } catch (err) {
         console.error(err);
       }
@@ -55,12 +58,15 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
       if (!searchQuery.trim()) {
         setResults([]);
         setPostResults([]);
+        cacheService.setSearchCache({ lastSearchQuery: '', lastResults: [], lastPostResults: [] });
         return;
       }
 
       setLoading(true);
       try {
         const searchLower = searchQuery.toLowerCase();
+        let matchedUsers: User[] = [];
+        let matchedPosts: Post[] = [];
         
         if (searchLower.startsWith('@')) {
           // Username search
@@ -72,12 +78,12 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
             ...doc.data()
           })) as User[];
           
-          const matchedUsers = users.filter(u => 
+          matchedUsers = users.filter(u => 
             u.uid !== auth.currentUser?.uid && 
             u.username?.toLowerCase().includes(username)
-          );
+          ).slice(0, 5);
           
-          setResults(matchedUsers.slice(0, 5)); // max few accounts
+          setResults(matchedUsers);
           setPostResults([]);
         } else {
           // General search: users and tags
@@ -91,14 +97,14 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
             ...doc.data()
           })) as User[];
           
-          const matchedUsers = users.filter(u => 
+          matchedUsers = users.filter(u => 
             u.uid !== auth.currentUser?.uid && 
             (
               u.displayName?.toLowerCase().includes(searchStr) || 
               u.username?.toLowerCase().includes(searchStr)
             )
-          );
-          setResults(matchedUsers.slice(0, 5)); // max few accounts
+          ).slice(0, 5);
+          setResults(matchedUsers);
 
           // Tags
           const postsQ = query(
@@ -107,12 +113,18 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
             limit(20)
           );
           const postsSnapshot = await getDocs(postsQ);
-          const posts = postsSnapshot.docs.map(doc => ({
+          matchedPosts = postsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           })) as Post[];
-          setPostResults(posts);
+          setPostResults(matchedPosts);
         }
+
+        cacheService.setSearchCache({
+          lastSearchQuery: searchQuery,
+          lastResults: matchedUsers,
+          lastPostResults: matchedPosts
+        });
       } catch (error) {
         handleFirestoreError(error, OperationType.GET, searchQuery.startsWith('#') ? 'posts' : 'users');
       } finally {

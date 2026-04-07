@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../utils';
 import UserAvatar from './UserAvatar';
 import ShareModal from './ShareModal';
+import ConfirmationModal from './ConfirmationModal';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
 
@@ -23,7 +24,7 @@ interface ReelCardProps {
 export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal = false }: ReelCardProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -36,8 +37,11 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
   const [burstHearts, setBurstHearts] = useState<{ id: number; x: number; y: number; rotation: number; scale: number }[]>([]);
   const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTap = useRef<number>(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -254,6 +258,29 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
       handleFirestoreError(err, OperationType.CREATE, 'reelComments');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteComment = async () => {
+    if (!commentToDelete || !auth.currentUser || isDeletingComment) return;
+    
+    setIsDeletingComment(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete comment
+      batch.delete(doc(db, 'reelComments', commentToDelete));
+      
+      // Update reel comment count
+      const reelRef = doc(db, 'reels', reel.id);
+      batch.update(reelRef, { commentsCount: increment(-1) });
+      
+      await batch.commit();
+      setCommentToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `reelComments/${commentToDelete}`);
+    } finally {
+      setIsDeletingComment(false);
     }
   };
 
@@ -530,19 +557,25 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
               >
                 {reel.authorName}
               </h4>
-              {!isFollowing && reel.authorId !== auth.currentUser?.uid && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.9, rotate: -5 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleFollow();
-                  }}
-                  className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-[10px] font-black uppercase tracking-widest rounded-full border border-white/20 transition-all shadow-[0_0_15px_rgba(99,102,241,0.5)]"
-                >
-                  Follow
-                </motion.button>
-              )}
+              <AnimatePresence>
+                {isFollowing === false && reel.authorId !== auth.currentUser?.uid && (
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.8, width: 0 }}
+                    animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                    exit={{ opacity: 0, scale: 0.5, width: 0, padding: 0, margin: 0 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.9, rotate: -5 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFollow();
+                    }}
+                    className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-[10px] font-black uppercase tracking-widest rounded-full border border-white/20 transition-all shadow-[0_0_15px_rgba(99,102,241,0.5)] whitespace-nowrap overflow-hidden"
+                  >
+                    Follow
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
             
             <div className="flex items-center gap-2.5 bg-black/30 backdrop-blur-xl rounded-full px-2 py-1 w-fit border border-white/10 shadow-2xl mt-1">
@@ -592,7 +625,7 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="relative w-full max-w-md bg-white dark:bg-zinc-900 rounded-t-[2.5rem] flex flex-col shadow-2xl h-[70vh] overflow-hidden"
+                className="relative w-full max-w-md bg-white dark:bg-zinc-900 rounded-t-[2.5rem] flex flex-col shadow-2xl h-[80dvh] max-h-[800px] overflow-hidden"
               >
                 <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                   <h3 className="font-outfit font-black text-zinc-900 dark:text-zinc-50 tracking-tight text-lg">Comments</h3>
@@ -645,11 +678,20 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
                                 onClick={() => {
                                   setReplyingTo({ id: comment.id, username: comment.authorName });
                                   setNewComment(`@${comment.authorName} `);
+                                  setTimeout(() => inputRef.current?.focus(), 0);
                                 }}
                                 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-600"
                               >
                                 Reply
                               </button>
+                              {comment.authorId === auth.currentUser?.uid && (
+                                <button
+                                  onClick={() => setCommentToDelete(comment.id)}
+                                  className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-red-600"
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -657,7 +699,7 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
                         {/* Replies */}
                         {comments.filter(c => c.replyToId === comment.id).length > 0 && (
                           <div className="ml-12 space-y-4 mt-2">
-                            {comments.filter(c => c.replyToId === comment.id).map(reply => (
+                            {comments.filter(c => c.replyToId === comment.id).reverse().map(reply => (
                               <div key={reply.id} className="flex gap-3 group/reply">
                                 <UserAvatar userId={reply.authorId} size={28} className="ring-2 ring-zinc-100 dark:ring-zinc-800" />
                                 <div className="flex-1">
@@ -687,11 +729,20 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
                                       onClick={() => {
                                         setReplyingTo({ id: comment.id, username: reply.authorName });
                                         setNewComment(`@${reply.authorName} `);
+                                        setTimeout(() => inputRef.current?.focus(), 0);
                                       }}
                                       className="text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-600"
                                     >
                                       Reply
                                     </button>
+                                    {reply.authorId === auth.currentUser?.uid && (
+                                      <button
+                                        onClick={() => setCommentToDelete(reply.id)}
+                                        className="text-[9px] font-black uppercase tracking-widest text-red-400 hover:text-red-600"
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -721,6 +772,7 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
                   )}
                   <div className="flex items-center gap-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl px-4 py-3 border-none">
                     <input
+                      ref={inputRef}
                       type="text"
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}

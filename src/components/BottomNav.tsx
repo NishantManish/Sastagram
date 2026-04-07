@@ -15,6 +15,7 @@ interface BottomNavProps {
 const baseTabs = [
   { id: 'feed', icon: Home, label: 'Home' },
   { id: 'search', icon: Search, label: 'Search' },
+  { id: 'messages', icon: Send, label: 'Messages' },
   { id: 'reels', icon: ({ className }: { className?: string }) => (
     <div className={cn("relative flex items-center justify-center", className)}>
       <div className="w-5 h-5 border-2 border-current rounded-md flex items-center justify-center">
@@ -23,7 +24,6 @@ const baseTabs = [
       <div className="absolute -top-1 -right-1 w-2 h-2 bg-current rounded-full" />
     </div>
   ), label: 'Reels' },
-  { id: 'messages', icon: Send, label: 'Messages' },
   { id: 'profile', icon: User, label: 'Profile' },
 ] as const;
 

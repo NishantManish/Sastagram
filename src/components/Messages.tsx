@@ -9,6 +9,7 @@ import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
 import ReelDetailsModal from './ReelDetailsModal';
 import { useBlocks } from '../services/blockService';
+import { cacheService } from '../services/cacheService';
 import { motion, AnimatePresence } from 'motion/react';
 import { deleteDoc } from 'firebase/firestore';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
@@ -17,14 +18,15 @@ import { deleteFromCloudinary } from '../utils/media';
 import ConfirmationModal from './ConfirmationModal';
 
 export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: () => void, onNavigate?: (tab: any) => void, onTagClick?: (tag: string) => void }) {
-  const [chats, setChats] = useState<Chat[]>([]);
+  const cache = cacheService.getMessagesCache();
+  const [chats, setChats] = useState<Chat[]>(cache.chats);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(true);
-  const [chatUsers, setChatUsers] = useState<Record<string, User>>({});
+  const [loading, setLoading] = useState(cache.chats.length === 0);
+  const [chatUsers, setChatUsers] = useState<Record<string, User>>(cache.chatUsers);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedReel, setSelectedReel] = useState<Reel | null>(null);
@@ -77,6 +79,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       })) as Chat[];
       
       setChats(fetchedChats);
+      cacheService.setMessagesCache({ chats: fetchedChats });
       if (fetchedChats.length === 0) {
         setLoading(false);
       }
@@ -121,7 +124,11 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         }));
         
         if (Object.keys(usersData).length > 0) {
-          setChatUsers(prev => ({ ...prev, ...usersData }));
+          setChatUsers(prev => {
+            const next = { ...prev, ...usersData };
+            cacheService.setMessagesCache({ chatUsers: next });
+            return next;
+          });
         }
       } catch (error) {
         console.error('Error fetching chat users:', error);

@@ -231,7 +231,7 @@ service cloud.firestore {
     }
 
     function isValidComment() {
-      return hasOnlyAllowedFields(['postId', 'authorId', 'authorName', 'authorPhoto', 'text', 'likesCount', 'createdAt']) &&
+      return hasOnlyAllowedFields(['postId', 'authorId', 'authorName', 'authorPhoto', 'text', 'likesCount', 'createdAt', 'replyToId']) &&
              hasRequiredFields(['postId', 'authorId', 'authorName', 'text', 'createdAt']) &&
              validStringLength('postId', 1, 128) &&
              validStringLength('authorId', 1, 128) &&
@@ -239,6 +239,7 @@ service cloud.firestore {
              isValidOptionalString('authorPhoto', 0, 2000) &&
              validStringLength('text', 1, 500) &&
              isValidOptionalNumber('likesCount') &&
+             isValidOptionalString('replyToId', 0, 128) &&
              request.resource.data.createdAt is timestamp;
     }
 
@@ -443,7 +444,7 @@ service cloud.firestore {
     }
 
     function isValidReelComment() {
-      return hasOnlyAllowedFields(['reelId', 'authorId', 'authorName', 'authorPhoto', 'text', 'likesCount', 'createdAt']) &&
+      return hasOnlyAllowedFields(['reelId', 'authorId', 'authorName', 'authorPhoto', 'text', 'likesCount', 'createdAt', 'replyToId']) &&
              hasRequiredFields(['reelId', 'authorId', 'authorName', 'text', 'createdAt']) &&
              validStringLength('reelId', 1, 128) &&
              validStringLength('authorId', 1, 128) &&
@@ -451,6 +452,7 @@ service cloud.firestore {
              isValidOptionalString('authorPhoto', 0, 2000) &&
              validStringLength('text', 1, 500) &&
              isValidOptionalNumber('likesCount') &&
+             isValidOptionalString('replyToId', 0, 128) &&
              request.resource.data.createdAt is timestamp;
     }
 
@@ -577,6 +579,7 @@ service cloud.firestore {
                        isUnchanged('authorName') &&
                        isUnchanged('authorPhoto') &&
                        isUnchanged('createdAt') &&
+                       isUnchanged('replyToId') &&
                        isUnchanged('likesCount'))
                       ||
                       // Anyone updating likesCount
@@ -587,6 +590,7 @@ service cloud.firestore {
                        isUnchanged('authorPhoto') &&
                        isUnchanged('text') &&
                        isUnchanged('createdAt') &&
+                       isUnchanged('replyToId') &&
                        math.abs(request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0)) == 1 &&
                        (
                          (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
@@ -708,13 +712,13 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidReelComment() && request.resource.data.authorId == request.auth.uid;
       allow update: if isAuthenticated() && isValidReelComment() && (
-        (resource.data.authorId == request.auth.uid && isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('createdAt')) ||
-        (isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('authorName') && isUnchanged('authorPhoto') && isUnchanged('text') && isUnchanged('createdAt') &&
+        (resource.data.authorId == request.auth.uid && isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('createdAt') && isUnchanged('replyToId')) ||
+        (isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('authorName') && isUnchanged('authorPhoto') && isUnchanged('text') && isUnchanged('createdAt') && isUnchanged('replyToId') &&
          (
-           (request.resource.data.likesCount == resource.data.likesCount + 1 &&
+           (request.resource.data.get('likesCount', 0) == resource.data.get('likesCount', 0) + 1 &&
             !exists(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) &&
             getAfter(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) != null) ||
-           (request.resource.data.likesCount == resource.data.likesCount - 1 &&
+           (request.resource.data.get('likesCount', 0) == resource.data.get('likesCount', 0) - 1 &&
             exists(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) &&
             getAfter(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) == null)
          )) ||

@@ -865,7 +865,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                 {/* Replies */}
                 {comments.filter(c => c.replyToId === comment.id).length > 0 && (
                   <div className="ml-11 space-y-3 mt-1">
-                    {comments.filter(c => c.replyToId === comment.id).map(reply => (
+                    {comments.filter(c => c.replyToId === comment.id).reverse().map(reply => (
                       <div key={reply.id} className="flex gap-3 group/reply">
                         <button 
                           onClick={() => {

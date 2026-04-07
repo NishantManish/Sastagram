@@ -26,6 +26,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
   const [messagesViewKey, setMessagesViewKey] = useState(0);
+  const [reelsViewKey, setReelsViewKey] = useState(0);
   const [createInitialType, setCreateInitialType] = useState<'post' | 'story'>('post');
   const [initialSearchQuery, setInitialSearchQuery] = useState('');
   const [initialPostId, setInitialPostId] = useState<string | null>(null);
@@ -249,7 +250,7 @@ export default function App() {
             />
           )}
           {activeTab === 'search' && <Search onNavigate={handleNavigate} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
-          {activeTab === 'reels' && <Reels onNavigate={handleNavigate} />}
+          {activeTab === 'reels' && <Reels key={`reels-${reelsViewKey}`} onNavigate={handleNavigate} />}
           {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
           {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
           {activeTab === 'profile' && <Profile userId={selectedUserId} onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
@@ -274,6 +275,8 @@ export default function App() {
                 feedRef.current?.scrollToTop();
               } else if (tab === 'messages' && activeTab === 'messages') {
                 setMessagesViewKey(prev => prev + 1);
+              } else if (tab === 'reels' && activeTab === 'reels') {
+                setReelsViewKey(prev => prev + 1);
               } else {
                 handleNavigate(tab);
               }
