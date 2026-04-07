@@ -42,6 +42,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
   const [editingText, setEditingText] = useState('');
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -204,6 +205,8 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         ...doc.data()
       })) as Comment[];
       setComments(fetchedComments);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `posts/${post.id}/comments`);
     });
 
     return () => unsubscribe();
@@ -360,10 +363,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
         authorName: auth.currentUser.displayName || 'Anonymous',
         authorPhoto: auth.currentUser.photoURL || '',
         text: newComment.trim(),
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        replyToId: replyingTo ? replyingTo.id : null
       });
 
-      if (post.authorId !== auth.currentUser.uid) {
+      if (post.authorId !== auth.currentUser.uid && !replyingTo) {
         const notificationRef = doc(collection(db, 'notifications'));
         batch.set(notificationRef, {
           userId: post.authorId,
@@ -382,6 +386,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
 
       await batch.commit();
       setNewComment('');
+      setReplyingTo(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `posts/${post.id}/comments`);
     } finally {
@@ -744,106 +749,236 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
             )}
 
             {/* Actual Comments */}
-            {comments.map((comment, index) => (
-              <div key={`${comment.id}-${index}`} className="flex gap-3 group/comment">
-                <button 
-                  onClick={() => {
-                    onUserClick?.(comment.authorId);
-                    onClose();
-                  }}
-                  className="hover:opacity-80 transition-opacity"
-                >
-                  <UserAvatar 
-                    userId={comment.authorId} 
-                    size={32} 
-                    fallbackPhoto={comment.authorPhoto} 
-                    fallbackName={comment.authorName} 
-                  />
-                </button>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
+            {comments.filter(c => !c.replyToId).map((comment, index) => (
+              <div key={`${comment.id}-${index}`} className="flex flex-col gap-3">
+                <div className="flex gap-3 group/comment">
+                  <button 
+                    onClick={() => {
+                      onUserClick?.(comment.authorId);
+                      onClose();
+                    }}
+                    className="hover:opacity-80 transition-opacity"
+                  >
+                    <UserAvatar 
+                      userId={comment.authorId} 
+                      size={32} 
+                      fallbackPhoto={comment.authorPhoto} 
+                      fallbackName={comment.authorName} 
+                    />
+                  </button>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <button 
+                          onClick={() => {
+                            onUserClick?.(comment.authorId);
+                            onClose();
+                          }}
+                          className="font-semibold text-sm text-zinc-900 mr-2 hover:underline"
+                        >
+                          {comment.authorName}
+                        </button>
+                        {editingCommentId === comment.id ? (
+                          <div className="mt-1 flex flex-col gap-2">
+                            <textarea
+                              autoFocus
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              className="w-full p-2 text-sm border border-zinc-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+                              rows={2}
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => setEditingCommentId(null)}
+                                className="px-3 py-1 text-xs font-medium text-zinc-500 hover:text-zinc-700"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handleUpdateComment(comment.id)}
+                                className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-zinc-800">{comment.text}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {editingCommentId !== comment.id && (
+                          <div className="flex items-center">
+                            {auth.currentUser?.uid === comment.authorId && (
+                              <button 
+                                onClick={() => {
+                                  setEditingCommentId(comment.id);
+                                  setEditingText(comment.text);
+                                }}
+                                className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {(auth.currentUser?.uid === comment.authorId || auth.currentUser?.uid === post.authorId) && (
+                              <button 
+                                onClick={() => setCommentToDelete(comment.id)}
+                                className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <button 
+                          onClick={() => handleLikeComment(comment.id)}
+                          disabled={processingLikes.has(comment.id)}
+                          className={`transition-colors p-1 ${likedComments.has(comment.id) ? 'text-red-500' : 'text-zinc-400 hover:text-red-500'} ${processingLikes.has(comment.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <Heart className={`w-4 h-4 ${likedComments.has(comment.id) ? 'fill-current' : ''}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <div className="text-xs text-zinc-500">
+                        {comment.createdAt?.toDate ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                      </div>
+                      {comment.likesCount && comment.likesCount > 0 && (
+                        <div className="text-xs font-semibold text-zinc-500">
+                          {comment.likesCount} {comment.likesCount === 1 ? 'like' : 'likes'}
+                        </div>
+                      )}
                       <button 
                         onClick={() => {
-                          onUserClick?.(comment.authorId);
-                          onClose();
+                          setReplyingTo({ id: comment.id, username: comment.authorName });
+                          setNewComment(`@${comment.authorName} `);
+                          document.getElementById('comment-input')?.focus();
                         }}
-                        className="font-semibold text-sm text-zinc-900 mr-2 hover:underline"
+                        className="text-xs font-semibold text-zinc-500 hover:text-zinc-700"
                       >
-                        {comment.authorName}
+                        Reply
                       </button>
-                      {editingCommentId === comment.id ? (
-                        <div className="mt-1 flex flex-col gap-2">
-                          <textarea
-                            autoFocus
-                            value={editingText}
-                            onChange={(e) => setEditingText(e.target.value)}
-                            className="w-full p-2 text-sm border border-zinc-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
-                            rows={2}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Replies */}
+                {comments.filter(c => c.replyToId === comment.id).length > 0 && (
+                  <div className="ml-11 space-y-3 mt-1">
+                    {comments.filter(c => c.replyToId === comment.id).map(reply => (
+                      <div key={reply.id} className="flex gap-3 group/reply">
+                        <button 
+                          onClick={() => {
+                            onUserClick?.(reply.authorId);
+                            onClose();
+                          }}
+                          className="hover:opacity-80 transition-opacity"
+                        >
+                          <UserAvatar 
+                            userId={reply.authorId} 
+                            size={24} 
+                            fallbackPhoto={reply.authorPhoto} 
+                            fallbackName={reply.authorName} 
                           />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => setEditingCommentId(null)}
-                              className="px-3 py-1 text-xs font-medium text-zinc-500 hover:text-zinc-700"
+                        </button>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <button 
+                                onClick={() => {
+                                  onUserClick?.(reply.authorId);
+                                  onClose();
+                                }}
+                                className="font-semibold text-xs text-zinc-900 mr-2 hover:underline"
+                              >
+                                {reply.authorName}
+                              </button>
+                              {editingCommentId === reply.id ? (
+                                <div className="mt-1 flex flex-col gap-2">
+                                  <textarea
+                                    autoFocus
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    className="w-full p-2 text-xs border border-zinc-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+                                    rows={2}
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      onClick={() => setEditingCommentId(null)}
+                                      className="px-3 py-1 text-[10px] font-medium text-zinc-500 hover:text-zinc-700"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => handleUpdateComment(reply.id)}
+                                      className="px-3 py-1 text-[10px] font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-zinc-800">{reply.text}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {editingCommentId !== reply.id && (
+                                <div className="flex items-center">
+                                  {auth.currentUser?.uid === reply.authorId && (
+                                    <button 
+                                      onClick={() => {
+                                        setEditingCommentId(reply.id);
+                                        setEditingText(reply.text);
+                                      }}
+                                      className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {(auth.currentUser?.uid === reply.authorId || auth.currentUser?.uid === post.authorId) && (
+                                    <button 
+                                      onClick={() => setCommentToDelete(reply.id)}
+                                      className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                              <button 
+                                onClick={() => handleLikeComment(reply.id)}
+                                disabled={processingLikes.has(reply.id)}
+                                className={`transition-colors p-1 ${likedComments.has(reply.id) ? 'text-red-500' : 'text-zinc-400 hover:text-red-500'} ${processingLikes.has(reply.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
+                                <Heart className={`w-3 h-3 ${likedComments.has(reply.id) ? 'fill-current' : ''}`} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <div className="text-[10px] text-zinc-500">
+                              {reply.createdAt?.toDate ? formatDistanceToNow(reply.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                            </div>
+                            {reply.likesCount && reply.likesCount > 0 && (
+                              <div className="text-[10px] font-semibold text-zinc-500">
+                                {reply.likesCount} {reply.likesCount === 1 ? 'like' : 'likes'}
+                              </div>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setReplyingTo({ id: comment.id, username: reply.authorName });
+                                setNewComment(`@${reply.authorName} `);
+                                document.getElementById('comment-input')?.focus();
+                              }}
+                              className="text-[10px] font-semibold text-zinc-500 hover:text-zinc-700"
                             >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleUpdateComment(comment.id)}
-                              className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                            >
-                              Save
+                              Reply
                             </button>
                           </div>
                         </div>
-                      ) : (
-                        <span className="text-sm text-zinc-800">{comment.text}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {editingCommentId !== comment.id && (
-                        <div className="flex items-center">
-                          {auth.currentUser?.uid === comment.authorId && (
-                            <button 
-                              onClick={() => {
-                                setEditingCommentId(comment.id);
-                                setEditingText(comment.text);
-                              }}
-                              className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {(auth.currentUser?.uid === comment.authorId || auth.currentUser?.uid === post.authorId) && (
-                            <button 
-                              onClick={() => setCommentToDelete(comment.id)}
-                              className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <button 
-                        onClick={() => handleLikeComment(comment.id)}
-                        disabled={processingLikes.has(comment.id)}
-                        className={`transition-colors p-1 ${likedComments.has(comment.id) ? 'text-red-500' : 'text-zinc-400 hover:text-red-500'} ${processingLikes.has(comment.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <Heart className={`w-4 h-4 ${likedComments.has(comment.id) ? 'fill-current' : ''}`} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <div className="text-xs text-zinc-500">
-                      {comment.createdAt?.toDate ? formatDistanceToNow(comment.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
-                    </div>
-                    {comment.likesCount && comment.likesCount > 0 && (
-                      <div className="text-xs font-semibold text-zinc-500">
-                        {comment.likesCount} {comment.likesCount === 1 ? 'like' : 'likes'}
                       </div>
-                    )}
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -886,7 +1021,22 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
           </div>
 
           {/* Comment Input */}
-          <div className="p-4 border-t border-zinc-200">
+          <div className="p-4 border-t border-zinc-200 flex flex-col gap-2">
+            {replyingTo && (
+              <div className="flex items-center justify-between px-2 text-xs text-zinc-500 bg-zinc-50 rounded-md py-1">
+                <span>Replying to <span className="font-bold">@{replyingTo.username}</span></span>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setReplyingTo(null);
+                    setNewComment('');
+                  }}
+                  className="p-1 hover:bg-zinc-200 rounded-full"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSubmitComment} className="flex items-center gap-2">
               <input
                 id="comment-input"

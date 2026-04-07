@@ -122,12 +122,20 @@ export default function HighlightViewerModal({ highlight, onClose, onEdit, isOwn
     }, 200);
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
+  const handlePointerUp = async (e: React.PointerEvent) => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
     const duration = Date.now() - pointerDownTime.current;
     
     setIsPaused(false);
-    if (videoRef.current) videoRef.current.play();
+    if (videoRef.current) {
+      try {
+        await videoRef.current.play();
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Video play interrupted:', error);
+        }
+      }
+    }
     
     if (duration < 200) {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -141,10 +149,18 @@ export default function HighlightViewerModal({ highlight, onClose, onEdit, isOwn
     }
   };
 
-  const handlePointerLeave = () => {
+  const handlePointerLeave = async () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
     setIsPaused(false);
-    if (videoRef.current) videoRef.current.play();
+    if (videoRef.current) {
+      try {
+        await videoRef.current.play();
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Video play interrupted:', error);
+        }
+      }
+    }
   };
 
   const hasUpdatedView = useRef(false);

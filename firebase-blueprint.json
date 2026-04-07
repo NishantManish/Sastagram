@@ -194,6 +194,61 @@
       },
       "required": ["commentId", "postId", "userId", "createdAt"]
     },
+    "Reel": {
+      "title": "Reel",
+      "description": "A short video content similar to Reels or TikTok.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "description": "The UID of the user who created the reel." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "authorPhoto": { "type": "string", "description": "The profile picture URL of the author." },
+        "videoUrl": { "type": "string", "description": "The URL of the reel video." },
+        "caption": { "type": "string", "description": "The caption for the reel." },
+        "likesCount": { "type": "number", "description": "The number of likes the reel has received." },
+        "commentsCount": { "type": "number", "description": "The number of comments on the reel." },
+        "viewsCount": { "type": "number", "description": "The number of views the reel has received." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the reel was created." }
+      },
+      "required": ["authorId", "authorName", "videoUrl", "likesCount", "commentsCount", "createdAt"]
+    },
+    "ReelCommentLike": {
+      "title": "ReelCommentLike",
+      "description": "A record of a user liking a reel comment.",
+      "type": "object",
+      "properties": {
+        "commentId": { "type": "string", "description": "The ID of the liked reel comment." },
+        "reelId": { "type": "string", "description": "The ID of the reel the comment belongs to." },
+        "userId": { "type": "string", "description": "The ID of the user who liked the comment." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the like was created." }
+      },
+      "required": ["commentId", "reelId", "userId", "createdAt"]
+    },
+    "ReelLike": {
+      "title": "ReelLike",
+      "description": "A record of a user liking a reel.",
+      "type": "object",
+      "properties": {
+        "reelId": { "type": "string", "description": "The ID of the liked reel." },
+        "userId": { "type": "string", "description": "The ID of the user who liked the reel." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the like was created." }
+      },
+      "required": ["reelId", "userId", "createdAt"]
+    },
+    "ReelComment": {
+      "title": "ReelComment",
+      "description": "A comment on a reel.",
+      "type": "object",
+      "properties": {
+        "reelId": { "type": "string", "description": "The ID of the reel being commented on." },
+        "authorId": { "type": "string", "description": "The ID of the user who wrote the comment." },
+        "authorName": { "type": "string", "description": "The display name of the author." },
+        "authorPhoto": { "type": "string", "description": "The profile picture URL of the author." },
+        "text": { "type": "string", "description": "The text content of the comment." },
+        "likesCount": { "type": "number", "description": "The number of likes the comment has received." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the comment was created." }
+      },
+      "required": ["reelId", "authorId", "authorName", "text", "createdAt"]
+    }
   },
   "firestore": {
     "/users/{userId}": {
@@ -251,6 +306,22 @@
     "/highlights/{highlightId}": {
       "schema": { "$ref": "#/entities/Highlight" },
       "description": "Stores user profile highlights."
+    },
+    "/reels/{reelId}": {
+      "schema": { "$ref": "#/entities/Reel" },
+      "description": "Stores short video reels."
+    },
+    "/reelLikes/{likeId}": {
+      "schema": { "$ref": "#/entities/ReelLike" },
+      "description": "Stores like records for reels."
+    },
+    "/reelComments/{commentId}": {
+      "schema": { "$ref": "#/entities/ReelComment" },
+      "description": "Stores comments on reels."
+    },
+    "/reelCommentLikes/{likeId}": {
+      "schema": { "$ref": "#/entities/ReelCommentLike" },
+      "description": "Stores like records for reel comments."
     }
   }
 }

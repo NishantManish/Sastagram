@@ -1,24 +1,33 @@
-import { Home, PlusSquare, User, Search, Send, ShieldAlert } from 'lucide-react';
+import { Home, PlusSquare, User, Search, Send, ShieldAlert, Clapperboard } from 'lucide-react';
 import { cn } from '../utils';
 import { motion } from 'motion/react';
 
-export type TabType = 'feed' | 'search' | 'create' | 'notifications' | 'profile' | 'messages' | 'admin';
+export type TabType = 'feed' | 'search' | 'reels' | 'create' | 'notifications' | 'profile' | 'messages' | 'admin';
 
 interface BottomNavProps {
   activeTab: TabType;
   onChange: (tab: TabType) => void;
   unreadMessages?: number;
   isAdmin?: boolean;
+  isDark?: boolean;
 }
 
 const baseTabs = [
   { id: 'feed', icon: Home, label: 'Home' },
   { id: 'search', icon: Search, label: 'Search' },
+  { id: 'reels', icon: ({ className }: { className?: string }) => (
+    <div className={cn("relative flex items-center justify-center", className)}>
+      <div className="w-5 h-5 border-2 border-current rounded-md flex items-center justify-center">
+        <div className="w-0 h-0 border-t-[3px] border-t-transparent border-l-[5px] border-l-current border-b-[3px] border-b-transparent ml-0.5" />
+      </div>
+      <div className="absolute -top-1 -right-1 w-2 h-2 bg-current rounded-full" />
+    </div>
+  ), label: 'Reels' },
   { id: 'messages', icon: Send, label: 'Messages' },
   { id: 'profile', icon: User, label: 'Profile' },
 ] as const;
 
-export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isAdmin = false }: BottomNavProps) {
+export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isAdmin = false, isDark = false }: BottomNavProps) {
   const tabs = isAdmin 
     ? [...baseTabs, { id: 'admin', icon: ShieldAlert, label: 'Admin' }] 
     : baseTabs;
@@ -28,7 +37,12 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
       <motion.div 
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="bg-white/90 backdrop-blur-xl border border-zinc-200/50 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[2.5rem] px-2 py-1.5 flex items-center gap-1 max-w-md w-full pointer-events-auto"
+        className={cn(
+          "backdrop-blur-xl border shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[2.5rem] px-2 py-1.5 flex items-center gap-1 max-w-md w-full pointer-events-auto transition-colors duration-500",
+          isDark 
+            ? "bg-zinc-900/80 border-zinc-800 text-white" 
+            : "bg-white/90 border-zinc-200/50 text-zinc-900"
+        )}
       >
         {tabs.map((tab, idx) => {
           const isActive = activeTab === tab.id;
@@ -43,7 +57,10 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
               {isActive && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute inset-x-1 inset-y-1 bg-indigo-50 rounded-[1.5rem] -z-10"
+                  className={cn(
+                    "absolute inset-x-1 inset-y-1 rounded-[1.5rem] -z-10",
+                    isDark ? "bg-white/10" : "bg-indigo-50"
+                  )}
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                 />
               )}
@@ -56,7 +73,9 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
                 whileTap={{ scale: 0.9 }}
                 className={cn(
                   "transition-colors duration-300",
-                  isActive ? "text-indigo-600" : "text-zinc-400 group-hover:text-zinc-600"
+                  isActive 
+                    ? (isDark ? "text-white" : "text-indigo-600") 
+                    : (isDark ? "text-zinc-500 group-hover:text-zinc-300" : "text-zinc-400 group-hover:text-zinc-600")
                 )}
               >
                 <Icon 

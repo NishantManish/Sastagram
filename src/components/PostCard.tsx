@@ -144,16 +144,26 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     const video = videoRef.current;
     if (!video) return;
 
+    let isMounted = true;
+
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
+      async (entries) => {
+        for (const entry of entries) {
           if (entry.isIntersecting) {
-            video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+            try {
+              await video.play();
+              if (isMounted) setIsPlaying(true);
+            } catch (error) {
+              if (isMounted && error instanceof Error && error.name !== 'AbortError') {
+                console.error('Video play interrupted:', error);
+              }
+              if (isMounted) setIsPlaying(false);
+            }
           } else {
             video.pause();
-            setIsPlaying(false);
+            if (isMounted) setIsPlaying(false);
           }
-        });
+        }
       },
       { threshold: 0.6 }
     );
@@ -161,7 +171,9 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     observer.observe(video);
 
     return () => {
+      isMounted = false;
       observer.unobserve(video);
+      video.pause();
     };
   }, []);
 
@@ -173,14 +185,22 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     }
   };
 
-  const togglePlay = (e: React.MouseEvent) => {
+  const togglePlay = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
         setIsPlaying(false);
       } else {
-        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        try {
+          await videoRef.current.play();
+          setIsPlaying(true);
+        } catch (error) {
+          if (error instanceof Error && error.name !== 'AbortError') {
+            console.error('Video play interrupted:', error);
+          }
+          setIsPlaying(false);
+        }
       }
     }
   };

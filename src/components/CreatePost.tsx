@@ -3,7 +3,7 @@ import { addDoc, collection, serverTimestamp, Timestamp, writeBatch, doc } from 
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
-import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight, GripVertical, Maximize, RectangleHorizontal, RectangleVertical } from 'lucide-react';
+import { ImagePlus, Loader2, Upload, Camera, Layout, X, Video, ChevronLeft, ChevronRight, GripVertical, Maximize, RectangleHorizontal, RectangleVertical, Clapperboard } from 'lucide-react';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import ZoomableMedia from './ZoomableMedia';
 import Cropper, { Area, Point } from 'react-easy-crop';
@@ -15,7 +15,7 @@ interface CreatePostProps {
   initialType?: UploadType;
 }
 
-type UploadType = 'post' | 'story';
+type UploadType = 'post' | 'story' | 'reel';
 
 interface MediaFile {
   file: File;
@@ -93,6 +93,12 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
       if (uploadType === 'story' && validFiles.length > 1) {
         setMediaFiles([validFiles[0]]);
         setError('Only one media file is allowed for stories.');
+      } else if (uploadType === 'reel' && validFiles.length > 1) {
+        setMediaFiles([validFiles[0]]);
+        setError('Only one video is allowed for reels.');
+      } else if (uploadType === 'reel' && validFiles[0].type !== 'video') {
+        setError('Please select a video for your reel.');
+        if (fileInputRef.current) fileInputRef.current.value = '';
       } else {
         setMediaFiles(prev => [...prev, ...validFiles].slice(0, 10)); // Max 10 files
         setError(null);
@@ -186,6 +192,26 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
           handleFirestoreError(err, OperationType.CREATE, 'posts');
           throw err;
         }
+      } else if (uploadType === 'reel') {
+        try {
+          await addDoc(collection(db, 'reels'), {
+            authorId: auth.currentUser.uid,
+            authorName: auth.currentUser.displayName || 'Anonymous',
+            authorPhoto: auth.currentUser.photoURL || '',
+            videoUrl: uploadedUrls[0].url,
+            caption: caption.trim(),
+            likesCount: 0,
+            commentsCount: 0,
+            viewsCount: 0,
+            createdAt: serverTimestamp(),
+          });
+        } catch (err) {
+          for (const media of uploadedUrls) {
+            await deleteFromCloudinary(media.url).catch(console.error);
+          }
+          handleFirestoreError(err, OperationType.CREATE, 'reels');
+          throw err;
+        }
       } else {
         try {
           const expiresAt = new Date();
@@ -263,6 +289,7 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
 
   const getCurrentAspect = () => {
     if (uploadType === 'story') return 9/16;
+    if (uploadType === 'reel') return 9/16;
     switch (aspectRatioMode) {
       case 'square': return 1;
       case 'portrait': return 4/5;
@@ -307,6 +334,15 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
           >
             <Camera className="w-4 h-4" />
             Story
+          </button>
+          <button
+            onClick={() => handleTabSwitch('reel')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+              uploadType === 'reel' ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}
+          >
+            <Clapperboard className="w-4 h-4" />
+            Reel
           </button>
         </div>
       </div>
@@ -474,10 +510,10 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
             {loading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                {uploadType === 'post' ? 'Sharing post...' : 'Uploading story...'}
+                {uploadType === 'post' ? 'Sharing post...' : uploadType === 'reel' ? 'Sharing reel...' : 'Uploading story...'}
               </>
             ) : (
-              uploadType === 'post' ? 'Share Post' : 'Upload Story'
+              uploadType === 'post' ? 'Share Post' : uploadType === 'reel' ? 'Share Reel' : 'Upload Story'
             )}
           </button>
         </motion.form>

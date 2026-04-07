@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, User } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
@@ -87,6 +88,8 @@ export default function MessageNotification({ onNavigate, activeTab }: MessageNo
           }
         }
       });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'chats');
     });
 
     return () => unsubscribe();

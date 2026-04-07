@@ -3,9 +3,10 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, del
 import { signOut, deleteUser } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
-import { Post, User, Highlight, Story, Message } from '../types';
-import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle, Plus, UserCheck, Link, QrCode, ChevronDown, Mail } from 'lucide-react';
+import { Post, User, Highlight, Story, Message, Reel } from '../types';
+import { Menu, Grid3X3, Camera, Edit2, UserPlus, UserMinus, ArrowLeft, ShieldAlert, ShieldCheck, MoreVertical, LogOut, Trash2, Bookmark, Heart, Settings, Share2, MessageCircle, Plus, UserCheck, Link, QrCode, ChevronDown, Mail, Clapperboard } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
+import ReelDetailsModal from './ReelDetailsModal';
 import EditProfileModal from './EditProfileModal';
 import FollowListModal from './FollowListModal';
 import CreateHighlightModal from './CreateHighlightModal';
@@ -22,15 +23,16 @@ import ConfirmationModal from './ConfirmationModal';
 import ShareModal from './ShareModal';
 
 interface ProfileProps {
-  userId?: string;
+  userId?: string | null;
   onBack?: () => void;
-  onNavigate?: (tab: 'feed' | 'search' | 'create' | 'notifications' | 'profile' | 'messages') => void;
+  onNavigate?: (tab: any, initialType?: any) => void;
   onTagClick?: (tag: string) => void;
   onSettingsToggle?: (isOpen: boolean) => void;
 }
 
 export default function Profile({ userId, onBack, onNavigate, onTagClick, onSettingsToggle }: ProfileProps) {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [reels, setReels] = useState<Reel[]>([]);
   const [taggedPosts, setTaggedPosts] = useState<Post[]>([]);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,13 +42,16 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   const [isMessagingLoading, setIsMessagingLoading] = useState(false);
   
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedReel, setSelectedReel] = useState<Reel | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [followModalType, setFollowModalType] = useState<'followers' | 'following' | null>(null);
   const [viewedUserId, setViewedUserId] = useState<string | null>(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+  const [reelToDelete, setReelToDelete] = useState<Reel | null>(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [isDeletingReel, setIsDeletingReel] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
@@ -54,7 +59,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   useEffect(() => {
     onSettingsToggle?.(showSettingsPage);
   }, [showSettingsPage, onSettingsToggle]);
-  const [activeGridTab, setActiveGridTab] = useState<'posts' | 'tagged'>('posts');
+  const [activeGridTab, setActiveGridTab] = useState<'posts' | 'reels' | 'tagged'>('posts');
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
@@ -103,6 +108,15 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
         if (data.mediaUrls) {
           data.mediaUrls.forEach(m => mediaToDelete.push(m.url));
         }
+        batch.delete(d.ref);
+      });
+
+      // 2b. Reels & media
+      const reelsRef = collection(db, 'reels');
+      const reelsSnap = await getDocs(query(reelsRef, where('authorId', '==', uid)));
+      reelsSnap.docs.forEach(d => {
+        const data = d.data() as Reel;
+        if (data.videoUrl) mediaToDelete.push(data.videoUrl);
         batch.delete(d.ref);
       });
 
@@ -212,6 +226,8 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
       if (docSnap.exists()) {
         setUserProfile({ uid: docSnap.id, ...docSnap.data() } as User);
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${targetUserId}`);
     });
 
     // Fetch user highlights
@@ -227,7 +243,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
       })) as Highlight[];
       setHighlights(newHighlights);
     }, (error) => {
-      console.error('Error fetching highlights:', error);
+      handleFirestoreError(error, OperationType.LIST, 'highlights');
     });
 
     // Fetch user posts
@@ -248,8 +264,25 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
       if (error.message.includes('permission')) {
         setPosts([]);
       }
-      console.error('Error fetching user posts:', error);
+      handleFirestoreError(error, OperationType.LIST, 'posts');
       setLoading(false);
+    });
+
+    // Fetch user reels
+    const reelsQ = query(
+      collection(db, 'reels'),
+      where('authorId', '==', targetUserId),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribeReels = onSnapshot(reelsQ, (snapshot) => {
+      const newReels = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Reel[];
+      setReels(newReels);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'reels');
     });
 
     // Fetch tagged posts
@@ -267,7 +300,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
         })) as Post[];
         setTaggedPosts(newTaggedPosts);
       }, (error) => {
-        console.error('Error fetching tagged posts:', error);
+        handleFirestoreError(error, OperationType.LIST, 'posts');
       });
     }
 
@@ -275,6 +308,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
       unsubscribeUser();
       unsubscribeHighlights();
       unsubscribePosts();
+      unsubscribeReels();
       unsubscribeTagged();
     };
   }, [targetUserId, isOwnProfile, currentUser?.uid, userProfile?.username]);
@@ -287,12 +321,16 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
     const followRef = doc(db, 'follows', followId);
     const unsubscribeFollow = onSnapshot(followRef, (docSnap) => {
       setIsFollowing(docSnap.exists());
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `follows/${currentUser.uid}_${targetUserId}`);
     });
 
     const followedById = `${targetUserId}_${currentUser.uid}`;
     const followedByRef = doc(db, 'follows', followedById);
     const unsubscribeFollowedBy = onSnapshot(followedByRef, (docSnap) => {
       setIsFollowedBy(docSnap.exists());
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `follows/${targetUserId}_${currentUser.uid}`);
     });
 
     return () => {
@@ -764,6 +802,15 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
           <span className={`text-[7px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'posts' ? 'opacity-100' : 'opacity-0'}`}>Feed</span>
           {activeGridTab === 'posts' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
         </button>
+
+        <button 
+          onClick={() => setActiveGridTab('reels')}
+          className={`flex-1 py-3.5 flex flex-col items-center gap-1.5 transition-all ${activeGridTab === 'reels' ? 'text-zinc-900' : 'text-zinc-300 hover:text-zinc-400'}`}
+        >
+          <Clapperboard className="w-4 h-4" />
+          <span className={`text-[7px] uppercase tracking-[0.2em] font-black transition-opacity ${activeGridTab === 'reels' ? 'opacity-100' : 'opacity-0'}`}>Reels</span>
+          {activeGridTab === 'reels' && <motion.div layoutId="activeTab" className="absolute bottom-0 w-10 h-0.5 bg-zinc-900 rounded-full" />}
+        </button>
         
         <button 
           onClick={() => setActiveGridTab('tagged')}
@@ -791,17 +838,54 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
               <div key={`post-skeleton-${i}`} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
             ))}
           </div>
-        ) : (activeGridTab === 'posts' ? posts : taggedPosts).length === 0 ? (
+        ) : (activeGridTab === 'posts' ? posts : activeGridTab === 'reels' ? reels : taggedPosts).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
             <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
-              <Camera className="w-10 h-10 text-zinc-300" />
+              {activeGridTab === 'reels' ? <Clapperboard className="w-10 h-10 text-zinc-300" /> : <Camera className="w-10 h-10 text-zinc-300" />}
             </div>
             <p className="text-xl font-black text-zinc-900 mb-2">
-              {activeGridTab === 'posts' ? 'No Posts Yet' : 'No Tagged Posts'}
+              {activeGridTab === 'posts' ? 'No Posts Yet' : activeGridTab === 'reels' ? 'No Reels Yet' : 'No Tagged Posts'}
             </p>
             <p className="text-sm text-zinc-400 font-medium">
-              {activeGridTab === 'posts' ? 'Capture and share your first moment.' : 'When people tag you in posts, they will appear here.'}
+              {activeGridTab === 'posts' ? 'Capture and share your first moment.' : activeGridTab === 'reels' ? 'Share your first reel with the world.' : 'When people tag you in posts, they will appear here.'}
             </p>
+          </div>
+        ) : activeGridTab === 'reels' ? (
+          /* 3-Column Grid for Reels */
+          <div className="grid grid-cols-3 gap-1.5">
+            {reels.map((reel, index) => (
+              <motion.div 
+                key={`reel-${reel.id}-${index}`}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.03 }}
+                className="aspect-[9/16] bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl"
+                onClick={() => setSelectedReel(reel)}
+              >
+                <video 
+                  src={reel.videoUrl} 
+                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                  muted
+                  playsInline
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center text-white backdrop-blur-[4px]">
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-center gap-1">
+                      <Heart className="w-4 h-4 fill-white" />
+                      <span className="font-black text-[9px] tracking-widest uppercase">{(reel.likesCount || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <MessageCircle className="w-4 h-4 fill-white" />
+                      <span className="font-black text-[9px] tracking-widest uppercase">{(reel.commentsCount || 0).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[10px] font-bold">
+                  <Clapperboard className="w-3 h-3" />
+                  <span>{(reel.viewsCount || 0).toLocaleString()}</span>
+                </div>
+              </motion.div>
+            ))}
           </div>
         ) : (
           /* Standard 3-Column Grid for Posts and Tagged */
@@ -1145,6 +1229,26 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
           onClose={() => setIsShareModalOpen(false)}
           profile={userProfile}
         />
+        {selectedPost && (
+          <PostDetailsModal 
+            key="post-details"
+            post={selectedPost} 
+            onClose={() => setSelectedPost(null)} 
+            onUserClick={(uid) => {
+              setSelectedPost(null);
+              setViewedUserId(uid);
+            }}
+            onTagClick={onTagClick}
+          />
+        )}
+        {selectedReel && (
+          <ReelDetailsModal
+            key="reel-details"
+            reel={selectedReel}
+            onClose={() => setSelectedReel(null)}
+            onNavigate={onNavigate}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Send, Link, PlusCircle } from 'lucide-react';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore';
@@ -106,7 +107,8 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
       }
 
       const batch = writeBatch(db);
-      const lastMessageText = post ? 'Shared a post' : `Shared ${profile?.displayName}'s profile`;
+      const isReel = post && !post.mediaUrls && post.videoUrl;
+      const lastMessageText = post ? (isReel ? 'Shared a reel' : 'Shared a post') : `Shared ${profile?.displayName}'s profile`;
 
       if (!chatId) {
         const newChatRef = doc(collection(db, 'chats'));
@@ -135,15 +137,17 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
       const newMessageRef = doc(collection(db, `chats/${chatId}/messages`));
       
       if (post) {
+        const isReel = !post.mediaUrls && post.videoUrl;
         const currentMedia = post.mediaUrls && post.mediaUrls.length > currentMediaIndex 
           ? post.mediaUrls[currentMediaIndex] 
-          : { url: post.imageUrl || post.videoUrl || '', type: post.mediaType || 'image' };
+          : { url: post.imageUrl || post.videoUrl || '', type: post.mediaType || (isReel ? 'video' : 'image') };
 
         batch.set(newMessageRef, {
           chatId: chatId,
           senderId: auth.currentUser.uid,
           text: '',
-          sharedPostId: post.id,
+          sharedPostId: isReel ? '' : post.id,
+          sharedReelId: isReel ? post.id : '',
           sharedPostSlideIndex: currentMediaIndex,
           sharedPostPreviewUrl: currentMedia.url,
           sharedPostMediaType: currentMedia.type,
@@ -172,7 +176,12 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
   const handleCopyLink = () => {
     let url = '';
     if (post) {
-      url = `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`;
+      const isReel = !post.mediaUrls && post.videoUrl;
+      if (isReel) {
+        url = `${window.location.origin}/reel/${post.id}`;
+      } else {
+        url = `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`;
+      }
     } else if (profile) {
       url = `${window.location.origin}/profile/${profile.uid}`;
     }
@@ -187,10 +196,13 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
   const handleNativeShare = async () => {
     let shareData = {};
     if (post) {
+      const isReel = !post.mediaUrls && post.videoUrl;
       shareData = {
-        title: `${post.authorName}'s post on Sastagram`,
-        text: post.caption || 'Check out this post!',
-        url: `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`,
+        title: `${post.authorName}'s ${isReel ? 'reel' : 'post'} on Sastagram`,
+        text: post.caption || `Check out this ${isReel ? 'reel' : 'post'}!`,
+        url: isReel 
+          ? `${window.location.origin}/reel/${post.id}`
+          : `${window.location.origin}/post/${post.id}${currentMediaIndex > 0 ? `?slide=${currentMediaIndex}` : ''}`,
       };
     } else if (profile) {
       shareData = {
@@ -214,25 +226,27 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center p-4 bg-black/60 backdrop-blur-sm"
         >
-          <motion.div 
+            <motion.div 
             initial={{ opacity: 0, y: '100%' }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            className="bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
           >
-            <div className="p-4 border-b border-zinc-100 flex items-center justify-between">
-              <h3 className="font-bold text-lg text-zinc-900">Share {profile ? 'Profile' : 'Post'}</h3>
-              <button onClick={onClose} className="p-2 bg-zinc-100 rounded-full hover:bg-zinc-200 transition-colors">
+            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+              <h3 className="font-bold text-lg text-zinc-900 dark:text-white">
+                Share {profile ? 'Profile' : (post && !post.mediaUrls && post.videoUrl ? 'Reel' : 'Post')}
+              </h3>
+              <button onClick={onClose} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-zinc-500 dark:text-zinc-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -245,10 +259,10 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
                     disabled={sharingToStory}
                     className="flex flex-col items-center gap-2 shrink-0 disabled:opacity-50"
                   >
-                    <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                    <div className="w-14 h-14 rounded-full bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800">
                       <PlusCircle className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-medium text-zinc-700">Add to Story</span>
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Add to Story</span>
                   </button>
                 )}
                 
@@ -256,10 +270,10 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
                   onClick={handleCopyLink}
                   className="flex flex-col items-center gap-2 shrink-0"
                 >
-                  <div className="w-14 h-14 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-700 border border-zinc-200">
+                  <div className="w-14 h-14 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                     <Link className="w-6 h-6" />
                   </div>
-                  <span className="text-xs font-medium text-zinc-700">Copy Link</span>
+                  <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Copy Link</span>
                 </button>
 
                 {typeof navigator.share === 'function' && (
@@ -267,37 +281,37 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
                     onClick={handleNativeShare}
                     className="flex flex-col items-center gap-2 shrink-0"
                   >
-                    <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                    <div className="w-14 h-14 rounded-full bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800">
                       <Send className="w-6 h-6" />
                     </div>
-                    <span className="text-xs font-medium text-zinc-700">Share via...</span>
+                    <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Share via...</span>
                   </button>
                 )}
               </div>
 
               <div className="mt-2">
-                <h4 className="text-sm font-semibold text-zinc-900 mb-3 uppercase tracking-wider text-[10px]">Send to Followers</h4>
+                <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3 uppercase tracking-wider text-[10px]">Send to Followers</h4>
                 {loading ? (
                   <div className="flex justify-center py-4">
                     <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
                   </div>
                 ) : followers.length === 0 ? (
-                  <p className="text-sm text-zinc-500 text-center py-4">No followers yet to share with.</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-4">No followers yet to share with.</p>
                 ) : (
                   <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                     {followers.map((user, idx) => (
                       <div key={`${user.uid}-${idx}`} className="flex items-center justify-between group">
                         <div className="flex items-center gap-3">
-                          <UserAvatar userId={user.uid} size={40} className="border border-zinc-100" />
+                          <UserAvatar userId={user.uid} size={40} className="border border-zinc-100 dark:border-zinc-800" />
                           <div className="flex flex-col">
-                            <span className="font-bold text-zinc-900 text-sm">{user.displayName}</span>
-                            <span className="text-[10px] text-zinc-400 font-medium">@{user.username || 'user'}</span>
+                            <span className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">{user.displayName}</span>
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">@{user.username || 'user'}</span>
                           </div>
                         </div>
                         <button
                           onClick={() => handleShareToUser(user)}
                           disabled={sharingToUser === user.uid}
-                          className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-full transition-all active:scale-95 disabled:opacity-50 shadow-sm shadow-indigo-200"
+                          className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-full transition-all active:scale-95 disabled:opacity-50 shadow-sm shadow-indigo-200 dark:shadow-indigo-900/20"
                         >
                           {sharingToUser === user.uid ? 'Sending...' : 'Send'}
                         </button>
@@ -310,6 +324,7 @@ export default function ShareModal({ isOpen, onClose, post, profile, currentMedi
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { handleFirestoreError, OperationType } from './utils/firestore';
 import AuthScreen from './components/AuthScreen';
 import Feed, { FeedRef } from './components/Feed';
 import CreatePost from './components/CreatePost';
@@ -12,7 +13,8 @@ import Search from './components/Search';
 import Messages from './components/Messages';
 import MessageNotification from './components/MessageNotification';
 import AdminDashboard from './components/AdminDashboard';
-import { Send, ArrowLeft, Camera, Bell, PlusSquare } from 'lucide-react';
+import Reels from './components/Reels';
+import { Send, ArrowLeft, Camera, Bell, PlusSquare, Clapperboard } from 'lucide-react';
 import { cn } from './utils';
 import { useTheme } from './contexts/ThemeContext';
 
@@ -28,6 +30,7 @@ export default function App() {
   const [initialSearchQuery, setInitialSearchQuery] = useState('');
   const [initialPostId, setInitialPostId] = useState<string | null>(null);
   const [initialSlideIndex, setInitialSlideIndex] = useState(0);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [showHeader, setShowHeader] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -91,6 +94,8 @@ export default function App() {
     );
     const unsubscribeNotifications = onSnapshot(qNotifications, (snapshot) => {
       setUnreadNotifications(snapshot.size);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
     });
 
     // Messages count (unread chats)
@@ -104,6 +109,8 @@ export default function App() {
         return data.readStatus?.[user.uid] === false;
       }).length;
       setUnreadMessages(unreadCount);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'chats');
     });
 
     return () => {
@@ -146,16 +153,23 @@ export default function App() {
     return <AuthScreen />;
   }
 
-  const handleNavigate = (tab: TabType, initialType?: 'post' | 'story') => {
-    if (tab === 'create' && initialType) {
+  const handleNavigate = (tab: TabType, initialType?: 'post' | 'story' | string) => {
+    if (tab === 'create' && initialType && (initialType === 'post' || initialType === 'story')) {
       setCreateInitialType(initialType);
+    } else if (tab === 'profile' && initialType) {
+      setSelectedUserId(initialType);
+    } else if (tab === 'profile' && !initialType) {
+      setSelectedUserId(null);
     }
     setActiveTab(tab);
   };
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-zinc-50">
+      <div className={cn(
+        "min-h-screen transition-colors duration-500",
+        activeTab === 'reels' ? "bg-black" : "bg-zinc-50"
+      )}>
         <MessageNotification onNavigate={handleNavigate} activeTab={activeTab} />
         {/* Header */}
         {activeTab === 'feed' ? (
@@ -186,7 +200,10 @@ export default function App() {
                 onClick={() => handleNavigate('create')}
                 className="p-2.5 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 rounded-2xl transition-all active:scale-90 group"
               >
-                <PlusSquare className="w-6 h-6 transition-all duration-300 group-hover:scale-110" />
+                <div className="w-6 h-6 rounded-lg border-2 border-zinc-700 dark:border-zinc-300 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-indigo-600 dark:group-hover:border-indigo-400">
+                  <div className="w-3 h-0.5 bg-zinc-700 dark:bg-zinc-300 absolute group-hover:bg-indigo-600 dark:group-hover:bg-indigo-400 transition-colors" />
+                  <div className="w-0.5 h-3 bg-zinc-700 dark:bg-zinc-300 absolute group-hover:bg-indigo-600 dark:group-hover:bg-indigo-400 transition-colors" />
+                </div>
               </button>
               <button 
                 onClick={() => handleNavigate('notifications')}
@@ -204,7 +221,7 @@ export default function App() {
               </button>
             </div>
           </header>
-        ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications' && activeTab !== 'create' && activeTab !== 'admin') ? (
+        ) : (activeTab !== 'profile' && activeTab !== 'messages' && activeTab !== 'search' && activeTab !== 'notifications' && activeTab !== 'create' && activeTab !== 'admin' && activeTab !== 'reels') ? (
           <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-zinc-100/50 px-4 h-16 flex items-center max-w-md mx-auto">
             <button 
               onClick={() => handleNavigate('feed')}
@@ -220,7 +237,7 @@ export default function App() {
         <main className={cn(
           "max-w-md mx-auto min-h-[calc(100vh-4rem)] transition-all duration-300",
           activeTab === 'feed' && "pt-16",
-          "pb-32"
+          activeTab !== 'reels' && "pb-32"
         )}>
           {activeTab === 'feed' && (
             <Feed 
@@ -232,9 +249,10 @@ export default function App() {
             />
           )}
           {activeTab === 'search' && <Search onNavigate={handleNavigate} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
+          {activeTab === 'reels' && <Reels onNavigate={handleNavigate} />}
           {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
           {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
-          {activeTab === 'profile' && <Profile onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
+          {activeTab === 'profile' && <Profile userId={selectedUserId} onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
           {activeTab === 'messages' && (
             <Messages 
               key={`messages-${messagesViewKey}`}
@@ -250,6 +268,7 @@ export default function App() {
         {!isSettingsOpen && (
           <BottomNav 
             activeTab={activeTab} 
+            isDark={activeTab === 'reels'}
             onChange={(tab) => {
               if (tab === 'feed' && activeTab === 'feed') {
                 feedRef.current?.scrollToTop();

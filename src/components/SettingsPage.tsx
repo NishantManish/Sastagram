@@ -14,6 +14,7 @@ import { Post, User } from '../types';
 import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { AlertCircle } from 'lucide-react';
 import PostDetailsModal from './PostDetailsModal';
+import ReelDetailsModal from './ReelDetailsModal';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { unblockUser, useBlocks } from '../services/blockService';
 import UserAvatar from './UserAvatar';
@@ -107,15 +108,20 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
 
       unsubscribe = onSnapshot(savedQ, async (snapshot) => {
         const postPromises = snapshot.docs.map(async (saveDoc) => {
-          const postRef = doc(db, 'posts', saveDoc.data().postId);
+          const data = saveDoc.data();
+          const collectionName = data.isReel ? 'reels' : 'posts';
+          const postRef = doc(db, collectionName, data.postId);
           const postSnap = await getDoc(postRef);
           if (postSnap.exists()) {
-            return { id: postSnap.id, ...postSnap.data() } as Post;
+            return { id: postSnap.id, ...postSnap.data(), isReel: data.isReel } as Post;
           }
           return null;
         });
         const resolvedPosts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
         setSavedPosts(resolvedPosts);
+        setIsPostsLoading(false);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'savedPosts');
         setIsPostsLoading(false);
       });
     } else if (activeView === 'liked') {
@@ -124,8 +130,26 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
         where('userId', '==', auth.currentUser.uid),
         orderBy('createdAt', 'desc')
       );
+      const reelLikedQ = query(
+        collection(db, 'reelLikes'),
+        where('userId', '==', auth.currentUser.uid),
+        orderBy('createdAt', 'desc')
+      );
 
-      unsubscribe = onSnapshot(likedQ, async (snapshot) => {
+      let posts: Post[] = [];
+      let reels: Post[] = [];
+
+      const updateLikedPosts = () => {
+        const combined = [...posts, ...reels].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+        setLikedPosts(combined);
+        setIsPostsLoading(false);
+      };
+
+      const unsubPosts = onSnapshot(likedQ, async (snapshot) => {
         const postPromises = snapshot.docs.map(async (likeDoc) => {
           const postRef = doc(db, 'posts', likeDoc.data().postId);
           const postSnap = await getDoc(postRef);
@@ -134,10 +158,31 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
           }
           return null;
         });
-        const resolvedPosts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
-        setLikedPosts(resolvedPosts);
-        setIsPostsLoading(false);
+        posts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
+        updateLikedPosts();
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'likes');
       });
+
+      const unsubReels = onSnapshot(reelLikedQ, async (snapshot) => {
+        const reelPromises = snapshot.docs.map(async (likeDoc) => {
+          const reelRef = doc(db, 'reels', likeDoc.data().reelId);
+          const reelSnap = await getDoc(reelRef);
+          if (reelSnap.exists()) {
+            return { id: reelSnap.id, ...reelSnap.data(), isReel: true } as Post;
+          }
+          return null;
+        });
+        reels = (await Promise.all(reelPromises)).filter(p => p !== null) as Post[];
+        updateLikedPosts();
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'reelLikes');
+      });
+
+      unsubscribe = () => {
+        unsubPosts();
+        unsubReels();
+      };
     }
 
     return () => unsubscribe();
@@ -505,10 +550,17 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
           )}
         </div>
         {selectedPost && (
-          <PostDetailsModal
-            post={selectedPost}
-            onClose={() => setSelectedPost(null)}
-          />
+          (selectedPost as any).isReel ? (
+            <ReelDetailsModal
+              reel={selectedPost as any}
+              onClose={() => setSelectedPost(null)}
+            />
+          ) : (
+            <PostDetailsModal
+              post={selectedPost}
+              onClose={() => setSelectedPost(null)}
+            />
+          )
         )}
       </div>
     );

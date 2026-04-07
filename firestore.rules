@@ -172,6 +172,12 @@ service cloud.firestore {
              (request.resource.data[field] is number && request.resource.data[field] >= 0);
     }
 
+    function isValidOptionalBool(field) {
+      return !(field in request.resource.data) || 
+             request.resource.data[field] == null || 
+             request.resource.data[field] is bool;
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
@@ -246,10 +252,10 @@ service cloud.firestore {
     }
 
     function isValidNotification() {
-      return hasOnlyAllowedFields(['userId', 'type', 'senderId', 'senderName', 'senderPhoto', 'postId', 'chatId', 'storyId', 'commentId', 'contentPreview', 'read', 'createdAt']) &&
+      return hasOnlyAllowedFields(['userId', 'type', 'senderId', 'senderName', 'senderPhoto', 'postId', 'chatId', 'storyId', 'commentId', 'reelId', 'contentPreview', 'read', 'createdAt']) &&
              hasRequiredFields(['userId', 'type', 'senderId', 'senderName', 'read', 'createdAt']) &&
              validStringLength('userId', 1, 128) &&
-             validStringLength('type', 1, 20) &&
+             validStringLength('type', 1, 50) &&
              validStringLength('senderId', 1, 128) &&
              validStringLength('senderName', 1, 100) &&
              isValidOptionalString('senderPhoto', 0, 2000) &&
@@ -257,16 +263,18 @@ service cloud.firestore {
              isValidOptionalString('chatId', 0, 128) &&
              isValidOptionalString('storyId', 0, 128) &&
              isValidOptionalString('commentId', 0, 128) &&
+             isValidOptionalString('reelId', 0, 128) &&
              isValidOptionalString('contentPreview', 0, 1000) &&
              request.resource.data.read is bool &&
              request.resource.data.createdAt is timestamp;
     }
 
     function isValidSavedPost() {
-      return hasOnlyAllowedFields(['userId', 'postId', 'createdAt']) &&
+      return hasOnlyAllowedFields(['userId', 'postId', 'isReel', 'createdAt']) &&
              hasRequiredFields(['userId', 'postId', 'createdAt']) &&
              validStringLength('userId', 1, 128) &&
              validStringLength('postId', 1, 128) &&
+             isValidOptionalBool('isReel') &&
              request.resource.data.createdAt is timestamp;
     }
 
@@ -384,7 +392,7 @@ service cloud.firestore {
     }
 
     function isValidMessage() {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'sharedPostSlideIndex', 'sharedPostPreviewUrl', 'sharedPostMediaType', 'sharedProfileId', 'sharedStoryId', 'sharedStoryPreviewUrl', 'sharedStoryMediaType', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'sharedPostSlideIndex', 'sharedPostPreviewUrl', 'sharedPostMediaType', 'sharedProfileId', 'sharedStoryId', 'sharedStoryPreviewUrl', 'sharedStoryMediaType', 'sharedReelId', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              validStringLength('chatId', 1, 128) &&
              validStringLength('senderId', 1, 128) &&
@@ -394,7 +402,8 @@ service cloud.firestore {
               ('attachmentUrl' in request.resource.data && request.resource.data.attachmentUrl.size() > 0) || 
               ('sharedPostId' in request.resource.data && request.resource.data.sharedPostId.size() > 0) ||
               ('sharedProfileId' in request.resource.data && request.resource.data.sharedProfileId.size() > 0) ||
-              ('sharedStoryId' in request.resource.data && request.resource.data.sharedStoryId.size() > 0)) &&
+              ('sharedStoryId' in request.resource.data && request.resource.data.sharedStoryId.size() > 0) ||
+              ('sharedReelId' in request.resource.data && request.resource.data.sharedReelId.size() > 0)) &&
              isValidOptionalString('attachmentUrl', 0, 2000) &&
              isValidOptionalString('sharedPostId', 0, 128) &&
              isValidOptionalNumber('sharedPostSlideIndex') &&
@@ -404,10 +413,54 @@ service cloud.firestore {
              isValidOptionalString('sharedStoryId', 0, 128) &&
              isValidOptionalString('sharedStoryPreviewUrl', 0, 2000) &&
              isValidOptionalString('sharedStoryMediaType', 0, 20) &&
+             isValidOptionalString('sharedReelId', 0, 128) &&
              request.resource.data.createdAt is timestamp &&
              (!('editedAt' in request.resource.data) || request.resource.data.editedAt is timestamp) &&
              (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool) &&
              (!('deletedFor' in request.resource.data) || request.resource.data.deletedFor is list);
+    }
+
+    function isValidReel() {
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'videoUrl', 'caption', 'likesCount', 'commentsCount', 'viewsCount', 'createdAt']) &&
+             hasRequiredFields(['authorId', 'authorName', 'videoUrl', 'likesCount', 'commentsCount', 'viewsCount', 'createdAt']) &&
+             validStringLength('authorId', 1, 128) &&
+             validStringLength('authorName', 1, 100) &&
+             isValidOptionalString('authorPhoto', 0, 2000) &&
+             validStringLength('videoUrl', 1, 2000) &&
+             isValidOptionalString('caption', 0, 2200) &&
+             request.resource.data.likesCount is number &&
+             request.resource.data.commentsCount is number &&
+             request.resource.data.viewsCount is number &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidReelLike() {
+      return hasOnlyAllowedFields(['reelId', 'userId', 'createdAt']) &&
+             hasRequiredFields(['reelId', 'userId', 'createdAt']) &&
+             validStringLength('reelId', 1, 128) &&
+             validStringLength('userId', 1, 128) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidReelComment() {
+      return hasOnlyAllowedFields(['reelId', 'authorId', 'authorName', 'authorPhoto', 'text', 'likesCount', 'createdAt']) &&
+             hasRequiredFields(['reelId', 'authorId', 'authorName', 'text', 'createdAt']) &&
+             validStringLength('reelId', 1, 128) &&
+             validStringLength('authorId', 1, 128) &&
+             validStringLength('authorName', 1, 100) &&
+             isValidOptionalString('authorPhoto', 0, 2000) &&
+             validStringLength('text', 1, 500) &&
+             isValidOptionalNumber('likesCount') &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidReelCommentLike() {
+      return hasOnlyAllowedFields(['commentId', 'reelId', 'userId', 'createdAt']) &&
+             hasRequiredFields(['commentId', 'reelId', 'userId', 'createdAt']) &&
+             validStringLength('commentId', 1, 128) &&
+             validStringLength('reelId', 1, 128) &&
+             validStringLength('userId', 1, 128) &&
+             request.resource.data.createdAt is timestamp;
     }
 
     match /posts/{postId} {
@@ -622,6 +675,58 @@ service cloud.firestore {
                     );
                     
       allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /reels/{reelId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReel() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidReel() && (
+        (resource.data.authorId == request.auth.uid && isUnchanged('authorId') && isUnchanged('createdAt')) ||
+        (isUnchanged('authorId') && isUnchanged('authorName') && isUnchanged('authorPhoto') && isUnchanged('videoUrl') && isUnchanged('caption') && isUnchanged('createdAt') &&
+         (
+           (request.resource.data.likesCount == resource.data.likesCount + 1 && 
+            !exists(/databases/$(database)/documents/reelLikes/$(reelId + '_' + request.auth.uid)) &&
+            getAfter(/databases/$(database)/documents/reelLikes/$(reelId + '_' + request.auth.uid)) != null) ||
+           (request.resource.data.likesCount == resource.data.likesCount - 1 &&
+            exists(/databases/$(database)/documents/reelLikes/$(reelId + '_' + request.auth.uid)) &&
+            getAfter(/databases/$(database)/documents/reelLikes/$(reelId + '_' + request.auth.uid)) == null) ||
+           (math.abs(request.resource.data.commentsCount - resource.data.commentsCount) == 1) ||
+           (request.resource.data.viewsCount == resource.data.viewsCount + 1)
+         )) ||
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    match /reelLikes/{likeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReelLike() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /reelComments/{commentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReelComment() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidReelComment() && (
+        (resource.data.authorId == request.auth.uid && isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('createdAt')) ||
+        (isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('authorName') && isUnchanged('authorPhoto') && isUnchanged('text') && isUnchanged('createdAt') &&
+         (
+           (request.resource.data.likesCount == resource.data.likesCount + 1 &&
+            !exists(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) &&
+            getAfter(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) != null) ||
+           (request.resource.data.likesCount == resource.data.likesCount - 1 &&
+            exists(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) &&
+            getAfter(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) == null)
+         )) ||
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    match /reelCommentLikes/{likeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReelCommentLike() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /stories/{storyId} {

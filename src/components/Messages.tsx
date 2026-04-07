@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, addDoc, serverTimestamp, getDocs, writeBatch, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
-import { Chat, Message, User, Post } from '../types';
-import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus } from 'lucide-react';
+import { Chat, Message, User, Post, Reel } from '../types';
+import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard } from 'lucide-react';
 import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
+import ReelDetailsModal from './ReelDetailsModal';
 import { useBlocks } from '../services/blockService';
 import { motion, AnimatePresence } from 'motion/react';
 import { deleteDoc } from 'firebase/firestore';
@@ -26,6 +27,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   const [chatUsers, setChatUsers] = useState<Record<string, User>>({});
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedReel, setSelectedReel] = useState<Reel | null>(null);
   const [selectedPostSlide, setSelectedPostSlide] = useState(0);
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
@@ -323,6 +325,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           let lastMessageText = '';
           if (lastMsg) {
             if (lastMsg.sharedPostId) lastMessageText = 'Shared a post';
+            else if (lastMsg.sharedReelId) lastMessageText = 'Shared a reel';
             else if (lastMsg.attachmentUrl) lastMessageText = 'Attachment';
             else lastMessageText = lastMsg.text || '';
           }
@@ -411,7 +414,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
 
       const otherUserId = selectedChat.participants.find(id => id !== auth.currentUser?.uid);
       batch.set(doc(db, 'chats', selectedChat.id), {
-        lastMessage: messageText || 'Attachment',
+        lastMessage: messageText || (attachmentUrl ? 'Attachment' : 'Message'),
         updatedAt: serverTimestamp(),
         readStatus: {
           [auth.currentUser.uid]: true,
@@ -501,6 +504,19 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       }
     } catch (error) {
       console.error('Error fetching post:', error);
+    }
+  };
+
+  const handleReelClick = async (reelId: string) => {
+    try {
+      const reelDoc = await getDoc(doc(db, 'reels', reelId));
+      if (reelDoc.exists()) {
+        setSelectedReel({ id: reelDoc.id, ...reelDoc.data() } as Reel);
+      } else {
+        alert('This reel is no longer available.');
+      }
+    } catch (error) {
+      console.error('Error fetching reel:', error);
     }
   };
 
@@ -749,6 +765,37 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                                 )}
                                 <div className="px-1 py-1 flex items-center justify-between">
                                   <span className={`text-[11px] font-black uppercase tracking-widest ${isMine ? 'text-white' : 'text-zinc-900'}`}>View Post</span>
+                                  <ArrowRight className={`w-3 h-3 ${isMine ? 'text-white' : 'text-zinc-400'}`} />
+                                </div>
+                              </div>
+                            )}
+
+                            {msg.sharedReelId && (
+                              <div 
+                                onClick={() => handleReelClick(msg.sharedReelId!)}
+                                className={`mb-2 p-2 rounded-xl border cursor-pointer transition-all hover:brightness-95 active:scale-[0.98] flex flex-col gap-2 ${
+                                  isMine ? 'bg-white/10 border-white/20' : 'bg-zinc-50 border-zinc-200'
+                                }`}
+                              >
+                                {msg.sharedPostPreviewUrl ? (
+                                  <div className="relative aspect-[9/16] w-32 overflow-hidden rounded-lg bg-black/10 mx-auto">
+                                    <video 
+                                      src={msg.sharedPostPreviewUrl} 
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                      <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30">
+                                        <Clapperboard className="w-5 h-5 text-white" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className={`w-32 aspect-[9/16] rounded-lg flex items-center justify-center mx-auto ${isMine ? 'bg-white/20' : 'bg-zinc-200'}`}>
+                                    <Clapperboard className={`w-8 h-8 ${isMine ? 'text-white' : 'text-zinc-500'}`} />
+                                  </div>
+                                )}
+                                <div className="px-1 py-1 flex items-center justify-between">
+                                  <span className={`text-[11px] font-black uppercase tracking-widest ${isMine ? 'text-white' : 'text-zinc-900'}`}>View Reel</span>
                                   <ArrowRight className={`w-3 h-3 ${isMine ? 'text-white' : 'text-zinc-400'}`} />
                                 </div>
                               </div>
@@ -1261,6 +1308,14 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
             onUserClick={setSelectedUserId}
             onTagClick={onTagClick}
             initialMediaIndex={selectedPostSlide}
+          />
+        )}
+
+        {selectedReel && (
+          <ReelDetailsModal
+            reel={selectedReel}
+            onClose={() => setSelectedReel(null)}
+            onNavigate={onNavigate}
           />
         )}
       </AnimatePresence>

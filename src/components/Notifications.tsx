@@ -259,13 +259,13 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                         fallbackName={notification.senderName} 
                       />
                       <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-xl flex items-center justify-center shadow-md ring-2 ring-white
-                        ${notification.type === 'like' ? 'bg-red-500' : ''}
-                        ${notification.type === 'comment' ? 'bg-blue-500' : ''}
+                        ${notification.type === 'like' || notification.type === 'reel_like' ? 'bg-red-500' : ''}
+                        ${notification.type === 'comment' || notification.type === 'reel_comment' ? 'bg-blue-500' : ''}
                         ${notification.type === 'follow' ? 'bg-indigo-600' : ''}
                         ${notification.type === 'message' ? 'bg-green-500' : ''}
                       `}>
-                        {notification.type === 'like' && <Heart className="w-3 h-3 text-white fill-white" />}
-                        {notification.type === 'comment' && <MessageCircle className="w-3 h-3 text-white fill-white" />}
+                        {(notification.type === 'like' || notification.type === 'reel_like') && <Heart className="w-3 h-3 text-white fill-white" />}
+                        {(notification.type === 'comment' || notification.type === 'reel_comment') && <MessageCircle className="w-3 h-3 text-white fill-white" />}
                         {notification.type === 'follow' && <UserPlus className="w-3 h-3 text-white" />}
                         {notification.type === 'message' && <MessageCircle className="w-3 h-3 text-white" />}
                       </div>
@@ -276,7 +276,9 @@ export default function Notifications({ onBack }: { onBack?: () => void }) {
                         <span className="font-bold hover:underline cursor-pointer">{notification.senderName}</span>{' '}
                         <span className="text-zinc-600">
                           {notification.type === 'like' && (notification.storyId ? 'liked your story.' : 'liked your post.')}
+                          {notification.type === 'reel_like' && 'liked your reel.'}
                           {notification.type === 'comment' && 'commented on your post.'}
+                          {notification.type === 'reel_comment' && 'commented on your reel.'}
                           {notification.type === 'follow' && 'started following you.'}
                           {notification.type === 'message' && 'replied to your story.'}
                         </span>

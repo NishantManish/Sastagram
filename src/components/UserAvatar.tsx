@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { getOptimizedImageUrl } from '../utils/cloudinary';
 
 interface UserAvatarProps {
@@ -25,6 +26,8 @@ export default function UserAvatar({ userId, size, className = '', fallbackPhoto
         setPhotoURL(data.photoURL || null);
         setDisplayName(data.displayName || null);
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${userId}`);
     });
 
     return () => unsubscribe();
