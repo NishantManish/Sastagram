@@ -39,6 +39,8 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowedBy, setIsFollowedBy] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [isFollowClicked, setIsFollowClicked] = useState(false);
+  const isInitialLoad = useRef(true);
   const [isMessagingLoading, setIsMessagingLoading] = useState(false);
   
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -55,6 +57,15 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [showSettingsPage, setShowSettingsPage] = useState(false);
+
+  useEffect(() => {
+    if (isFollowing !== null) {
+      const timer = setTimeout(() => {
+        isInitialLoad.current = false;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isFollowing]);
 
   useEffect(() => {
     onSettingsToggle?.(showSettingsPage);
@@ -349,6 +360,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
 
   const handleFollowToggle = async () => {
     if (!currentUser || !targetUserId || isFollowLoading) return;
+    setIsFollowClicked(true);
     setIsFollowLoading(true);
 
     const followId = `${currentUser.uid}_${targetUserId}`;
@@ -697,7 +709,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: isInitialLoad.current ? 0 : (isFollowClicked ? 0.2 : 0) }}
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
                     className="flex-1 h-11 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs shadow-xl shadow-indigo-50 disabled:opacity-70"
@@ -712,7 +724,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: isInitialLoad.current ? 0 : (isFollowClicked ? 0.2 : 0) }}
                     onClick={handleFollowToggle}
                     disabled={isFollowLoading}
                     className="flex-1 h-11 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-black rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs disabled:opacity-70"

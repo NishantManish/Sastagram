@@ -1,4 +1,5 @@
-import { Home, PlusSquare, User, Search, Send, ShieldAlert, Clapperboard } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Home, PlusSquare, User, Search, ShieldAlert, MessageSquare, MessageSquareMore } from 'lucide-react';
 import { cn } from '../utils';
 import { motion } from 'motion/react';
 
@@ -12,25 +13,30 @@ interface BottomNavProps {
   isDark?: boolean;
 }
 
-const baseTabs = [
-  { id: 'feed', icon: Home, label: 'Home' },
-  { id: 'search', icon: Search, label: 'Search' },
-  { id: 'messages', icon: Send, label: 'Messages' },
-  { id: 'reels', icon: ({ className }: { className?: string }) => (
-    <div className={cn("relative flex items-center justify-center", className)}>
-      <div className="w-5 h-5 border-2 border-current rounded-md flex items-center justify-center">
-        <div className="w-0 h-0 border-t-[3px] border-t-transparent border-l-[5px] border-l-current border-b-[3px] border-b-transparent ml-0.5" />
-      </div>
-      <div className="absolute -top-1 -right-1 w-2 h-2 bg-current rounded-full" />
-    </div>
-  ), label: 'Reels' },
-  { id: 'profile', icon: User, label: 'Profile' },
-] as const;
-
 export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isAdmin = false, isDark = false }: BottomNavProps) {
-  const tabs = isAdmin 
-    ? [...baseTabs, { id: 'admin', icon: ShieldAlert, label: 'Admin' }] 
-    : baseTabs;
+  const tabs = useMemo(() => {
+    const baseTabs = [
+      { id: 'feed', icon: Home, label: 'Home' },
+      { id: 'search', icon: Search, label: 'Search' },
+      { 
+        id: 'messages', 
+        icon: unreadMessages > 0 ? MessageSquareMore : MessageSquare, 
+        label: 'Messages' 
+      },
+      { id: 'reels', icon: ({ className }: { className?: string }) => (
+        <div className={cn("relative flex items-center justify-center", className)}>
+          <div className="w-5 h-5 border-2 border-current rounded-md flex items-center justify-center">
+            <div className="w-0 h-0 border-t-[3px] border-t-transparent border-l-[5px] border-l-current border-b-[3px] border-b-transparent ml-0.5" />
+          </div>
+        </div>
+      ), label: 'Reels' },
+      { id: 'profile', icon: User, label: 'Profile' },
+    ];
+
+    return isAdmin 
+      ? [...baseTabs, { id: 'admin', icon: ShieldAlert, label: 'Admin' }] 
+      : baseTabs;
+  }, [unreadMessages, isAdmin]);
 
   return (
     <div className="fixed bottom-6 left-0 right-0 flex justify-center z-40 px-4 pointer-events-none">
@@ -82,14 +88,9 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
                   className={cn(
                     "w-6 h-6 transition-all duration-300",
                     isActive ? "stroke-[2.5px]" : "stroke-[2px]",
-                    tab.id === 'messages' && "-rotate-12"
+                    tab.id === 'messages' && "-rotate-6"
                   )} 
                 />
-                {tab.id === 'messages' && unreadMessages > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-indigo-500 text-[9px] font-black text-white ring-2 ring-white animate-in zoom-in duration-300">
-                    {unreadMessages > 9 ? '9+' : unreadMessages}
-                  </span>
-                )}
               </motion.div>
             </button>
           );

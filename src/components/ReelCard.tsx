@@ -16,12 +16,14 @@ import { deleteFromCloudinary } from '../utils/media';
 interface ReelCardProps {
   reel: Reel;
   isActive: boolean;
+  isGlobalMuted?: boolean;
+  onToggleGlobalMute?: (muted: boolean) => void;
   onNavigate?: (tab: any, initialType?: any) => void;
   onDelete?: (reelId: string) => void;
   isModal?: boolean;
 }
 
-export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal = false }: ReelCardProps) {
+export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobalMute, onNavigate, onDelete, isModal = false }: ReelCardProps) {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
@@ -29,7 +31,18 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [isMuted, setIsMuted] = useState(true);
+  const [localMuted, setLocalMuted] = useState(true);
+  const isMuted = isGlobalMuted !== undefined ? isGlobalMuted : localMuted;
+  
+  const handleToggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onToggleGlobalMute) {
+      onToggleGlobalMute(!isMuted);
+    } else {
+      setLocalMuted(!isMuted);
+    }
+  };
+
   const [isPlaying, setIsPlaying] = useState(true);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -39,6 +52,7 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
+  const [isFollowClicked, setIsFollowClicked] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTap = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -124,6 +138,28 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
     }
   }, [showComments, reel.id]);
 
+  useEffect(() => {
+    if (showComments && auth.currentUser) {
+      const q = query(
+        collection(db, 'reelCommentLikes'),
+        where('reelId', '==', reel.id),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const likesMap: Record<string, boolean> = {};
+        snapshot.docs.forEach(doc => {
+          likesMap[doc.data().commentId] = true;
+        });
+        setCommentLikes(likesMap);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, `reelCommentLikes/${reel.id}`);
+      });
+      return () => unsubscribe();
+    } else {
+      setCommentLikes({});
+    }
+  }, [showComments, reel.id, auth.currentUser]);
+
   const handleLike = async () => {
     if (!auth.currentUser) return;
     const likeRef = doc(db, 'reelLikes', `${reel.id}_${auth.currentUser.uid}`);
@@ -167,6 +203,7 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
 
   const handleFollow = async () => {
     if (!auth.currentUser || isFollowing) return;
+    setIsFollowClicked(true);
     const followRef = doc(db, 'follows', `${auth.currentUser.uid}_${reel.authorId}`);
     const currentUserRef = doc(db, 'users', auth.currentUser.uid);
     const authorRef = doc(db, 'users', reel.authorId);
@@ -411,8 +448,8 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
             exit={{ opacity: 0, scale: 0.5 }}
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
           >
-            <div className="w-20 h-20 bg-black/30 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
-              <Play className="w-10 h-10 text-white fill-white ml-1" />
+            <div className="w-24 h-24 bg-black/30 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20">
+              <Play className="w-12 h-12 text-white fill-white ml-1.5" />
             </div>
           </motion.div>
         )}
@@ -423,7 +460,7 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
         <h2 className="text-white font-serif italic font-black text-2xl tracking-tight drop-shadow-lg pointer-events-auto">Reels</h2>
         <div className="flex items-center gap-3 pointer-events-auto">
           <button
-            onClick={() => setIsMuted(!isMuted)}
+            onClick={handleToggleMute}
             className="p-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all border border-white/10"
           >
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -563,7 +600,10 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
                     initial={{ opacity: 0, scale: 0.8, width: 0 }}
                     animate={{ opacity: 1, scale: 1, width: 'auto' }}
                     exit={{ opacity: 0, scale: 0.5, width: 0, padding: 0, margin: 0 }}
-                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                    transition={{ 
+                      duration: isFollowClicked ? 0.3 : 0, 
+                      ease: "easeInOut" 
+                    }}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.9, rotate: -5 }}
                     onClick={(e) => {
@@ -792,6 +832,20 @@ export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal
             </div>
           )}
         </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Comment Delete Confirmation Modal */}
+      {createPortal(
+        <ConfirmationModal
+          isOpen={!!commentToDelete}
+          onClose={() => setCommentToDelete(null)}
+          onConfirm={handleDeleteComment}
+          title="Delete Comment"
+          message="Are you sure you want to delete this comment? This action cannot be undone."
+          confirmText="Delete"
+          isDanger={true}
+        />,
         document.body
       )}
     </div>

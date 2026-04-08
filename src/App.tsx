@@ -240,6 +240,20 @@ export default function App() {
           activeTab === 'feed' && "pt-16",
           activeTab !== 'reels' && "pb-32"
         )}>
+          {/* Cached Pages */}
+          <div className={cn(activeTab !== 'search' && "hidden")}>
+            <Search onNavigate={handleNavigate} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />
+          </div>
+          <div className={cn(activeTab !== 'messages' && "hidden")}>
+            <Messages 
+              key={`messages-${messagesViewKey}`}
+              onBack={() => handleNavigate('feed')} 
+              onNavigate={handleNavigate} 
+              onTagClick={handleNavigateToSearch} 
+            />
+          </div>
+
+          {/* Non-cached Pages */}
           {activeTab === 'feed' && (
             <Feed 
               ref={feedRef}
@@ -249,19 +263,10 @@ export default function App() {
               initialSlideIndex={initialSlideIndex}
             />
           )}
-          {activeTab === 'search' && <Search onNavigate={handleNavigate} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />}
           {activeTab === 'reels' && <Reels key={`reels-${reelsViewKey}`} onNavigate={handleNavigate} />}
           {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
           {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
           {activeTab === 'profile' && <Profile userId={selectedUserId} onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}
-          {activeTab === 'messages' && (
-            <Messages 
-              key={`messages-${messagesViewKey}`}
-              onBack={() => handleNavigate('feed')} 
-              onNavigate={handleNavigate} 
-              onTagClick={handleNavigateToSearch} 
-            />
-          )}
           {activeTab === 'admin' && isAdmin && <AdminDashboard />}
         </main>
 

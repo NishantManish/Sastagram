@@ -711,9 +711,13 @@ service cloud.firestore {
     match /reelComments/{commentId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidReelComment() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isAuthenticated() && isValidReelComment() && (
-        (resource.data.authorId == request.auth.uid && isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('createdAt') && isUnchanged('replyToId')) ||
-        (isUnchanged('authorId') && isUnchanged('reelId') && isUnchanged('authorName') && isUnchanged('authorPhoto') && isUnchanged('text') && isUnchanged('createdAt') && isUnchanged('replyToId') &&
+      allow update: if isAuthenticated() && (
+        // Author updating text
+        (resource.data.authorId == request.auth.uid && 
+         isValidReelComment() && 
+         areImmutableFieldsUnchanged(['authorId', 'reelId', 'createdAt', 'replyToId'])) ||
+        // Anyone updating likesCount
+        (areImmutableFieldsUnchanged(['reelId', 'authorId', 'authorName', 'authorPhoto', 'text', 'createdAt', 'replyToId']) &&
          (
            (request.resource.data.get('likesCount', 0) == resource.data.get('likesCount', 0) + 1 &&
             !exists(/databases/$(database)/documents/reelCommentLikes/$(commentId + '_' + request.auth.uid)) &&

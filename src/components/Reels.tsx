@@ -17,6 +17,7 @@ export default function Reels({ onNavigate }: ReelsProps) {
   const [lastVisible, setLastVisible] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [activeReelId, setActiveReelId] = useState<string | null>(null);
+  const [isGlobalMuted, setIsGlobalMuted] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -142,6 +143,8 @@ export default function Reels({ onNavigate }: ReelsProps) {
           <ReelCard 
             reel={reel} 
             isActive={activeReelId === reel.id}
+            isGlobalMuted={isGlobalMuted}
+            onToggleGlobalMute={setIsGlobalMuted}
             onNavigate={onNavigate}
             onDelete={(reelId) => {
               setReels(prev => prev.filter(r => r.id !== reelId));
