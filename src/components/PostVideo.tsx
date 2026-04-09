@@ -22,6 +22,12 @@ export default function PostVideo({
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -33,6 +39,7 @@ export default function PostVideo({
           for (const entry of entries) {
             if (entry.isIntersecting) {
               try {
+                video.muted = isMuted; // Ensure muted state is correct before playing
                 await video.play();
                 if (isMounted) setIsPlaying(true);
               } catch (error) {

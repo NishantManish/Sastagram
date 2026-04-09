@@ -131,6 +131,7 @@ export interface Reel {
   authorPhoto?: string;
   videoUrl: string;
   caption?: string;
+  tags?: string[];
   likesCount: number;
   commentsCount: number;
   viewsCount: number;

@@ -118,7 +118,9 @@ export default function HighlightViewerModal({ highlight, onClose, onEdit, isOwn
     pointerDownTime.current = Date.now();
     holdTimer.current = window.setTimeout(() => {
       setIsPaused(true);
-      if (videoRef.current) videoRef.current.pause();
+      if (videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause();
+      }
     }, 200);
   };
 
@@ -129,7 +131,10 @@ export default function HighlightViewerModal({ highlight, onClose, onEdit, isOwn
     setIsPaused(false);
     if (videoRef.current) {
       try {
-        await videoRef.current.play();
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
       } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Video play interrupted:', error);
@@ -154,7 +159,10 @@ export default function HighlightViewerModal({ highlight, onClose, onEdit, isOwn
     setIsPaused(false);
     if (videoRef.current) {
       try {
-        await videoRef.current.play();
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
       } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Video play interrupted:', error);

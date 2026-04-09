@@ -168,11 +168,27 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
   const handlePointerDown = () => {
     holdTimer.current = Date.now();
     setIsPaused(true);
+    if (videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause();
+    }
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
+  const handlePointerUp = async (e: React.PointerEvent) => {
     const duration = Date.now() - (holdTimer.current || 0);
     setIsPaused(false);
+    
+    if (videoRef.current) {
+      try {
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Video play interrupted:', error);
+        }
+      }
+    }
     
     // If it was a quick tap (less than 200ms), handle navigation
     if (duration < 200) {
@@ -553,6 +569,21 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
               className="flex-1 flex items-center justify-center relative touch-none"
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
+              onPointerLeave={async () => {
+                setIsPaused(false);
+                if (videoRef.current) {
+                  try {
+                    const playPromise = videoRef.current.play();
+                    if (playPromise !== undefined) {
+                      await playPromise;
+                    }
+                  } catch (error) {
+                    if (error instanceof Error && error.name !== 'AbortError') {
+                      console.error('Video play interrupted:', error);
+                    }
+                  }
+                }
+              }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 if (!activeStory?.likedBy?.includes(auth.currentUser?.uid || '')) {

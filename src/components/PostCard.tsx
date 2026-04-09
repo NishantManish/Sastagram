@@ -151,8 +151,11 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         for (const entry of entries) {
           if (entry.isIntersecting) {
             try {
-              await video.play();
-              if (isMounted) setIsPlaying(true);
+              const playPromise = video.play();
+              if (playPromise !== undefined) {
+                await playPromise;
+                if (isMounted) setIsPlaying(true);
+              }
             } catch (error) {
               if (isMounted && error instanceof Error && error.name !== 'AbortError') {
                 console.error('Video play interrupted:', error);
@@ -160,7 +163,9 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               if (isMounted) setIsPlaying(false);
             }
           } else {
-            video.pause();
+            if (!video.paused) {
+              video.pause();
+            }
             if (isMounted) setIsPlaying(false);
           }
         }
@@ -173,7 +178,9 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     return () => {
       isMounted = false;
       observer.unobserve(video);
-      video.pause();
+      if (!video.paused) {
+        video.pause();
+      }
     };
   }, []);
 
@@ -189,12 +196,17 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     e.stopPropagation();
     if (videoRef.current) {
       if (isPlaying) {
-        videoRef.current.pause();
+        if (!videoRef.current.paused) {
+          videoRef.current.pause();
+        }
         setIsPlaying(false);
       } else {
         try {
-          await videoRef.current.play();
-          setIsPlaying(true);
+          const playPromise = videoRef.current.play();
+          if (playPromise !== undefined) {
+            await playPromise;
+            setIsPlaying(true);
+          }
         } catch (error) {
           if (error instanceof Error && error.name !== 'AbortError') {
             console.error('Video play interrupted:', error);
@@ -578,7 +590,15 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                       onClick={(e) => {
                         // Don't stop propagation so double tap works
                         if (videoRef.current && videoRef.current.paused) {
-                          videoRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+                          const playPromise = videoRef.current.play();
+                          if (playPromise !== undefined) {
+                            playPromise.then(() => setIsPlaying(true)).catch((error) => {
+                              if (error instanceof Error && error.name !== 'AbortError') {
+                                console.error('Video play interrupted:', error);
+                              }
+                              setIsPlaying(false);
+                            });
+                          }
                         } else {
                           toggleMute();
                         }

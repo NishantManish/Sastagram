@@ -59,6 +59,12 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  useEffect(() => {
     if (!auth.currentUser || !showComments) return;
 
     // Check which comments are liked
@@ -104,6 +110,7 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
       }
 
       try {
+        video.muted = isMuted; // Ensure muted state is correct before playing
         await video.play();
       } catch (error) {
         // AbortError is expected when play() is interrupted by pause() or removal

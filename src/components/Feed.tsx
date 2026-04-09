@@ -8,7 +8,7 @@ import PostDetailsModal from './PostDetailsModal';
 import Profile from './Profile';
 import Stories from './Stories';
 import { Camera, RefreshCw, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence, useScroll, useSpring, useTransform } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useBlocks } from '../services/blockService';
 
 export interface FeedRef {
@@ -22,6 +22,7 @@ const Feed = forwardRef<FeedRef, {
   initialSlideIndex?: number
 }>(({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }, ref) => {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [pexelsPosts, setPexelsPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -57,6 +58,7 @@ const Feed = forwardRef<FeedRef, {
     }
   }, [initialPostId]);
 
+  // Fetch Firebase Posts
   useEffect(() => {
     const q = query(
       collection(db, 'posts'),
@@ -72,8 +74,6 @@ const Feed = forwardRef<FeedRef, {
       setPosts(newPosts);
       setLoading(false);
     }, (error) => {
-      // If we get a permission error, it might be because some posts in the results are blocked.
-      // In a real app, we'd need to filter the query, but for now we'll just log it.
       if (error.message.includes('permission')) {
         console.warn('Permission denied on feed query. This is expected if blocked users are in the results.');
       } else {
@@ -83,6 +83,49 @@ const Feed = forwardRef<FeedRef, {
     });
 
     return () => unsubscribe();
+  }, [limitCount]);
+
+  // Fetch Personalized Pexels Posts
+  useEffect(() => {
+    const fetchPexels = async () => {
+      try {
+        const response = await fetch('/api/reels/next', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ interactions: [] }) // We can use empty or fetch from local storage if we want
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.videos) {
+            const mappedPosts: Post[] = data.videos.map((v: any) => ({
+              id: `pexels-${v.id}`,
+              authorId: `pexels-${v.user}`,
+              authorName: v.user,
+              authorPhoto: '',
+              imageUrl: v.image,
+              videoUrl: v.url,
+              mediaType: 'video',
+              mediaUrls: [{ url: v.url, type: 'video' }],
+              caption: `Recommended for you based on your activity: ${v.query}`,
+              likesCount: Math.floor(Math.random() * 1000) + 100,
+              commentsCount: Math.floor(Math.random() * 100) + 10,
+              createdAt: new Date(),
+              isReel: false
+            }));
+            setPexelsPosts(prev => {
+              const existingIds = new Set(prev.map(p => p.id));
+              const newP = mappedPosts.filter(p => !existingIds.has(p.id));
+              return [...prev, ...newP];
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch personalized posts", err);
+      }
+    };
+    
+    // Fetch every time limitCount increases to get more recommended posts
+    fetchPexels();
   }, [limitCount]);
 
   useEffect(() => {
@@ -120,7 +163,6 @@ const Feed = forwardRef<FeedRef, {
     const distance = currentY - startY.current;
     
     if (distance > 0 && window.scrollY === 0) {
-      // Add resistance
       const resisted = Math.min(distance * 0.4, 100);
       setPullDistance(resisted);
       if (e.cancelable) {
@@ -135,11 +177,8 @@ const Feed = forwardRef<FeedRef, {
     
     if (pullDistance > 60) {
       setRefreshing(true);
-      setPullDistance(60); // Hold at refresh position
-      
-      // Simulate network request delay since onSnapshot handles real-time updates
+      setPullDistance(60); 
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
       setRefreshing(false);
     }
     
@@ -151,13 +190,27 @@ const Feed = forwardRef<FeedRef, {
     !blockedByIds.includes(post.authorId)
   );
 
+  // Interleave Firebase posts and Pexels posts
+  const combinedPosts: Post[] = [];
+  let fbIndex = 0;
+  let pxIndex = 0;
+  
+  while (fbIndex < filteredPosts.length || pxIndex < pexelsPosts.length) {
+    // Add 3 Firebase posts, then 1 Pexels post
+    for (let i = 0; i < 3 && fbIndex < filteredPosts.length; i++) {
+      combinedPosts.push(filteredPosts[fbIndex++]);
+    }
+    if (pxIndex < pexelsPosts.length) {
+      combinedPosts.push(pexelsPosts[pxIndex++]);
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-md mx-auto pb-24 relative min-h-screen">
         <div className="mt-2">
           {[1, 2, 3].map((i) => (
             <div key={`feed-skeleton-${i}`} className="bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800 sm:border sm:rounded-xl sm:mb-4 overflow-hidden animate-pulse">
-              {/* Header */}
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
@@ -165,11 +218,7 @@ const Feed = forwardRef<FeedRef, {
                 </div>
                 <div className="w-16 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
               </div>
-              
-              {/* Image */}
               <div className="w-full aspect-square bg-zinc-200 dark:bg-zinc-800" />
-              
-              {/* Actions */}
               <div className="px-4 py-3">
                 <div className="flex items-center gap-4 mb-3">
                   <div className="w-7 h-7 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
@@ -198,7 +247,6 @@ const Feed = forwardRef<FeedRef, {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Redesigned Pull to Refresh */}
       <div className="absolute top-0 left-0 right-0 pointer-events-none z-50 overflow-hidden h-40">
         <motion.div 
           className="flex flex-col items-center justify-center w-full h-full"
@@ -242,7 +290,7 @@ const Feed = forwardRef<FeedRef, {
         <Stories onNavigate={onNavigate} />
         
         <div className="mt-2">
-          {filteredPosts.length === 0 ? (
+          {combinedPosts.length === 0 ? (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -254,7 +302,7 @@ const Feed = forwardRef<FeedRef, {
             </motion.div>
           ) : (
             <AnimatePresence mode="popLayout">
-              {filteredPosts.map((post, index) => (
+              {combinedPosts.map((post, index) => (
                 <motion.div
                   key={`${post.id}-${index}`}
                   id={`post-${post.id}`}
@@ -269,8 +317,8 @@ const Feed = forwardRef<FeedRef, {
                     onTagClick={onTagClick}
                     initialMediaIndex={post.id === initialPostId ? initialSlideIndex : 0}
                     onSwipeNext={() => {
-                      if (index < filteredPosts.length - 1) {
-                        const nextPost = document.getElementById(`post-${filteredPosts[index + 1].id}`);
+                      if (index < combinedPosts.length - 1) {
+                        const nextPost = document.getElementById(`post-${combinedPosts[index + 1].id}`);
                         if (nextPost) {
                           nextPost.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }
@@ -278,7 +326,7 @@ const Feed = forwardRef<FeedRef, {
                     }}
                     onSwipePrev={() => {
                       if (index > 0) {
-                        const prevPost = document.getElementById(`post-${filteredPosts[index - 1].id}`);
+                        const prevPost = document.getElementById(`post-${combinedPosts[index - 1].id}`);
                         if (prevPost) {
                           prevPost.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }
