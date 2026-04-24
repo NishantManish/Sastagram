@@ -7,6 +7,7 @@ export interface User {
   followersCount: number;
   followingCount: number;
   createdAt: any; // Firestore Timestamp
+  closeFriends?: string[];
 }
 
 export interface Post {
@@ -25,6 +26,7 @@ export interface Post {
   commentsCount?: number;
   createdAt: any; // Firestore Timestamp
   isReel?: boolean;
+  audience?: 'all' | 'close_friends';
 }
 
 export interface Like {
@@ -91,6 +93,7 @@ export interface Story {
   viewers?: string[];
   likesCount?: number;
   likedBy?: string[];
+  audience?: 'all' | 'close_friends';
 }
 
 export interface Chat {

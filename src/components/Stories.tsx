@@ -4,7 +4,7 @@ import { ref, deleteObject } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Story } from '../types';
-import { Plus, X, Trash2, Send, Eye, Heart } from 'lucide-react';
+import { Plus, X, Trash2, Send, Eye, Heart, Star } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlocks } from '../services/blockService';
@@ -36,7 +36,17 @@ function ViewerItem({ userId, isLiked }: { userId: string, isLiked?: boolean }) 
   );
 }
 
-export default function Stories({ onNavigate }: { onNavigate?: (tab: string, initialType?: 'post' | 'story') => void }) {
+export default function Stories({ 
+  onNavigate,
+  mode = 'list',
+  initialActiveUserId,
+  onCloseViewer
+}: { 
+  onNavigate?: (tab: string, initialType?: 'post' | 'story') => void,
+  mode?: 'list' | 'viewer',
+  initialActiveUserId?: string | null,
+  onCloseViewer?: () => void
+}) {
   const [groupedStories, setGroupedStories] = useState<Record<string, Story[]>>({});
   const [activeUserStories, setActiveUserStories] = useState<Story[] | null>(null);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
@@ -112,6 +122,13 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (initialActiveUserId && groupedStories[initialActiveUserId] && groupedStories[initialActiveUserId].length > 0) {
+      setActiveUserStories(groupedStories[initialActiveUserId]);
+      setCurrentStoryIndex(0);
+    }
+  }, [initialActiveUserId, groupedStories]);
+
   const holdTimer = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoDuration, setVideoDuration] = useState<number>(5000);
@@ -127,6 +144,7 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
       setCurrentStoryIndex(0);
       setProgress(0);
       setVideoDuration(5000);
+      onCloseViewer?.();
     }
   };
 
@@ -422,6 +440,294 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
     }
   }, [activeStory]);
 
+  if (mode === 'viewer') {
+    return (
+      <AnimatePresence>
+        {activeStory && activeUserStories && (
+          <motion.div
+            key="story-viewer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black flex flex-col"
+          >
+            {/* Progress Bars */}
+            <div className="absolute top-0 left-0 right-0 p-2 flex gap-1 z-20 pt-safe">
+              {activeUserStories.map((s, idx) => (
+                <div key={`${s.id}-${idx}`} className="h-1 bg-white/30 rounded-full flex-1 overflow-hidden">
+                  {idx === currentStoryIndex ? (
+                    <div 
+                      className="h-full bg-white transition-all duration-75 ease-linear"
+                      style={{ width: `${progress}%` }}
+                    />
+                  ) : idx < currentStoryIndex ? (
+                    <div className="h-full w-full bg-white" />
+                  ) : (
+                    <div className="h-full w-0 bg-white" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Header */}
+            <div className="absolute top-4 left-0 right-0 p-4 pt-8 flex items-center justify-between z-10 bg-gradient-to-b from-black/50 to-transparent">
+              <div className="flex items-center gap-2">
+                <UserAvatar 
+                  userId={activeStory.authorId} 
+                  size={32}
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="text-white font-medium text-sm drop-shadow-md">{activeStory.authorName}</div>
+                    {activeStory.audience === 'close_friends' && (
+                      <div className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                        <Star className="w-3 h-3 fill-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-white/80 text-xs drop-shadow-md">
+                    {activeStory.createdAt ? formatDistanceToNow(activeStory.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {activeStory.authorId === auth.currentUser?.uid && (
+                  <button 
+                    onClick={() => handleDeleteStory(activeStory.id, activeStory.imageUrl, activeStory.videoUrl)}
+                    className="p-2 text-white/80 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 className="w-6 h-6" />
+                  </button>
+                )}
+                <button 
+                  onClick={() => {
+                    setActiveUserStories(null);
+                    setCurrentStoryIndex(0);
+                    onCloseViewer?.();
+                  }}
+                  className="p-2 text-white/80 hover:text-white transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Image/Video and Navigation */}
+            <div 
+              className="flex-1 flex items-center justify-center relative touch-none"
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={async () => {
+                setIsPaused(false);
+                if (videoRef.current) {
+                  try {
+                    const playPromise = videoRef.current.play();
+                    if (playPromise !== undefined) {
+                      await playPromise;
+                    }
+                  } catch (error) {
+                    if (error instanceof Error && error.name !== 'AbortError') {
+                      console.error('Video play interrupted:', error);
+                    }
+                  }
+                }
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (!activeStory?.likedBy?.includes(auth.currentUser?.uid || '')) {
+                  handleToggleLike();
+                } else {
+                  setShowHeartAnimation(true);
+                  setTimeout(() => setShowHeartAnimation(false), 1000);
+                }
+              }}
+            >
+              {activeStory.mediaType === 'video' || activeStory.videoUrl || (activeStory.imageUrl && (activeStory.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || activeStory.imageUrl.includes('/video/upload/'))) ? (
+                <video 
+                  ref={videoRef}
+                  src={activeStory.videoUrl || activeStory.imageUrl} 
+                  autoPlay
+                  playsInline
+                  onEnded={handleNextStory}
+                  onLoadedMetadata={(e) => {
+                    const video = e.target as HTMLVideoElement;
+                    setVideoDuration(video.duration * 1000);
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img 
+                  src={getOptimizedImageUrl(activeStory.imageUrl || '', 800)} 
+                  alt="Story" 
+                  className="w-full h-full object-cover"
+                />
+              )}
+
+              {/* Navigation Zones */}
+              <div className="absolute inset-y-0 left-0 w-1/3 z-10" onClick={handlePrevStory} />
+              <div className="absolute inset-y-0 right-0 w-2/3 z-10" onClick={handleNextStory} />
+
+              {/* Heart Animation Overlay */}
+              <AnimatePresence>
+                {showHeartAnimation && (
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1.5, opacity: 1 }}
+                    exit={{ scale: 2, opacity: 0 }}
+                    className="absolute z-50 pointer-events-none"
+                  >
+                    <Heart className="w-24 h-24 text-white fill-white drop-shadow-2xl" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Reply Input */}
+            {activeStory.authorId !== auth.currentUser?.uid && (
+              <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20">
+                <form onSubmit={handleSendReply} className="flex items-center gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      onFocus={() => setIsPaused(true)}
+                      onBlur={() => setIsPaused(false)}
+                      placeholder="Send message..."
+                      className="w-full bg-white/10 border border-white/30 rounded-full py-3 px-6 text-white text-sm placeholder:text-white/60 focus:outline-none focus:bg-white/20 focus:border-white/50 transition-all backdrop-blur-md"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleLike}
+                    className="p-2 text-white active:scale-90 transition-all"
+                  >
+                    <Heart 
+                      className={cn(
+                        "w-7 h-7 transition-colors",
+                        activeStory.likedBy?.includes(auth.currentUser?.uid || '') 
+                          ? "fill-red-500 text-red-500" 
+                          : "text-white"
+                      )} 
+                    />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!replyText.trim() || isSendingReply}
+                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-black active:scale-90 transition-all disabled:opacity-50 shadow-lg"
+                  >
+                    <Send className="w-6 h-6" />
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Viewers Button (Only for author) */}
+            {activeStory.authorId === auth.currentUser?.uid && (
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20">
+                <button
+                  onClick={() => {
+                    setIsPaused(true);
+                    setShowViewers(true);
+                  }}
+                  className="flex items-center gap-2 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-md transition-colors"
+                >
+                  <Eye className="w-5 h-5" />
+                  <span className="font-medium">{activeStory.viewsCount || 0} Views</span>
+                </button>
+              </div>
+            )}
+
+            {/* Viewers Modal */}
+            <AnimatePresence>
+              {showViewers && (
+                <motion.div
+                  key="viewers-modal"
+                  initial={{ opacity: 0, y: '100%' }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                  className="absolute inset-x-0 bottom-0 top-1/3 bg-white rounded-t-3xl z-30 flex flex-col overflow-hidden shadow-2xl"
+                >
+                  <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                    <h3 className="font-bold text-lg">Viewers</h3>
+                    <button 
+                      onClick={() => {
+                        setShowViewers(false);
+                        setIsPaused(false);
+                      }}
+                      className="p-2 bg-zinc-100 rounded-full hover:bg-zinc-200 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {(!activeStory.viewers || activeStory.viewers.length === 0) ? (
+                      <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                        <Eye className="w-12 h-12 mb-2 opacity-20" />
+                        <p>No views yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {Array.from(new Set(activeStory.viewers || [])).map((viewerId, idx) => (
+                          <div key={`${viewerId}-${idx}`}>
+                            <ViewerItem userId={viewerId} isLiked={activeStory.likedBy?.includes(viewerId)} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Delete Confirmation Modal */}
+            <AnimatePresence>
+              {storyToDelete && (
+                <motion.div
+                  key="delete-modal"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0, y: 10 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.9, opacity: 0, y: 10 }}
+                    className="bg-white rounded-[28px] p-6 max-w-[280px] w-full shadow-2xl text-center"
+                  >
+                    <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Trash2 className="w-6 h-6 text-red-500" />
+                    </div>
+                    <h3 className="text-lg font-bold text-zinc-900 mb-1.5">Delete Story?</h3>
+                    <p className="text-zinc-500 text-xs mb-6 leading-relaxed">
+                      This will permanently remove your story. This action cannot be undone.
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={confirmDeleteStory}
+                        className="w-full py-3 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-red-200"
+                      >
+                        Delete Story
+                      </button>
+                      <button
+                        onClick={cancelDeleteStory}
+                        className="w-full py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 text-sm font-bold rounded-xl transition-all active:scale-[0.98]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+
   return (
     <div className="bg-white border-b border-zinc-100 py-4 px-4 overflow-x-auto no-scrollbar">
       <div className="flex gap-4 items-center">
@@ -431,7 +737,7 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
             className={cn(
               "relative w-16 h-16 rounded-full p-[2px] transition-all duration-300 cursor-pointer",
               groupedStories[auth.currentUser?.uid || ''] 
-                ? "bg-gradient-to-tr from-indigo-600 to-purple-600 active:scale-95" 
+                ? (groupedStories[auth.currentUser?.uid || ''].some(s => s.audience === 'close_friends') ? "bg-green-500 active:scale-95" : "bg-gradient-to-tr from-indigo-600 to-purple-600 active:scale-95")
                 : "bg-zinc-200 group-hover:bg-zinc-300"
             )}
             onClick={() => {
@@ -474,6 +780,7 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
           })
           .map((userStories, uIdx) => {
             const firstStory = userStories[0];
+            const hasCloseFriendsStory = userStories.some(s => s.audience === 'close_friends');
           return (
             <div 
               key={`${firstStory.authorId}-${uIdx}`} 
@@ -483,7 +790,10 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
                 setCurrentStoryIndex(0);
               }}
             >
-              <div className="relative w-16 h-16 rounded-full p-[2px] bg-gradient-to-tr from-indigo-600 to-purple-600 active:scale-95 transition-transform">
+              <div className={cn(
+                "relative w-16 h-16 rounded-full p-[2px] active:scale-95 transition-transform",
+                hasCloseFriendsStory ? "bg-green-500" : "bg-gradient-to-tr from-indigo-600 to-purple-600"
+              )}>
                 <div className="w-full h-full rounded-full bg-white p-[2px]">
                   <div className="w-full h-full rounded-full bg-zinc-100 overflow-hidden">
                     <UserAvatar 
@@ -537,7 +847,14 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
                   size={32}
                 />
                 <div>
-                  <div className="text-white font-medium text-sm drop-shadow-md">{activeStory.authorName}</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="text-white font-medium text-sm drop-shadow-md">{activeStory.authorName}</div>
+                    {activeStory.audience === 'close_friends' && (
+                      <div className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                        <Star className="w-3 h-3 fill-white" />
+                      </div>
+                    )}
+                  </div>
                   <div className="text-white/80 text-xs drop-shadow-md">
                     {activeStory.createdAt ? formatDistanceToNow(activeStory.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
                   </div>
@@ -556,6 +873,7 @@ export default function Stories({ onNavigate }: { onNavigate?: (tab: string, ini
                   onClick={() => {
                     setActiveUserStories(null);
                     setCurrentStoryIndex(0);
+                    onCloseViewer?.();
                   }}
                   className="p-2 text-white/80 hover:text-white transition-colors"
                 >

@@ -183,7 +183,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser() {
-      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role']) &&
+      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'closeFriends']) &&
              hasRequiredFields(['uid', 'username', 'displayName']) &&
              validStringLength('uid', 1, 128) &&
              validStringLength('username', 3, 30) &&
@@ -193,11 +193,12 @@ service cloud.firestore {
              isValidOptionalNumber('followersCount') &&
              isValidOptionalNumber('followingCount') &&
              (request.resource.data.get('createdAt', null) == null || request.resource.data.createdAt is timestamp) &&
-             (request.resource.data.get('role', 'user') in ['user', 'admin']);
+             (request.resource.data.get('role', 'user') in ['user', 'admin']) &&
+             (!('closeFriends' in request.resource.data) || request.resource.data.closeFriends is list);
     }
 
     function isValidPost() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'mediaUrls', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'mediaUrls', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt', 'audience']) &&
              hasRequiredFields(['authorId', 'authorName', 'createdAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
@@ -211,7 +212,8 @@ service cloud.firestore {
              (!('mentions' in request.resource.data) || request.resource.data.mentions is list) &&
              isValidOptionalNumber('likesCount') &&
              isValidOptionalNumber('commentsCount') &&
-             request.resource.data.createdAt is timestamp;
+             request.resource.data.createdAt is timestamp &&
+             (!('audience' in request.resource.data) || request.resource.data.audience in ['all', 'close_friends']);
     }
 
     function isValidLike() {
@@ -280,7 +282,7 @@ service cloud.firestore {
     }
 
     function isValidStory() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers', 'likesCount', 'likedBy']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers', 'likesCount', 'likedBy', 'audience']) &&
              hasRequiredFields(['authorId', 'authorName', 'mediaType', 'createdAt', 'expiresAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
@@ -293,7 +295,8 @@ service cloud.firestore {
              isValidOptionalNumber('viewsCount') &&
              (!('viewers' in request.resource.data) || request.resource.data.viewers is list) &&
              isValidOptionalNumber('likesCount') &&
-             (!('likedBy' in request.resource.data) || request.resource.data.likedBy is list);
+             (!('likedBy' in request.resource.data) || request.resource.data.likedBy is list) &&
+             (!('audience' in request.resource.data) || request.resource.data.audience in ['all', 'close_friends']);
     }
 
     function isValidStoryLike() {
@@ -366,26 +369,34 @@ service cloud.firestore {
                        isUnchanged('followingCount') &&
                        isUnchanged('role'))
                       ||
-                      // System/Users updating counts (Follow/Unfollow)
-                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role']) &&
-                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role']) &&
+                      // System/Users updating counts (Follow/Unfollow/Block)
+                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'closeFriends']) &&
+                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role', 'closeFriends']) &&
                        (
-                         // Update followersCount
-                         (request.resource.data.get('followersCount', 0) != resource.data.get('followersCount', 0) &&
-                          math.abs(request.resource.data.get('followersCount', 0) - resource.data.get('followersCount', 0)) == 1 &&
-                          (
-                            // Follow: count increased, follow doc must be created in this batch
-                            (request.resource.data.get('followersCount', 0) > resource.data.get('followersCount', 0) &&
-                             getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) != null) ||
-                            // Unfollow: count decreased, follow doc must be deleted in this batch
-                            (request.resource.data.get('followersCount', 0) < resource.data.get('followersCount', 0) &&
-                             getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) == null)
-                          )
-                         ) ||
-                         // Update followingCount (Owner only)
-                         (isOwner(userId) && 
-                          request.resource.data.get('followingCount', 0) != resource.data.get('followingCount', 0) &&
-                          math.abs(request.resource.data.get('followingCount', 0) - resource.data.get('followingCount', 0)) == 1
+                         (
+                           isUnchanged('followersCount') ||
+                           (math.abs(request.resource.data.get('followersCount', 0) - resource.data.get('followersCount', 0)) == 1 &&
+                            (
+                              isOwner(userId) ||
+                              (request.resource.data.get('followersCount', 0) > resource.data.get('followersCount', 0) &&
+                               getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) != null) ||
+                              (request.resource.data.get('followersCount', 0) < resource.data.get('followersCount', 0) &&
+                               getAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + userId)) == null)
+                            )
+                           )
+                         ) &&
+                         (
+                           isUnchanged('followingCount') ||
+                           (math.abs(request.resource.data.get('followingCount', 0) - resource.data.get('followingCount', 0)) == 1 &&
+                            (
+                              isOwner(userId) ||
+                              (request.resource.data.get('followingCount', 0) < resource.data.get('followingCount', 0) &&
+                               getAfter(/databases/$(database)/documents/blocks/$(request.auth.uid + '_' + userId)) != null)
+                            )
+                           )
+                         ) &&
+                         (
+                           !isUnchanged('followersCount') || !isUnchanged('followingCount')
                          )
                        )
                       )
@@ -470,7 +481,13 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        !('audience' in resource.data) || 
+        resource.data.audience == 'all' || 
+        resource.data.authorId == request.auth.uid || 
+        (resource.data.audience == 'close_friends' && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.authorId)).data.get('closeFriends', [])) ||
+        isAdmin()
+      );
       
       allow create: if isAuthenticated() && 
                     isValidPost() && 
@@ -504,6 +521,7 @@ service cloud.firestore {
                        isUnchanged('mentions') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('commentsCount') &&
+                       isUnchanged('audience') &&
                        math.abs(request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0)) == 1 &&
                        (
                          (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
@@ -528,6 +546,7 @@ service cloud.firestore {
                        isUnchanged('mentions') &&
                        isUnchanged('createdAt') &&
                        isUnchanged('likesCount') &&
+                       isUnchanged('audience') &&
                        math.abs(request.resource.data.get('commentsCount', 0) - resource.data.get('commentsCount', 0)) == 1
                       )
                       ||
@@ -563,7 +582,7 @@ service cloud.firestore {
                     followId == request.auth.uid + '_' + request.resource.data.followingId &&
                     areImmutableFieldsUnchanged(['followerId', 'followingId']);
                     
-      allow delete: if isAuthenticated() && (resource == null || resource.data.followerId == request.auth.uid);
+      allow delete: if isAuthenticated() && (resource == null || resource.data.followerId == request.auth.uid || resource.data.followingId == request.auth.uid || isAdmin());
     }
 
     match /comments/{commentId} {
@@ -742,7 +761,13 @@ service cloud.firestore {
     }
 
     match /stories/{storyId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        !('audience' in resource.data) || 
+        resource.data.audience == 'all' || 
+        resource.data.authorId == request.auth.uid || 
+        (resource.data.audience == 'close_friends' && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.authorId)).data.get('closeFriends', [])) ||
+        isAdmin()
+      );
       
       allow create: if isAuthenticated() && 
                     isValidStory() &&
@@ -760,6 +785,7 @@ service cloud.firestore {
                        isUnchanged('expiresAt') &&
                        isUnchanged('likesCount') &&
                        isUnchanged('likedBy') &&
+                       isUnchanged('audience') &&
                        request.resource.data.viewsCount == resource.data.get('viewsCount', 0) + 1 &&
                        request.resource.data.viewers.hasAll(resource.data.get('viewers', [])) &&
                        request.resource.data.viewers.hasAll([request.auth.uid]) &&
@@ -777,6 +803,7 @@ service cloud.firestore {
                        isUnchanged('expiresAt') &&
                        isUnchanged('viewsCount') &&
                        isUnchanged('viewers') &&
+                       isUnchanged('audience') &&
                        (request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0) == 1 || resource.data.get('likesCount', 0) - request.resource.data.get('likesCount', 0) == 1) &&
                        (
                          (request.resource.data.get('likesCount', 0) > resource.data.get('likesCount', 0) &&
@@ -887,7 +914,7 @@ service cloud.firestore {
 
     match /blocks/{blockId} {
       allow read: if isAuthenticated() && (resource == null || resource.data.blockerId == request.auth.uid || resource.data.blockedId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidBlock() && request.resource.data.blockerId == request.auth.uid && blockId == request.auth.uid + '_' + request.resource.data.blockedId;
+      allow create, update: if isAuthenticated() && isValidBlock() && request.resource.data.blockerId == request.auth.uid && blockId == request.auth.uid + '_' + request.resource.data.blockedId;
       allow delete: if isAuthenticated() && (resource == null || resource.data.blockerId == request.auth.uid || isAdmin());
     }
   }

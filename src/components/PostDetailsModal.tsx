@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Trash2, Heart, Edit2, MessageCircle, Bookmark } from 'lucide-react';
+import { X, Send, Trash2, Heart, Edit2, MessageCircle, Bookmark, Star } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc, limit, getDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
@@ -73,6 +73,30 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
     setLikeCount((prev) => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
     
     setIsLiking(true);
+
+    if (post.id.startsWith('pexels-') || post.id.startsWith('unsplash-')) {
+      const likeId = `${post.id}_${auth.currentUser.uid}`;
+      const likeRef = doc(db, 'likes', likeId);
+      try {
+        if (!newIsLiked) {
+          await deleteDoc(likeRef);
+        } else {
+          await setDoc(likeRef, {
+            postId: post.id,
+            userId: auth.currentUser.uid,
+            createdAt: serverTimestamp(),
+          });
+        }
+      } catch (err) {
+        console.error("Error updating external like:", err);
+        setIsLiked(!newIsLiked);
+        setLikeCount((prev) => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
+      } finally {
+        setIsLiking(false);
+      }
+      return;
+    }
+
     const likeId = `${post.id}_${auth.currentUser.uid}`;
     const likeRef = doc(db, 'likes', likeId);
     const postRef = doc(db, 'posts', post.id);
@@ -353,6 +377,29 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
     if (!newComment.trim() || !auth.currentUser || isSubmitting) return;
 
     setIsSubmitting(true);
+
+    if (post.id.startsWith('pexels-') || post.id.startsWith('unsplash-')) {
+      try {
+        const commentRef = doc(collection(db, 'comments'));
+        await setDoc(commentRef, {
+          postId: post.id,
+          authorId: auth.currentUser.uid,
+          authorName: auth.currentUser.displayName || 'Anonymous',
+          authorPhoto: auth.currentUser.photoURL || '',
+          text: newComment.trim(),
+          createdAt: serverTimestamp(),
+          replyToId: replyingTo ? replyingTo.id : null
+        });
+        setNewComment('');
+        setReplyingTo(null);
+      } catch (err) {
+        console.error("Error adding comment to external post:", err);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     try {
       const batch = writeBatch(db);
       
@@ -414,6 +461,19 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
     if (!commentToDelete || !auth.currentUser || isDeletingComment) return;
     
     setIsDeletingComment(true);
+
+    if (post.id.startsWith('pexels-') || post.id.startsWith('unsplash-')) {
+      try {
+        await deleteDoc(doc(db, 'comments', commentToDelete));
+        setCommentToDelete(null);
+      } catch (error) {
+        console.error("Error deleting comment from external post:", error);
+      } finally {
+        setIsDeletingComment(false);
+      }
+      return;
+    }
+
     try {
       const batch = writeBatch(db);
       
@@ -584,6 +644,11 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
               >
                 {post.authorName}
               </button>
+              {post.audience === 'close_friends' && (
+                <div className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                  <Star className="w-3 h-3 fill-white" />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {auth.currentUser?.uid === post.authorId && (

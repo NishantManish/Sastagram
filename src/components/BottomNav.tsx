@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Home, PlusSquare, User, Search, ShieldAlert, MessageSquare, MessageSquareMore } from 'lucide-react';
+import { Home, PlusSquare, User, Search, ShieldAlert, Send } from 'lucide-react';
 import { cn } from '../utils';
 import { motion } from 'motion/react';
 
@@ -20,7 +20,7 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
       { id: 'search', icon: Search, label: 'Search' },
       { 
         id: 'messages', 
-        icon: unreadMessages > 0 ? MessageSquareMore : MessageSquare, 
+        icon: Send, 
         label: 'Messages' 
       },
       { id: 'reels', icon: ({ className }: { className?: string }) => (
@@ -78,7 +78,7 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
                 }}
                 whileTap={{ scale: 0.9 }}
                 className={cn(
-                  "transition-colors duration-300",
+                  "relative transition-colors duration-300",
                   isActive 
                     ? (isDark ? "text-white" : "text-indigo-600") 
                     : (isDark ? "text-zinc-500 group-hover:text-zinc-300" : "text-zinc-400 group-hover:text-zinc-600")
@@ -88,9 +88,14 @@ export default function BottomNav({ activeTab, onChange, unreadMessages = 0, isA
                   className={cn(
                     "w-6 h-6 transition-all duration-300",
                     isActive ? "stroke-[2.5px]" : "stroke-[2px]",
-                    tab.id === 'messages' && "-rotate-6"
+                    tab.id === 'messages' && "-rotate-12"
                   )} 
                 />
+                {tab.id === 'messages' && unreadMessages > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white ring-2 ring-white dark:ring-zinc-950 shadow-sm animate-in zoom-in duration-300">
+                    {unreadMessages > 9 ? '9+' : unreadMessages}
+                  </span>
+                )}
               </motion.div>
             </button>
           );

@@ -85,9 +85,25 @@ export default function Search({ onNavigate, initialQuery, onClearInitialQuery }
           
           setResults(matchedUsers);
           setPostResults([]);
+        } else if (searchLower.startsWith('#')) {
+          // Tag search
+          const tag = searchLower.slice(1);
+          const postsQ = query(
+            collection(db, 'posts'),
+            where('tags', 'array-contains', tag),
+            limit(20)
+          );
+          const postsSnapshot = await getDocs(postsQ);
+          matchedPosts = postsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Post[];
+          
+          setResults([]);
+          setPostResults(matchedPosts);
         } else {
           // General search: users and tags
-          const searchStr = searchLower.startsWith('#') ? searchLower.slice(1) : searchLower;
+          const searchStr = searchLower;
           
           // Users
           const usersQ = query(collection(db, 'users'), limit(50));

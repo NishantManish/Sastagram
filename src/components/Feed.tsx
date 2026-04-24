@@ -22,7 +22,7 @@ const Feed = forwardRef<FeedRef, {
   initialSlideIndex?: number
 }>(({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }, ref) => {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [pexelsPosts, setPexelsPosts] = useState<Post[]>([]);
+  const [unsplashPosts, setUnsplashPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
@@ -85,34 +85,33 @@ const Feed = forwardRef<FeedRef, {
     return () => unsubscribe();
   }, [limitCount]);
 
-  // Fetch Personalized Pexels Posts
+  // Fetch Personalized Unsplash Posts
   useEffect(() => {
-    const fetchPexels = async () => {
+    const fetchUnsplash = async () => {
       try {
-        const response = await fetch('/api/reels/next', {
+        const response = await fetch('/api/unsplash/next', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ interactions: [] }) // We can use empty or fetch from local storage if we want
         });
         if (response.ok) {
           const data = await response.json();
-          if (data.videos) {
-            const mappedPosts: Post[] = data.videos.map((v: any) => ({
-              id: `pexels-${v.id}`,
-              authorId: `pexels-${v.user}`,
-              authorName: v.user,
-              authorPhoto: '',
-              imageUrl: v.image,
-              videoUrl: v.url,
-              mediaType: 'video',
-              mediaUrls: [{ url: v.url, type: 'video' }],
-              caption: `Recommended for you based on your activity: ${v.query}`,
-              likesCount: Math.floor(Math.random() * 1000) + 100,
+          if (data.images) {
+            const mappedPosts: Post[] = data.images.map((img: any) => ({
+              id: `unsplash-${img.id}`,
+              authorId: `unsplash-${img.user.id}`,
+              authorName: img.user.name,
+              authorPhoto: img.user.profile_image,
+              imageUrl: img.url,
+              mediaType: 'image',
+              mediaUrls: [{ url: img.url, type: 'image' }],
+              caption: img.description || `Recommended for you based on your activity: ${img.query}`,
+              likesCount: img.likes || Math.floor(Math.random() * 1000) + 100,
               commentsCount: Math.floor(Math.random() * 100) + 10,
               createdAt: new Date(),
               isReel: false
             }));
-            setPexelsPosts(prev => {
+            setUnsplashPosts(prev => {
               const existingIds = new Set(prev.map(p => p.id));
               const newP = mappedPosts.filter(p => !existingIds.has(p.id));
               return [...prev, ...newP];
@@ -120,12 +119,12 @@ const Feed = forwardRef<FeedRef, {
           }
         }
       } catch (err) {
-        console.error("Failed to fetch personalized posts", err);
+        console.error("Failed to fetch personalized unsplash posts", err);
       }
     };
     
     // Fetch every time limitCount increases to get more recommended posts
-    fetchPexels();
+    fetchUnsplash();
   }, [limitCount]);
 
   useEffect(() => {
@@ -195,13 +194,13 @@ const Feed = forwardRef<FeedRef, {
   let fbIndex = 0;
   let pxIndex = 0;
   
-  while (fbIndex < filteredPosts.length || pxIndex < pexelsPosts.length) {
-    // Add 3 Firebase posts, then 1 Pexels post
+  while (fbIndex < filteredPosts.length || pxIndex < unsplashPosts.length) {
+    // Add 3 Firebase posts, then 1 Unsplash post
     for (let i = 0; i < 3 && fbIndex < filteredPosts.length; i++) {
       combinedPosts.push(filteredPosts[fbIndex++]);
     }
-    if (pxIndex < pexelsPosts.length) {
-      combinedPosts.push(pexelsPosts[pxIndex++]);
+    if (pxIndex < unsplashPosts.length) {
+      combinedPosts.push(unsplashPosts[pxIndex++]);
     }
   }
 

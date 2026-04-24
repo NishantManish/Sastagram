@@ -19,24 +19,34 @@ export const blockUser = async (blockedId: string) => {
     });
 
     // 2. Handle unfollowing both ways
-    // Blocker unfollows blocked
     const follow1Id = `${blockerId}_${blockedId}`;
     const follow1Ref = doc(db, 'follows', follow1Id);
     const follow1Snap = await getDoc(follow1Ref);
-    if (follow1Snap.exists()) {
-      batch.delete(follow1Ref);
-      batch.update(doc(db, 'users', blockerId), { followingCount: increment(-1) });
-      batch.update(doc(db, 'users', blockedId), { followersCount: increment(-1) });
-    }
-
-    // Blocked unfollows blocker
+    
     const follow2Id = `${blockedId}_${blockerId}`;
     const follow2Ref = doc(db, 'follows', follow2Id);
     const follow2Snap = await getDoc(follow2Ref);
+
+    let blockerUpdates: any = {};
+    let blockedUpdates: any = {};
+
+    if (follow1Snap.exists()) {
+      batch.delete(follow1Ref);
+      blockerUpdates.followingCount = increment(-1);
+      blockedUpdates.followersCount = increment(-1);
+    }
+
     if (follow2Snap.exists()) {
       batch.delete(follow2Ref);
-      batch.update(doc(db, 'users', blockedId), { followingCount: increment(-1) });
-      batch.update(doc(db, 'users', blockerId), { followersCount: increment(-1) });
+      blockedUpdates.followingCount = increment(-1);
+      blockerUpdates.followersCount = increment(-1);
+    }
+
+    if (Object.keys(blockerUpdates).length > 0) {
+      batch.update(doc(db, 'users', blockerId), blockerUpdates);
+    }
+    if (Object.keys(blockedUpdates).length > 0) {
+      batch.update(doc(db, 'users', blockedId), blockedUpdates);
     }
 
     await batch.commit();

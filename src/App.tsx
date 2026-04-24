@@ -17,6 +17,7 @@ import Reels from './components/Reels';
 import { Send, ArrowLeft, Camera, Bell, PlusSquare, Clapperboard } from 'lucide-react';
 import { cn } from './utils';
 import { useTheme } from './contexts/ThemeContext';
+import { motion } from 'motion/react';
 
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -179,8 +180,10 @@ export default function App() {
             !showHeader && "-translate-y-full shadow-none",
             showHeader && "shadow-sm shadow-zinc-200/20"
           )}>
-            <div 
-              className="flex items-center gap-2.5 cursor-pointer active:scale-95 transition-transform"
+            <motion.div 
+              className="flex items-center gap-2.5 cursor-pointer origin-left"
+              whileHover="hover"
+              whileTap="tap"
               onClick={() => {
                 if (activeTab === 'feed') {
                   feedRef.current?.scrollToTop();
@@ -189,13 +192,27 @@ export default function App() {
                 }
               }}
             >
-              <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 -rotate-3">
+              <motion.div 
+                variants={{
+                  hover: { scale: 1.1, rotate: 0, x: 2 },
+                  tap: { scale: 0.9, rotate: -12, x: 0 }
+                }}
+                transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                className="w-9 h-9 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 -rotate-3"
+              >
                 <Camera className="w-5 h-5 text-white rotate-3" />
-              </div>
-              <h1 className="text-xl font-black text-zinc-900 dark:text-white tracking-tighter">
+              </motion.div>
+              <motion.h1 
+                variants={{
+                  hover: { x: -3, scale: 1.02 },
+                  tap: { x: -6, scale: 0.98 }
+                }}
+                transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                className="text-xl font-black text-zinc-900 dark:text-white tracking-tighter"
+              >
                 Sasta<span className="text-indigo-600 dark:text-indigo-400">gram</span>
-              </h1>
-            </div>
+              </motion.h1>
+            </motion.div>
             <div className="flex items-center gap-1.5">
               <button 
                 onClick={() => handleNavigate('create')}
@@ -238,9 +255,18 @@ export default function App() {
         <main className={cn(
           "max-w-md mx-auto min-h-[calc(100vh-4rem)] transition-all duration-300",
           activeTab === 'feed' && "pt-16",
-          activeTab !== 'reels' && "pb-32"
+          activeTab !== 'reels' && activeTab !== 'create' && "pb-32"
         )}>
           {/* Cached Pages */}
+          <div className={cn(activeTab !== 'feed' && "hidden")}>
+            <Feed 
+              ref={feedRef}
+              onNavigate={handleNavigate} 
+              onTagClick={handleNavigateToSearch} 
+              initialPostId={initialPostId}
+              initialSlideIndex={initialSlideIndex}
+            />
+          </div>
           <div className={cn(activeTab !== 'search' && "hidden")}>
             <Search onNavigate={handleNavigate} initialQuery={initialSearchQuery} onClearInitialQuery={() => setInitialSearchQuery('')} />
           </div>
@@ -254,15 +280,6 @@ export default function App() {
           </div>
 
           {/* Non-cached Pages */}
-          {activeTab === 'feed' && (
-            <Feed 
-              ref={feedRef}
-              onNavigate={handleNavigate} 
-              onTagClick={handleNavigateToSearch} 
-              initialPostId={initialPostId}
-              initialSlideIndex={initialSlideIndex}
-            />
-          )}
           {activeTab === 'reels' && <Reels key={`reels-${reelsViewKey}`} onNavigate={handleNavigate} />}
           {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
           {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
@@ -271,7 +288,7 @@ export default function App() {
         </main>
 
         {/* Navigation */}
-        {!isSettingsOpen && (
+        {!isSettingsOpen && activeTab !== 'create' && (
           <BottomNav 
             activeTab={activeTab} 
             isDark={activeTab === 'reels'}

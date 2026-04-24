@@ -53,10 +53,23 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [isFollowClicked, setIsFollowClicked] = useState(false);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTap = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+
+  const toggleExpandComment = (commentId: string) => {
+    setExpandedComments(prev => {
+      const next = new Set(prev);
+      if (next.has(commentId)) {
+        next.delete(commentId);
+      } else {
+        next.add(commentId);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (videoRef.current) {
@@ -719,7 +732,19 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
                                 <span className="text-[10px] text-zinc-400 font-bold">{comment.likesCount || 0}</span>
                               </div>
                             </div>
-                            <p className="text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed pr-8">{comment.text}</p>
+                            <p className="text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed pr-8">
+                              {expandedComments.has(comment.id) || comment.text.length <= 100 
+                                ? comment.text 
+                                : `${comment.text.substring(0, 100)}...`}
+                              {comment.text.length > 100 && (
+                                <button
+                                  onClick={() => toggleExpandComment(comment.id)}
+                                  className="ml-1 text-zinc-500 font-bold hover:text-zinc-700 text-[11px]"
+                                >
+                                  {expandedComments.has(comment.id) ? 'See less' : 'See more'}
+                                </button>
+                              )}
+                            </p>
                             <div className="flex items-center gap-4 mt-2">
                               <button 
                                 onClick={() => {
@@ -770,7 +795,19 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
                                       <span className="text-[9px] text-zinc-400 font-bold">{reply.likesCount || 0}</span>
                                     </div>
                                   </div>
-                                  <p className="text-zinc-700 dark:text-zinc-300 text-xs leading-relaxed pr-8">{reply.text}</p>
+                                  <p className="text-zinc-700 dark:text-zinc-300 text-xs leading-relaxed pr-8">
+                                    {expandedComments.has(reply.id) || reply.text.length <= 80 
+                                      ? reply.text 
+                                      : `${reply.text.substring(0, 80)}...`}
+                                    {reply.text.length > 80 && (
+                                      <button
+                                        onClick={() => toggleExpandComment(reply.id)}
+                                        className="ml-1 text-zinc-500 font-bold hover:text-zinc-700 text-[10px]"
+                                      >
+                                        {expandedComments.has(reply.id) ? 'See less' : 'See more'}
+                                      </button>
+                                    )}
+                                  </p>
                                   <div className="flex items-center gap-4 mt-1">
                                     <button 
                                       onClick={() => {

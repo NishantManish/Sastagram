@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2, Volume2, VolumeX, Play } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2, Volume2, VolumeX, Play, Star } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs, onSnapshot, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
@@ -151,11 +151,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         for (const entry of entries) {
           if (entry.isIntersecting) {
             try {
-              const playPromise = video.play();
-              if (playPromise !== undefined) {
-                await playPromise;
-                if (isMounted) setIsPlaying(true);
-              }
+              await video.play();
+              if (isMounted) setIsPlaying(true);
             } catch (error) {
               if (isMounted && error instanceof Error && error.name !== 'AbortError') {
                 console.error('Video play interrupted:', error);
@@ -163,9 +160,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               if (isMounted) setIsPlaying(false);
             }
           } else {
-            if (!video.paused) {
-              video.pause();
-            }
+            video.pause();
             if (isMounted) setIsPlaying(false);
           }
         }
@@ -178,9 +173,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     return () => {
       isMounted = false;
       observer.unobserve(video);
-      if (!video.paused) {
-        video.pause();
-      }
+      video.pause();
     };
   }, []);
 
@@ -196,17 +189,12 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     e.stopPropagation();
     if (videoRef.current) {
       if (isPlaying) {
-        if (!videoRef.current.paused) {
-          videoRef.current.pause();
-        }
+        videoRef.current.pause();
         setIsPlaying(false);
       } else {
         try {
-          const playPromise = videoRef.current.play();
-          if (playPromise !== undefined) {
-            await playPromise;
-            setIsPlaying(true);
-          }
+          await videoRef.current.play();
+          setIsPlaying(true);
         } catch (error) {
           if (error instanceof Error && error.name !== 'AbortError') {
             console.error('Video play interrupted:', error);
@@ -222,6 +210,14 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     if (!auth.currentUser || isFollowLoading || isFollowing) return;
     
     setIsFollowLoading(true);
+
+    if (post.id.startsWith('pexels-') || post.id.startsWith('unsplash-')) {
+      // Optimistic follow for external posts without backend updates
+      setIsFollowing(true);
+      setIsFollowLoading(false);
+      return;
+    }
+
     const followId = `${auth.currentUser.uid}_${post.authorId}`;
     const followRef = doc(db, 'follows', followId);
     const batch = writeBatch(db);
@@ -272,6 +268,31 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     setLikeCount(prev => newIsLiked ? prev + 1 : Math.max(0, prev - 1));
     
     setIsLiking(true);
+
+    if (post.id.startsWith('pexels-') || post.id.startsWith('unsplash-')) {
+      const likeId = `${post.id}_${auth.currentUser.uid}`;
+      const likeRef = doc(db, 'likes', likeId);
+      try {
+        if (!newIsLiked) {
+          await deleteDoc(likeRef);
+        } else {
+          await setDoc(likeRef, {
+            postId: post.id,
+            userId: auth.currentUser.uid,
+            createdAt: serverTimestamp(),
+          });
+        }
+        onLikeToggle?.();
+      } catch (err) {
+        console.error("Error updating external like:", err);
+        setIsLiked(!newIsLiked);
+        setLikeCount(prev => !newIsLiked ? prev + 1 : Math.max(0, prev - 1));
+      } finally {
+        setIsLiking(false);
+      }
+      return;
+    }
+
     const likeId = `${post.id}_${auth.currentUser.uid}`;
     const likeRef = doc(db, 'likes', likeId);
     const postRef = doc(db, 'posts', post.id);
@@ -488,6 +509,11 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
             >
               {post.authorName}
             </button>
+            {post.audience === 'close_friends' && (
+              <div className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                <Star className="w-3 h-3 fill-white" />
+              </div>
+            )}
           </div>
         </div>
         
@@ -590,15 +616,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                       onClick={(e) => {
                         // Don't stop propagation so double tap works
                         if (videoRef.current && videoRef.current.paused) {
-                          const playPromise = videoRef.current.play();
-                          if (playPromise !== undefined) {
-                            playPromise.then(() => setIsPlaying(true)).catch((error) => {
-                              if (error instanceof Error && error.name !== 'AbortError') {
-                                console.error('Video play interrupted:', error);
-                              }
-                              setIsPlaying(false);
-                            });
-                          }
+                          videoRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
                         } else {
                           toggleMute();
                         }

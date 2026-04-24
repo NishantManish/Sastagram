@@ -19,6 +19,7 @@ import { getOptimizedImageUrl } from '../utils/cloudinary';
 import { unblockUser, useBlocks } from '../services/blockService';
 import UserAvatar from './UserAvatar';
 import { cn } from '../lib/utils';
+import CloseFriendsManager from './CloseFriendsManager';
 
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -34,7 +35,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
   
-  const [activeView, setActiveView] = useState<'main' | 'password' | 'notifications' | 'privacy' | 'saved' | 'liked' | 'blocked' | 'theme'>('main');
+  const [activeView, setActiveView] = useState<'main' | 'password' | 'notifications' | 'privacy' | 'saved' | 'liked' | 'blocked' | 'theme' | 'close_friends'>('main');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -107,19 +108,28 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
       );
 
       unsubscribe = onSnapshot(savedQ, async (snapshot) => {
-        const postPromises = snapshot.docs.map(async (saveDoc) => {
-          const data = saveDoc.data();
-          const collectionName = data.isReel ? 'reels' : 'posts';
-          const postRef = doc(db, collectionName, data.postId);
-          const postSnap = await getDoc(postRef);
-          if (postSnap.exists()) {
-            return { id: postSnap.id, ...postSnap.data(), isReel: data.isReel } as Post;
-          }
-          return null;
-        });
-        const resolvedPosts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
-        setSavedPosts(resolvedPosts);
-        setIsPostsLoading(false);
+        try {
+          const postPromises = snapshot.docs.map(async (saveDoc) => {
+            try {
+              const data = saveDoc.data();
+              const collectionName = data.isReel ? 'reels' : 'posts';
+              const postRef = doc(db, collectionName, data.postId);
+              const postSnap = await getDoc(postRef);
+              if (postSnap.exists()) {
+                return { id: postSnap.id, ...postSnap.data(), isReel: data.isReel } as Post;
+              }
+            } catch (err) {
+              console.warn('Failed to fetch saved post:', err);
+            }
+            return null;
+          });
+          const resolvedPosts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
+          setSavedPosts(resolvedPosts);
+        } catch (err) {
+          console.error('Error processing saved posts:', err);
+        } finally {
+          setIsPostsLoading(false);
+        }
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'savedPosts');
         setIsPostsLoading(false);
@@ -150,31 +160,47 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
       };
 
       const unsubPosts = onSnapshot(likedQ, async (snapshot) => {
-        const postPromises = snapshot.docs.map(async (likeDoc) => {
-          const postRef = doc(db, 'posts', likeDoc.data().postId);
-          const postSnap = await getDoc(postRef);
-          if (postSnap.exists()) {
-            return { id: postSnap.id, ...postSnap.data() } as Post;
-          }
-          return null;
-        });
-        posts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
-        updateLikedPosts();
+        try {
+          const postPromises = snapshot.docs.map(async (likeDoc) => {
+            try {
+              const postRef = doc(db, 'posts', likeDoc.data().postId);
+              const postSnap = await getDoc(postRef);
+              if (postSnap.exists()) {
+                return { id: postSnap.id, ...postSnap.data() } as Post;
+              }
+            } catch (err) {
+              console.warn('Failed to fetch liked post:', err);
+            }
+            return null;
+          });
+          posts = (await Promise.all(postPromises)).filter(p => p !== null) as Post[];
+          updateLikedPosts();
+        } catch (err) {
+          console.error('Error processing liked posts:', err);
+        }
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'likes');
       });
 
       const unsubReels = onSnapshot(reelLikedQ, async (snapshot) => {
-        const reelPromises = snapshot.docs.map(async (likeDoc) => {
-          const reelRef = doc(db, 'reels', likeDoc.data().reelId);
-          const reelSnap = await getDoc(reelRef);
-          if (reelSnap.exists()) {
-            return { id: reelSnap.id, ...reelSnap.data(), isReel: true } as Post;
-          }
-          return null;
-        });
-        reels = (await Promise.all(reelPromises)).filter(p => p !== null) as Post[];
-        updateLikedPosts();
+        try {
+          const reelPromises = snapshot.docs.map(async (likeDoc) => {
+            try {
+              const reelRef = doc(db, 'reels', likeDoc.data().reelId);
+              const reelSnap = await getDoc(reelRef);
+              if (reelSnap.exists()) {
+                return { id: reelSnap.id, ...reelSnap.data(), isReel: true } as Post;
+              }
+            } catch (err) {
+              console.warn('Failed to fetch liked reel:', err);
+            }
+            return null;
+          });
+          reels = (await Promise.all(reelPromises)).filter(p => p !== null) as Post[];
+          updateLikedPosts();
+        } catch (err) {
+          console.error('Error processing liked reels:', err);
+        }
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, 'reelLikes');
       });
@@ -266,7 +292,7 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
       title: "Who can see your content",
       items: [
         { icon: <Shield className="w-5 h-5" />, title: "Account privacy", onClick: () => setActiveView('privacy') },
-        { icon: <Star className="w-5 h-5" />, title: "Close Friends", onClick: () => {} },
+        { icon: <Star className="w-5 h-5" />, title: "Close Friends", onClick: () => setActiveView('close_friends') },
         { icon: <ShieldOff className="w-5 h-5" />, title: "Blocked", onClick: () => setActiveView('blocked') },
         { icon: <EyeOff className="w-5 h-5" />, title: "Hide story and live", onClick: () => {} }
       ]
@@ -387,6 +413,10 @@ export default function SettingsPage({ onBack, onEditProfile }: SettingsPageProp
         </div>
       </div>
     );
+  }
+
+  if (activeView === 'close_friends') {
+    return <CloseFriendsManager onBack={() => setActiveView('main')} />;
   }
 
   if (activeView === 'password') {

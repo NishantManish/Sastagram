@@ -21,6 +21,8 @@ import { deleteFromCloudinary } from '../utils/media';
 import UserAvatar from './UserAvatar';
 import ConfirmationModal from './ConfirmationModal';
 import ShareModal from './ShareModal';
+import { cn } from '../utils';
+import Stories from './Stories';
 
 interface ProfileProps {
   userId?: string | null;
@@ -82,6 +84,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   const [isCopied, setIsCopied] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [viewingStoryUserId, setViewingStoryUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -223,6 +226,29 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
   const currentUser = auth.currentUser;
   const targetUserId = viewedUserId || userId || currentUser?.uid;
   const isOwnProfile = currentUser?.uid === targetUserId;
+
+  const [hasActiveStory, setHasActiveStory] = useState(false);
+  const [hasCloseFriendsStory, setHasCloseFriendsStory] = useState(false);
+
+  useEffect(() => {
+    if (!targetUserId) return;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const q = query(
+      collection(db, 'stories'),
+      where('authorId', '==', targetUserId),
+      where('createdAt', '>=', yesterday)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const validStories = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return !data.expiresAt || data.expiresAt.toDate() > new Date();
+      });
+      setHasActiveStory(validStories.length > 0);
+      setHasCloseFriendsStory(validStories.some(doc => doc.data().audience === 'close_friends'));
+    });
+    return () => unsubscribe();
+  }, [targetUserId]);
 
   const { blockedIds, blockedByIds } = useBlocks(currentUser?.uid);
   const isBlockedByMe = targetUserId ? blockedIds.includes(targetUserId) : false;
@@ -562,7 +588,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
                 onClick={() => setShowSettingsPage(true)}
                 className="p-2 text-zinc-900 hover:bg-zinc-50 rounded-xl transition-all active:scale-90 border border-zinc-100 shadow-sm"
               >
-                <Settings className="w-4 h-4" />
+                <Menu className="w-4 h-4" />
               </button>
             </>
           ) : (
@@ -642,15 +668,27 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
           <div className="relative mb-4">
             <div className="absolute -inset-1.5 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur-lg opacity-20 animate-pulse"></div>
             <div 
-              className="relative p-0.5 bg-white rounded-[2rem] shadow-lg cursor-pointer active:scale-95 transition-transform"
-              onClick={() => userProfile.photoURL && setShowProfilePhotoModal(true)}
+              className={cn(
+                "relative p-0.5 bg-white dark:bg-zinc-950 rounded-[2rem] shadow-lg cursor-pointer active:scale-95 transition-all duration-500",
+                hasActiveStory && (hasCloseFriendsStory ? "p-1 bg-green-500" : "p-1 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500")
+              )}
+              onClick={() => {
+                if (hasActiveStory) {
+                  setViewingStoryUserId(targetUserId);
+                } else if (userProfile?.photoURL) {
+                  setShowProfilePhotoModal(true);
+                }
+              }}
             >
               <UserAvatar 
                 userId={targetUserId} 
                 size={88} 
-                className="rounded-[1.8rem] border-2 border-white object-cover"
-                fallbackPhoto={userProfile.photoURL} 
-                fallbackName={userProfile.displayName} 
+                className={cn(
+                  "rounded-[1.8rem] border-2 border-white dark:border-zinc-900 object-cover",
+                  hasActiveStory && "border-2 border-white dark:border-zinc-950"
+                )}
+                fallbackPhoto={userProfile?.photoURL} 
+                fallbackName={userProfile?.displayName} 
               />
             </div>
           </div>
@@ -1270,6 +1308,15 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
             key="reel-details"
             reel={selectedReel}
             onClose={() => setSelectedReel(null)}
+            onNavigate={onNavigate}
+          />
+        )}
+        {viewingStoryUserId && (
+          <Stories 
+            key="profile-story-viewer"
+            mode="viewer"
+            initialActiveUserId={viewingStoryUserId}
+            onCloseViewer={() => setViewingStoryUserId(null)}
             onNavigate={onNavigate}
           />
         )}

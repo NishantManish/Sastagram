@@ -444,14 +444,22 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
 
   const getOtherUser = (chat: Chat) => {
     const otherUserId = chat.participants.find(id => id !== auth.currentUser?.uid);
-    return otherUserId ? chatUsers[otherUserId] : null;
+    if (!otherUserId) return null;
+    const user = chatUsers[otherUserId];
+    if (!user) return null;
+    
+    if (blockedByIds.includes(otherUserId)) {
+      return {
+        ...user,
+        displayName: 'Sastagram User',
+        username: 'sastagram_user',
+        photoURL: null
+      };
+    }
+    return user;
   };
 
-  const filteredChats = chats.filter(chat => {
-    const otherUserId = chat.participants.find(id => id !== auth.currentUser?.uid);
-    if (!otherUserId) return true;
-    return !blockedIds.includes(otherUserId) && !blockedByIds.includes(otherUserId);
-  });
+  const filteredChats = chats;
 
   const handleDeleteChat = async () => {
     if (!chatToDelete || !auth.currentUser) return;
