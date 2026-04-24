@@ -4,14 +4,41 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
+import { v2 as cloudinary } from "cloudinary";
 
 dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.VITE_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const app = express();
 const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Cloudinary delete route
+app.post("/api/cloudinary/delete", async (req, res) => {
+  try {
+    const { publicId, resourceType } = req.body;
+    if (!publicId || !resourceType) {
+      return res.status(400).json({ error: "Missing publicId or resourceType" });
+    }
+
+    if (!process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(500).json({ error: "Cloudinary credentials not configured on server" });
+    }
+
+    const result = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    res.json({ success: true, result });
+  } catch (error: any) {
+    console.error("Cloudinary delete error:", error);
+    res.status(500).json({ error: error.message || "Failed to delete from Cloudinary" });
+  }
+});
 
 // Initialize Gemini lazily
 let ai: GoogleGenAI | null = null;

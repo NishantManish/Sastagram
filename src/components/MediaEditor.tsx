@@ -591,7 +591,9 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
 
       const canvas = document.createElement('canvas');
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      if (!item.url.startsWith('blob:')) {
+        img.crossOrigin = 'anonymous';
+      }
       img.src = item.url;
 
       await new Promise((resolve) => {
@@ -603,10 +605,10 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
             return;
           }
 
-          const cropW = Math.max(1, (state.crop.width / 100) * img.width);
-          const cropH = Math.max(1, (state.crop.height / 100) * img.height);
-          const cropX = Math.max(0, (state.crop.x / 100) * img.width);
-          const cropY = Math.max(0, (state.crop.y / 100) * img.height);
+          const cropW = Math.max(1, (state.crop.width / 100) * img.naturalWidth);
+          const cropH = Math.max(1, (state.crop.height / 100) * img.naturalHeight);
+          const cropX = Math.max(0, (state.crop.x / 100) * img.naturalWidth);
+          const cropY = Math.max(0, (state.crop.y / 100) * img.naturalHeight);
 
           const isRotated = state.baseRotation === 90 || state.baseRotation === 270;
           
@@ -666,21 +668,21 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
 
           const getCanvasFontFamily = (fontStr: string) => {
             switch (fontStr) {
-              case 'Typewriter': return '"Special Elite", cursive';
+              case 'Typewriter': return '"Special Elite", monospace';
               case 'Modern': return '"Righteous", sans-serif';
               case 'Neon': return '"Monoton", cursive'; 
               case 'Strong': return '"Playfair Display", serif';
               case 'Marker': return '"Permanent Marker", cursive';
               case 'Elegant': return '"Playfair Display", serif';
-              case 'Tech': return '"Orbitron", sans-serif';
-              case 'Comic': return '"Bangers", system-ui';
-              case 'Bangers': return '"Bangers", system-ui';
+              case 'Tech': return '"Orbitron", monospace';
+              case 'Comic': return '"Bangers", cursive';
+              case 'Bangers': return '"Bangers", cursive';
               case 'Script': return '"Pacifico", cursive';
               case 'Lobster': return '"Lobster", cursive';
               case 'Pixel': return '"Press Start 2P", cursive';
               case 'Impact': return '"Anton", sans-serif';
               case 'Cursive': return '"Caveat", cursive';
-              default: return 'Arial, sans-serif';
+              default: return '"Outfit", sans-serif';
             }
           };
 
@@ -830,7 +832,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
 
       {/* Main Canvas Area */}
       <main 
-        className="flex-1 bg-black relative flex flex-col items-center justify-center p-4 md:p-12 overflow-hidden"
+        className="flex-1 bg-black relative flex flex-col items-center justify-center p-4 overflow-hidden"
         onPointerDown={(e) => {
           if (e.target === e.currentTarget) {
             setActiveElementId(null);
@@ -1115,7 +1117,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
             </div>
           )}
 
-          <aside className="w-full flex flex-row items-center justify-start md:justify-center px-6 py-4 gap-4 md:gap-8 overflow-x-auto no-scrollbar">
+          <aside className="w-full flex flex-row items-center justify-start px-6 py-4 gap-4 overflow-x-auto no-scrollbar">
             <ToolButton icon={<Type size={24} />} label="Text" onClick={() => { closeAllTools(); handleAddText(); }} />
             <ToolButton icon={<Smile size={24} />} label="Stickers" active={isStickerDrawerOpen} onClick={() => { const wasOpen = isStickerDrawerOpen; closeAllTools(); setIsStickerDrawerOpen(!wasOpen); }} />
             <ToolButton icon={<Sparkles size={24} />} label="Filters" active={isFilterDrawerOpen} onClick={() => { const wasOpen = isFilterDrawerOpen; closeAllTools(); setIsFilterDrawerOpen(!wasOpen); }} />
@@ -1488,7 +1490,7 @@ function ToolButton({ icon, label, onClick, active = false }: { icon: React.Reac
       onClick={onClick}
       className={`flex flex-col items-center gap-2 group min-w-[60px] transition-all ${active ? 'scale-110' : ''}`}
     >
-      <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg ${active ? 'bg-blue-600 text-white shadow-blue-600/40' : 'bg-zinc-900 text-zinc-400 group-hover:bg-zinc-800 group-hover:text-white'}`}>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg ${active ? 'bg-blue-600 text-white shadow-blue-600/40' : 'bg-zinc-900 text-zinc-400 group-hover:bg-zinc-800 group-hover:text-white'}`}>
         {icon}
       </div>
       <span className={`text-[10px] font-black tracking-widest uppercase transition-colors ${active ? 'text-blue-400' : 'text-zinc-500 group-hover:text-white'}`}>{label}</span>

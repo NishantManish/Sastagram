@@ -90,19 +90,6 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
           <h1 className="text-xl font-bold tracking-tight">Create</h1>
         </div>
         
-        {/* Post Type Selector (Desktop) */}
-        <div className="hidden md:flex bg-zinc-900 p-1 rounded-full">
-          {(['post', 'story', 'reel'] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setPostType(type)}
-              className={`px-6 py-1.5 rounded-full text-sm font-bold capitalize transition-all ${postType === type ? 'bg-zinc-700 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-
         <button 
           onClick={handleNext} 
           className={`px-6 py-2 rounded-full font-bold transition-all ${selectedItems.length > 0 ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-600/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
@@ -112,7 +99,7 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
       </header>
 
       {/* Post Type Selector (Mobile) */}
-      <div className="md:hidden flex bg-zinc-950 p-3 border-b border-zinc-800/50 justify-center shrink-0">
+      <div className="flex bg-zinc-950 p-3 border-b border-zinc-800/50 justify-center shrink-0">
         <div className="flex bg-zinc-900 p-1 rounded-full w-full max-w-sm">
           {(['post', 'story', 'reel'] as const).map((type) => (
             <button
@@ -126,13 +113,13 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
         </div>
       </div>
       
-      <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Main Preview Area */}
-        <div className="flex-[1.5] bg-black flex items-center justify-center p-4 md:p-8 relative group">
+        <div className="bg-black flex items-center justify-center p-4 relative group shrink-0">
           <div 
             className={`w-full max-w-2xl bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10 relative transition-all duration-300 ${
               postType === 'post' ? 'aspect-[4/5]' : 'aspect-[9/16]'
-            } max-h-[50vh] md:max-h-none`}
+            } max-h-[50vh]`}
           >
             {selectedItems.length > 0 ? (
               <motion.div
@@ -229,7 +216,7 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
               </div>
             </div>
 
-            <div className={`grid gap-2 overflow-y-auto max-h-[60vh] md:max-h-none no-scrollbar pb-20 ${gridCols === 2 ? 'grid-cols-2' : gridCols === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <div className={`grid gap-2 overflow-y-auto max-h-[60vh] no-scrollbar pb-20 ${gridCols === 2 ? 'grid-cols-2' : gridCols === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <input 
                 type="file" 
                 accept="image/*,video/*" 

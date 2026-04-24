@@ -4,7 +4,8 @@ import ShareScreen from './ShareScreen';
 import MediaSelector, { MediaItem } from './MediaSelector';
 import { AnimatePresence, motion } from 'motion/react';
 import { addDoc, collection, serverTimestamp, Timestamp, writeBatch, doc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, storage } from '../firebase';
 import { handleFirestoreError, OperationType, parseFirestoreError } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
 
@@ -71,21 +72,43 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
             throw new Error("Unable to locate file to upload");
         }
 
-        const formData = new FormData();
-        formData.append('file', fileToUpload, originalFileName);
-        formData.append('upload_preset', (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET);
+        let downloadUrl = '';
+        const cloudName = (import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME;
+        const uploadPreset = (import.meta as any).env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-        const response = await fetch(
-          `https://api.cloudinary.com/v1_1/${(import.meta as any).env.VITE_CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
-          { method: 'POST', body: formData }
-        );
+        if (cloudName && uploadPreset) {
+          try {
+            const formData = new FormData();
+            formData.append('file', fileToUpload, originalFileName);
+            formData.append('upload_preset', uploadPreset);
 
-        if (!response.ok) {
-          throw new Error(`Failed to upload to Cloudinary`);
+            const response = await fetch(
+              `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
+              { method: 'POST', body: formData }
+            );
+
+            if (!response.ok) {
+              throw new Error(`Failed to upload to Cloudinary`);
+            }
+
+            const data = await response.json();
+            downloadUrl = data.secure_url;
+          } catch (e) {
+            console.error('Cloudinary upload failed, falling back to Firebase Storage', e);
+          }
         }
 
-        const data = await response.json();
-        uploadedUrls.push({ url: data.secure_url, type: item.type });
+        if (!downloadUrl) {
+           // Fallback to Firebase Storage
+           const ext = fileToUpload.type.split('/')[1] || (item.type === 'video' ? 'mp4' : 'jpg');
+           const fileName = `${Date.now()}_${i}.${ext}`;
+           const storageRef = ref(storage, `uploads/${auth.currentUser.uid}/${fileName}`);
+           
+           await uploadBytes(storageRef, fileToUpload);
+           downloadUrl = await getDownloadURL(storageRef);
+        }
+
+        uploadedUrls.push({ url: downloadUrl, type: item.type });
       }
 
       // Now create Firestore documents
@@ -157,7 +180,7 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
   };
 
   return (
-    <div className="w-full min-h-[calc(100vh-4rem)] bg-zinc-950 text-white relative flex flex-col overflow-hidden pt-4 pb-24 z-50">
+    <div className="fixed inset-0 w-full h-[100dvh] max-w-md mx-auto bg-zinc-950 text-white flex flex-col overflow-hidden z-[100]">
       <AnimatePresence>
         {flowState === 'select' && (
           <motion.div 

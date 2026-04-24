@@ -1,8 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Caveat:wght@400..700&family=Lobster&family=Monoton&family=Orbitron:wght@400..900&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Press+Start+2P&family=Righteous&family=Special+Elite&display=swap');
 @import "tailwindcss";
 
 @theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-outfit: "Outfit", sans-serif;
+  --font-typewriter: "Special Elite", monospace;
+  --font-modern: "Righteous", sans-serif;
+  --font-neon: "Monoton", cursive;
+  --font-serif: "Playfair Display", serif;
+  --font-marker: "Permanent Marker", cursive;
+  --font-tech: "Orbitron", monospace;
+  --font-bangers: "Bangers", cursive;
+  --font-script: "Pacifico", cursive;
+  --font-lobster: "Lobster", cursive;
+  --font-pixel: "Press Start 2P", cursive;
+  --font-impact: "Anton", sans-serif;
+  --font-cursive: "Caveat", cursive;
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
