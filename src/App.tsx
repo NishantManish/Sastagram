@@ -186,7 +186,7 @@ export default function App() {
               whileTap="tap"
               onClick={() => {
                 if (activeTab === 'feed') {
-                  feedRef.current?.scrollToTop();
+                  feedRef.current?.resetView();
                 } else {
                   handleNavigate('feed');
                 }
@@ -294,7 +294,7 @@ export default function App() {
             isDark={activeTab === 'reels'}
             onChange={(tab) => {
               if (tab === 'feed' && activeTab === 'feed') {
-                feedRef.current?.scrollToTop();
+                feedRef.current?.resetView();
               } else if (tab === 'messages' && activeTab === 'messages') {
                 setMessagesViewKey(prev => prev + 1);
               } else if (tab === 'reels' && activeTab === 'reels') {

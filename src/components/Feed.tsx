@@ -13,6 +13,7 @@ import { useBlocks } from '../services/blockService';
 
 export interface FeedRef {
   scrollToTop: () => void;
+  resetView: () => void;
 }
 
 const Feed = forwardRef<FeedRef, { 
@@ -36,6 +37,10 @@ const Feed = forwardRef<FeedRef, {
 
   useImperativeHandle(ref, () => ({
     scrollToTop: () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    resetView: () => {
+      setSelectedUserId(null);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }));

@@ -42,6 +42,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(initialMediaIndex);
+  const [direction, setDirection] = useState(0);
   const [mediaAspectRatio, setMediaAspectRatio] = useState<number>(1);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -57,22 +58,32 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
 
   const currentMedia = mediaList[currentMediaIndex];
 
-  const handleDragEnd = (e: any, { offset, velocity }: any) => {
-    const swipe = offset.x;
-    const swipeThreshold = 50;
-    
-    if (swipe < -swipeThreshold) {
+  const handleSwipe = (newDirection: number) => {
+    setDirection(newDirection);
+    if (newDirection > 0) { // Swiping Left -> Going Next
       if (currentMediaIndex < mediaList.length - 1) {
         setCurrentMediaIndex(prev => prev + 1);
       } else if (onSwipeNext) {
         onSwipeNext();
       }
-    } else if (swipe > swipeThreshold) {
+    } else { // Swiping Right -> Going Prev
       if (currentMediaIndex > 0) {
         setCurrentMediaIndex(prev => prev - 1);
       } else if (onSwipePrev) {
         onSwipePrev();
       }
+    }
+  };
+
+  const handleDragEnd = (e: any, { offset, velocity }: any) => {
+    const swipe = offset.x;
+    const swipeThreshold = 50;
+    const velocityThreshold = 500;
+    
+    if (swipe < -swipeThreshold || velocity.x < -velocityThreshold) {
+      handleSwipe(1);
+    } else if (swipe > swipeThreshold || velocity.x > velocityThreshold) {
+      handleSwipe(-1);
     }
   };
 
@@ -594,13 +605,17 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
           onDragEnd={handleDragEnd}
           className="w-full h-full flex items-center justify-center relative touch-pan-y"
         >
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" custom={direction}>
             <motion.div
-              key={currentMediaIndex}
-              initial={{ opacity: 0, x: 50 }}
+              key={`${post.id}-${currentMediaIndex}`}
+              custom={direction}
+              initial={{ opacity: 0, x: direction > 0 ? 100 : -100 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, x: direction > 0 ? -100 : 100 }}
+              transition={{ 
+                x: { type: "spring", stiffness: 300, damping: 30 },
+                opacity: { duration: 0.2 }
+              }}
               className="w-full h-full flex items-center justify-center"
             >
               <ZoomableMedia className="w-full h-full">
