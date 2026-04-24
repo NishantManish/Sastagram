@@ -1,112 +1,132 @@
-# Sastagram 📸
+# 📸 Sastagram
 
-Sastagram is a modern, minimal social media application inspired by Instagram. It provides a clean space for visual storytelling, allowing users to share moments, connect with others, and discover creative content.
+> **A high-fidelity social storytelling platform.** Sastagram reimagines visual connection with a focus on speed, aesthetics, and real-time interaction.
 
-## ✨ Features
+---
 
-- **Modern Auth Experience:** Beautifully designed split-layout login and signup screens with Google and Email authentication.
-- **Dynamic Feed:** Scroll through a real-time feed of posts from creators you follow.
-- **Visual Stories:** Share ephemeral moments with a dedicated stories section at the top of the feed.
-- **Post Creation:** Upload and share your photos with captions.
-- **Rich Profiles:** Personalized user profiles with bios, follower/following counts, and a grid view of posts.
-- **Real-time Notifications:** Stay updated with likes, follows, and messages.
-- **Direct Messaging:** Connect with other users through a built-in messaging system.
-- **Search:** Discover new creators and content easily.
-- **Responsive Design:** Fully optimized for both desktop and mobile devices.
-- **AI-Powered Features:** Leveraging Google Gemini for intelligent content interactions.
+## 🚀 Core Experience
 
-## 🛠️ Tech Stack & Libraries
+Sastagram is more than just a clone—it's a performance-tuned social engine built with the latest stack. It combines the familiarity of Instagram with cutting-edge PWA features and AI-driven enhancements.
 
-This project is built with a robust set of modern web technologies:
+### ✨ Key Features
 
-### Frontend
-- **React 19.2:** The core library for building the user interface.
-- **Vite 8.0:** Next-generation frontend tooling for a fast development experience.
-- **Tailwind CSS 4.2:** A utility-first CSS framework for rapid UI development.
-- **Motion (Framer Motion) 12.3:** For smooth, high-performance animations and transitions.
-- **Lucide React 1.7:** A beautiful and consistent icon library.
-- **React Easy Crop 5.5:** For professional-grade image cropping during profile setup.
-- **Date-fns 4.1:** For easy and accurate date formatting.
+- **⚡ Instant Feedback:** Motion-powered transitions and optimistic UI updates for a buttery-smooth feel.
+- **🎨 Creative Studio:** Advanced post creation with multiple media support, custom aspect ratios, and AI-powered text styling.
+- **🌀 Interactive Reels:** A full-screen, vertically scrollable video experience with native-like performance.
+- **💬 Real-time DMs:** Low-latency messaging with attachment support and live presence indicators.
+- **🔥 Visual Stories:** Ephemeral content at the top of your feed with engaging transitions.
+- **🛠️ Power User Tools:** A integrated Admin Dashboard for comprehensive content and user management.
+- **🤖 Gemini AI Integration:** Smart features including intelligent image analysis and content suggestions.
+- **📱 PWA Ready:** Installable on Android/iOS for a native app feel with offline support hooks.
 
-### Backend & Infrastructure
-- **Firebase 12.11:**
-  - **Authentication:** Secure user sign-in with Google and Email.
-  - **Firestore:** Real-time NoSQL database for storing posts, users, and interactions.
-  - **Storage:** For handling file uploads (where applicable).
-- **Express 5.2:** A minimal and flexible Node.js web application framework for the backend server.
-- **Cloudinary 2.9:** For high-performance media storage, optimization, and delivery.
-- **Google Gemini AI 1.47:** Integrated for advanced AI-powered features.
+---
 
-## 📂 Project Structure
+## 🛠️ Performance Stack
+
+| Layer | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Framework** | [React 19](https://react.dev) | High-concurrency UI logic |
+| **Build Tool** | [Vite 8](https://vitejs.dev) | Near-instant HMR and optimized bundling |
+| **Styling** | [Tailwind CSS 4](https://tailwindcss.com) | Modern, responsive utility-first design |
+| **Animation** | [Motion](https://motion.dev) | Fluid layout animations and gestures |
+| **Backend** | [Firebase](https://firebase.google.com) | Real-time Data, Auth, and Security Rules |
+| **Server** | [Express](https://expressjs.com) | Custom API routes & Gemini integration |
+| **Media** | [Cloudinary](https://cloudinary.com) | CDN-delivered image/video optimization |
+
+---
+
+## 📂 Architecture at a Glance
 
 ```text
-├── src/
-│   ├── components/       # Reusable UI components
-│   ├── contexts/         # React Contexts for state management
-│   ├── hooks/            # Custom React hooks
-│   ├── services/         # API and third-party service integrations
-│   ├── utils/            # Utility functions
-│   ├── App.tsx           # Main application component
-│   └── main.tsx          # Application entry point
-├── server.ts             # Express backend server
-├── vite.config.ts        # Vite configuration
-├── tsconfig.json         # TypeScript configuration
-├── firestore.rules       # Firebase security rules
-└── metadata.json         # Application metadata
+src/
+├── components/       # Atomic UI & complex feature containers
+├── contexts/         # global state: Auth, Theme, Notifications
+├── services/         # Logic for Firebase, Cloudinary, and Gemini
+├── utils/            # Media processing, date formatters, and helpers
+├── types.ts          # Centralized TypeScript definitions
+└── App.tsx           # Router-level logic and layout orchestration
 ```
 
-## 🚀 Getting Started
+---
 
-### Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
-- A Firebase project
-- A Cloudinary account
+## 🗺️ Detailed Usage Guide
 
-### Installation
+### 1. Setup & Configuration
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/sastagram.git
-   cd sastagram
-   ```
+Sastagram requires a few external integrations to function at 100%.
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+#### External Credentials
+Create a `.env` file based on `.env.example`:
+```env
+# Cloudinary (Sign up at cloudinary.com)
+VITE_CLOUDINARY_CLOUD_NAME=dxxxxxxxx
+VITE_CLOUDINARY_UPLOAD_PRESET=ml_default
+CLOUDINARY_API_KEY=xxxxxxxxxxxxxxx
+CLOUDINARY_API_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-3. **Environment Setup:**
-   Create a `.env` file in the root directory and add your credentials (refer to `.env.example`):
-   ```env
-   VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name
-   VITE_CLOUDINARY_UPLOAD_PRESET=your_upload_preset
-   CLOUDINARY_API_KEY=your_api_key
-   CLOUDINARY_API_SECRET=your_api_secret
-   GEMINI_API_KEY=your_gemini_api_key
-   ```
+# Google Gemini (Get key at aistudio.google.com)
+GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxx
+```
 
-4. **Firebase Configuration:**
-   Place your `firebase-applet-config.json` in the root directory with your project details.
+#### Firebase Integration
+1. Create a project in [Firebase Console](https://console.firebase.google.com/).
+2. Enable **Authentication** (Google & Email).
+3. Enable **Firestore** in Test Mode (or apply `firestore.rules`).
+4. Download your `firebase-applet-config.json` and place it in the root.
 
-5. **Run the development server:**
-   ```bash
-   npm run dev
-   ```
-   The app will be available at `http://localhost:3000`.
+---
 
-## 📱 How to Install on Android
+### 2. Feature Walkthrough
 
-Since Sastagram is a Progressive Web App (PWA), you can easily "install" it on your Android device without using the Play Store:
+#### 🏠 Home & Feed
+- **Scroll** through posts from followings.
+- **Double Tap** on any post to quickly Like.
+- **Long Press** on media to see a full-view preview.
+- **Swipe** through multi-media posts with fluid gesture controls.
 
-1. **Open Chrome** on your Android phone.
-2. **Navigate to the URL** where your app is hosted (e.g., your deployed Cloud Run or Vercel URL).
-3. **Tap the three dots (menu)** in the top right corner of Chrome.
-4. **Select "Add to Home screen"**.
-5. **Confirm the name** (Sastagram) and tap "Add".
+#### 🎥 Reels
+- Access the Reels tab from the bottom navigation.
+- **Swipe Vertical** to switch between immersive video content.
+- Video playback is optimized to auto-pause when out of view.
 
-The app will now appear on your home screen and in your app drawer, providing a full-screen, app-like experience!
+#### ➕ Modern Creator
+- Click the **(+)** button to open the editor.
+- **Drag & Drop** multiple images or videos.
+- Use the built-in editor to crop images and overlay styled text.
 
-## 📄 License
+#### 🔐 Admin Dashboard
+- Access `/admin` (available to owners designated in database).
+- Manage reported content, oversee users, and monitor system health.
 
-This project is open-source and available under the MIT License.
+---
+
+## 📱 Mobile Installation (Android & iOS)
+
+Sastagram is designed to behave like a native app.
+
+**On Android (Chrome):**
+1. Visit the app URL.
+2. Tap the **Menu (⋮)** → **Add to Home screen**.
+3. Launch from your home screen for a full-screen experience.
+
+**On iOS (Safari):**
+1. Visit the app URL.
+2. Tap the **Share** button.
+3. Scroll down and select **Add to Home Screen**.
+
+---
+
+## 📜 Development Commands
+
+| Command | Action |
+| :--- | :--- |
+| `npm install` | Install dev and runtime dependencies |
+| `npm run dev` | Spin up Express + Vite development server |
+| `npm run build` | Generate production-ready optimized assets |
+| `npm run lint` | Static type checking with `tsc` |
+
+---
+
+## 📜 License
+
+This project is open-source under the [MIT License](LICENSE).
