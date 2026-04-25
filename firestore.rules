@@ -408,7 +408,7 @@ service cloud.firestore {
     }
 
     function isValidMessage() {
-      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'sharedPostId', 'sharedPostSlideIndex', 'sharedPostPreviewUrl', 'sharedPostMediaType', 'sharedProfileId', 'sharedStoryId', 'sharedStoryPreviewUrl', 'sharedStoryMediaType', 'sharedReelId', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
+      return hasOnlyAllowedFields(['chatId', 'senderId', 'text', 'attachmentUrl', 'likes', 'sharedPostId', 'sharedPostSlideIndex', 'sharedPostPreviewUrl', 'sharedPostMediaType', 'sharedProfileId', 'sharedStoryId', 'sharedStoryPreviewUrl', 'sharedStoryMediaType', 'sharedReelId', 'createdAt', 'editedAt', 'isEdited', 'deletedFor']) &&
              hasRequiredFields(['chatId', 'senderId', 'text', 'createdAt']) &&
              validStringLength('chatId', 1, 128) &&
              validStringLength('senderId', 1, 128) &&
@@ -433,7 +433,8 @@ service cloud.firestore {
              request.resource.data.createdAt is timestamp &&
              (!('editedAt' in request.resource.data) || request.resource.data.editedAt is timestamp) &&
              (!('isEdited' in request.resource.data) || request.resource.data.isEdited is bool) &&
-             (!('deletedFor' in request.resource.data) || request.resource.data.deletedFor is list);
+             (!('deletedFor' in request.resource.data) || request.resource.data.deletedFor is list) &&
+             (!('likes' in request.resource.data) || request.resource.data.likes is list);
     }
 
     function isValidReel() {
@@ -885,7 +886,8 @@ service cloud.firestore {
                           isUnchanged('attachmentUrl') &&
                           isUnchanged('sharedPostId') &&
                           isUnchanged('sharedPostSlideIndex') &&
-                          isUnchanged('deletedFor')
+                          isUnchanged('deletedFor') &&
+                          isUnchanged('likes')
                         )
                         ||
                         (
@@ -898,9 +900,24 @@ service cloud.firestore {
                           isUnchanged('createdAt') &&
                           isUnchanged('editedAt') &&
                           isUnchanged('isEdited') &&
+                          isUnchanged('likes') &&
                           request.resource.data.deletedFor.hasAll(resource.data.get('deletedFor', [])) &&
                           request.resource.data.deletedFor.hasAll([request.auth.uid]) &&
                           (request.resource.data.deletedFor.size() == resource.data.get('deletedFor', []).size() + 1 || request.resource.data.deletedFor.size() == resource.data.get('deletedFor', []).size())
+                        )
+                        ||
+                        (
+                          isUnchanged('chatId') &&
+                          isUnchanged('senderId') &&
+                          isUnchanged('text') &&
+                          isUnchanged('attachmentUrl') &&
+                          isUnchanged('sharedPostId') &&
+                          isUnchanged('sharedPostSlideIndex') &&
+                          isUnchanged('createdAt') &&
+                          isUnchanged('editedAt') &&
+                          isUnchanged('isEdited') &&
+                          isUnchanged('deletedFor') &&
+                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
                         )
                       );
 

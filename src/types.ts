@@ -112,6 +112,7 @@ export interface Message {
   senderId: string;
   text: string;
   attachmentUrl?: string;
+  likes?: string[];
   sharedPostId?: string;
   sharedPostSlideIndex?: number;
   sharedPostPreviewUrl?: string;

@@ -3,7 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, add
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, Message, User, Post, Reel } from '../types';
-import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard } from 'lucide-react';
+import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard, Heart } from 'lucide-react';
 import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
@@ -517,7 +517,10 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       } else {
         alert('This post is no longer available.');
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message?.includes('Missing or insufficient permissions') || error?.code === 'permission-denied') {
+        alert('This post is private or you do not have permission to view it.');
+      }
       console.error('Error fetching post:', error);
     }
   };
@@ -530,7 +533,10 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       } else {
         alert('This reel is no longer available.');
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message?.includes('Missing or insufficient permissions') || error?.code === 'permission-denied') {
+        alert('This reel is private or you do not have permission to view it.');
+      }
       console.error('Error fetching reel:', error);
     }
   };
@@ -633,62 +639,126 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                 const otherUserId = currentChat.participants.find(id => id !== auth.currentUser?.uid);
                 const isRead = isLastMessage && isMine && otherUserId && currentChat.readStatus?.[otherUserId];
 
+                const previousMsg = index > 0 ? messages[index - 1] : null;
+                const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+
+                const prevMinute = previousMsg?.createdAt ? Math.floor(previousMsg.createdAt.toMillis() / 60000) : null;
+                const currMinute = msg.createdAt ? Math.floor(msg.createdAt.toMillis() / 60000) : null;
+                const nextMinute = nextMsg?.createdAt ? Math.floor(nextMsg.createdAt.toMillis() / 60000) : null;
+
+                const isSameUserAsPrevious = previousMsg && previousMsg.senderId === msg.senderId;
+                const isSameMinuteAsPrevious = prevMinute === currMinute;
+                const isSameGroupAsPrevious = isSameUserAsPrevious && isSameMinuteAsPrevious;
+                const isSameGroupAsNext = nextMsg && nextMsg.senderId === msg.senderId && nextMinute === currMinute;
+
+                let roundedStyle = 'rounded-[22px]';
+                if (isMine) {
+                  if (isSameGroupAsPrevious && isSameGroupAsNext) {
+                    roundedStyle = 'rounded-l-[22px] rounded-r-[4px]';
+                  } else if (isSameGroupAsPrevious && !isSameGroupAsNext) {
+                    roundedStyle = 'rounded-l-[22px] rounded-tr-[4px] rounded-br-[22px]';
+                  } else if (!isSameGroupAsPrevious && isSameGroupAsNext) {
+                    roundedStyle = 'rounded-l-[22px] rounded-tr-[22px] rounded-br-[4px]';
+                  }
+                } else {
+                  if (isSameGroupAsPrevious && isSameGroupAsNext) {
+                    roundedStyle = 'rounded-r-[22px] rounded-l-[4px]';
+                  } else if (isSameGroupAsPrevious && !isSameGroupAsNext) {
+                    roundedStyle = 'rounded-r-[22px] rounded-tl-[4px] rounded-bl-[22px]';
+                  } else if (!isSameGroupAsPrevious && isSameGroupAsNext) {
+                    roundedStyle = 'rounded-r-[22px] rounded-tl-[22px] rounded-bl-[4px]';
+                  }
+                }
+
+                const showAvatar = !isMine && (!isSameGroupAsNext);
+
                 const showDate = index === 0 || 
-                  (msg.createdAt && messages[index - 1]?.createdAt && 
-                   !isSameDay(msg.createdAt.toDate(), messages[index - 1].createdAt.toDate()));
+                  (prevMinute !== null && currMinute !== null && 
+                   (!isSameDay(msg.createdAt.toDate(), previousMsg!.createdAt.toDate()) || currMinute - prevMinute >= 60));
 
                 const isEditable = isMine && msg.createdAt && (Date.now() - msg.createdAt.toMillis() < 60 * 60 * 1000);
 
-                return (
-                  <div key={`${msg.id}-${index}`} className="w-full">
-                    {showDate && msg.createdAt && (
-                      <div className="w-full flex justify-center my-6">
-                        <span className="text-[11px] font-bold text-zinc-400 bg-white px-4 py-1.5 rounded-full shadow-sm border border-zinc-100 uppercase tracking-widest">
-                          {format(msg.createdAt.toDate(), 'MMMM d, yyyy')}
-                        </span>
-                      </div>
-                    )}
+                const handleDoubleTap = async () => {
+                  if (!auth.currentUser) return;
+                  const newLikes = msg.likes?.includes(auth.currentUser.uid)
+                    ? msg.likes.filter(id => id !== auth.currentUser?.uid)
+                    : [...(msg.likes || []), auth.currentUser.uid];
                     
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      className={`flex flex-col w-full ${isMine ? 'items-end' : 'items-start'} relative group`}
-                    >
-                      <motion.div 
-                        drag="x"
-                        dragConstraints={{ left: -60, right: 60 }}
-                        dragElastic={0.1}
-                        onDragStart={handleMessageTouchEnd}
-                        className={`flex flex-col max-w-[85%] relative ${heldMessage?.id === msg.id ? 'z-50' : 'z-10'}`}
-                        onMouseDown={() => handleMessageTouchStart(msg)}
-                        onMouseUp={handleMessageTouchEnd}
-                        onMouseLeave={handleMessageTouchEnd}
-                        onTouchStart={() => handleMessageTouchStart(msg)}
-                        onTouchEnd={handleMessageTouchEnd}
-                      >
-                        {/* Hidden Timestamp that reveals on drag */}
-                        <div className={`absolute top-1/2 -translate-y-1/2 flex items-center transition-opacity duration-200 ${
-                          isMine ? 'left-full ml-4' : 'right-full mr-4'
-                        }`}>
-                          <span className="text-[10px] font-black text-zinc-400 whitespace-nowrap uppercase tracking-tighter">
-                            {msg.createdAt && format(msg.createdAt.toDate(), 'h:mm a')}
+                  try {
+                    await updateDoc(doc(db, `chats/${selectedChat.id}/messages`, msg.id), {
+                      likes: newLikes
+                    });
+                  } catch (error) {
+                    console.error('Error liking message:', error);
+                  }
+                };
+
+                return (
+                  <div key={`${msg.id}-${index}`} className={`w-full flex ${isMine ? 'justify-end' : 'justify-start'} ${
+                    isSameGroupAsPrevious ? 'mt-[0.7px]' : (isSameUserAsPrevious ? 'mt-[1.5px]' : 'mt-4')
+                  }`}>
+                    <div className="flex flex-col w-full">
+                      {showDate && msg.createdAt && (
+                        <div className="w-full flex justify-center my-6">
+                          <span className="text-[11px] font-medium text-zinc-500">
+                            {isSameDay(msg.createdAt.toDate(), new Date()) 
+                                ? format(msg.createdAt.toDate(), 'h:mm a')
+                                : format(msg.createdAt.toDate(), 'MMM d, h:mm a')}
                           </span>
                         </div>
-
-                        <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-                          {msg.isEdited && (
-                            <span className={`text-[9px] font-black text-zinc-400 mb-1 uppercase tracking-[0.15em] ${isMine ? 'mr-1' : 'ml-1'}`}>
-                              Edited
-                            </span>
-                          )}
-
-                          <div 
-                            className={`px-4 py-3 rounded-[20px] shadow-sm relative flex flex-col transition-all duration-300 ${
-                              isMine 
-                                ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-sm shadow-indigo-200/50' 
-                                : 'bg-white border border-zinc-100 text-zinc-900 rounded-tl-sm shadow-zinc-200/50'
-                            } ${heldMessage?.id === msg.id ? 'ring-4 ring-indigo-500/20 scale-[1.02] shadow-xl' : ''}`}
+                      )}
+                      
+                      <div className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'} relative group items-end gap-2`}>
+                        {!isMine && (
+                          <div className="w-7 h-7 flex-shrink-0 mb-1 z-10">
+                            {showAvatar && otherUser?.photoURL ? (
+                              <img src={getOptimizedImageUrl(otherUser.photoURL, 64, 64)} alt="" className="w-full h-full rounded-full object-cover border border-zinc-200 shadow-sm transition-transform active:scale-95" />
+                            ) : showAvatar ? (
+                              <div className="w-full h-full rounded-full bg-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-500">
+                                {otherUser?.displayName?.charAt(0).toUpperCase()}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                        <motion.div 
+                          drag="x"
+                          dragConstraints={{ left: 0, right: 0 }}
+                          dragElastic={0.4}
+                          whileDrag="dragged"
+                          onDragStart={handleMessageTouchEnd}
+                          onDoubleClick={handleDoubleTap}
+                          className={`flex flex-col max-w-[70%] relative ${heldMessage?.id === msg.id ? 'z-50' : 'z-20'}`}
+                          onMouseDown={() => handleMessageTouchStart(msg)}
+                          onMouseUp={handleMessageTouchEnd}
+                          onMouseLeave={handleMessageTouchEnd}
+                          onTouchStart={() => handleMessageTouchStart(msg)}
+                          onTouchEnd={handleMessageTouchEnd}
+                        >
+                          <motion.div 
+                            variants={{ dragged: { opacity: 1 } }}
+                            className={`absolute top-1/2 -translate-y-1/2 flex items-center transition-opacity duration-200 opacity-0 group-hover:opacity-100 pointer-events-none ${
+                              isMine ? 'left-full ml-2' : 'right-full mr-2'
+                            }`}
                           >
+                            <span className="text-[10px] font-medium text-zinc-400 whitespace-nowrap">
+                              {msg.createdAt && format(msg.createdAt.toDate(), 'h:mm a')}
+                            </span>
+                          </motion.div>
+
+                          <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+                            {msg.isEdited && (
+                              <span className={`text-[9px] font-medium text-zinc-400 mb-0.5 ${isMine ? 'mr-1' : 'ml-1'}`}>
+                                Edited
+                              </span>
+                            )}
+
+                            <div 
+                              className={`px-4 py-2 relative flex flex-col transition-all duration-200 ${roundedStyle} ${
+                                isMine 
+                                  ? 'bg-[#3797F0] text-white' 
+                                  : 'bg-[#EFEFEF] text-black'
+                              } ${heldMessage?.id === msg.id ? 'brightness-90 scale-[1.02] shadow-sm' : ''} ${!msg.text && (msg.attachmentUrl || msg.sharedPostId || msg.sharedReelId || msg.sharedProfileId || msg.sharedStoryId) ? '!p-1 !bg-transparent border border-zinc-200 shadow-sm' : ''}`}
+                            >
                             <AnimatePresence>
                               {heldMessage?.id === msg.id && (
                                   <motion.div
@@ -891,13 +961,20 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                             {msg.text && (
                               <p className="text-[15px] leading-relaxed break-words font-medium">{msg.text}</p>
                             )}
+
+                            {msg.likes && msg.likes.length > 0 && (
+                              <div className={`absolute -bottom-2 ${isMine ? '-left-2' : '-right-2'} bg-white shadow-sm border border-zinc-100 rounded-full p-1 z-20`}>
+                                <Heart className={`w-3.5 h-3.5 ${msg.likes.includes(auth.currentUser?.uid || '') ? 'text-red-500 fill-red-500' : 'text-zinc-400'}`} />
+                              </div>
+                            )}
                           </div>
                         </div>
                       </motion.div>
                       {isRead && (
-                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mt-1.5 mr-1">Read</span>
+                        <span className="text-[11px] font-semibold text-zinc-400 mt-1 mr-1">Seen</span>
                       )}
-                    </motion.div>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
