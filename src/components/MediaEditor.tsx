@@ -33,6 +33,12 @@ export type EditorState = {
   speed: number;
   muted: boolean;
   previewWidth?: number;
+  music?: {
+    url: string;
+    artist: string;
+    title: string;
+    artwork: string;
+  };
 };
 
 interface MediaEditorProps {
@@ -92,7 +98,8 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
     crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'original' },
     trim: { start: 0, end: 100 },
     speed: 1,
-    muted: false
+    muted: false,
+    music: undefined
   })));
 
   const [history, setHistory] = useState<EditorState[][]>(mediaItems.map(() => ([{ 
@@ -103,7 +110,8 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
     crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'original' },
     trim: { start: 0, end: 100 },
     speed: 1,
-    muted: false
+    muted: false,
+    music: undefined
   }])));
   const [historyIndices, setHistoryIndices] = useState<number[]>(mediaItems.map(() => 0));
 
@@ -113,9 +121,11 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
     baseRotation: 0,
     baseFlipH: false,
     crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'original' },
+    baseline: false,
     trim: { start: 0, end: 100 },
     speed: 1,
-    muted: false
+    muted: false,
+    music: undefined
   };
   const elements = currentState.elements;
   const currentFilter = currentState.filter;
@@ -125,6 +135,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
   const trim = currentState.trim;
   const speed = currentState.speed;
   const muted = currentState.muted;
+  const currentMusic = currentState.music;
 
   const historyIndex = historyIndices[currentIndex] || 0;
   const currentHistory = history[currentIndex] || [currentState];
@@ -139,6 +150,10 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
   const [showCenterGuide, setShowCenterGuide] = useState(false);
   const [isStickerDrawerOpen, setIsStickerDrawerOpen] = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const [isMusicLibraryOpen, setIsMusicLibraryOpen] = useState(false);
+  const [musicSearch, setMusicSearch] = useState('');
+  const [musicSearchResults, setMusicSearchResults] = useState<any[]>([]);
+  const [isSearchingMusic, setIsSearchingMusic] = useState(false);
   const [stickerSearch, setStickerSearch] = useState('');
   const [activeElementId, setActiveElementId] = useState<string | null>(null);
   
@@ -147,12 +162,90 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
     setIsTrimming(false);
     setIsStickerDrawerOpen(false);
     setIsFilterDrawerOpen(false);
+    setIsMusicLibraryOpen(false);
     setIsEditingText(false);
     setActiveElementId(null);
   };
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Handle music search
+  useEffect(() => {
+    if (!isMusicLibraryOpen) return;
+
+    const query = musicSearch.trim() || 'trending';
+    setIsSearchingMusic(true);
+    
+    // Simulate API call to iTunes
+    const searchMusic = async () => {
+      try {
+        const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=25`);
+        const data = await response.json();
+        
+        if (data && data.results) {
+          const results = data.results.map((track: any) => ({
+            id: track.trackId,
+            title: track.trackName,
+            artist: track.artistName,
+            url: track.previewUrl,
+            artwork: track.artworkUrl100
+          })).filter((track: any) => track.url); // Ensure we have a preview URL
+          
+          setMusicSearchResults(results);
+        }
+      } catch (e) {
+        console.error('Failed to search music', e);
+      } finally {
+        setIsSearchingMusic(false);
+      }
+    };
+    
+    const timeoutId = setTimeout(searchMusic, 500);
+    return () => clearTimeout(timeoutId);
+  }, [musicSearch, isMusicLibraryOpen]);
+
+  // Audio preview reference
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+  const [playingPreview, setPlayingPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioPreviewRef.current) {
+        audioPreviewRef.current.pause();
+      }
+    };
+  }, []);
+
+  const togglePreview = (url: string) => {
+    if (!audioPreviewRef.current) {
+      audioPreviewRef.current = new Audio();
+    }
+    
+    if (playingPreview === url) {
+      audioPreviewRef.current.pause();
+      setPlayingPreview(null);
+    } else {
+      audioPreviewRef.current.src = url;
+      audioPreviewRef.current.play();
+      setPlayingPreview(url);
+    }
+  };
+
+  const handleSelectMusic = (music: any) => {
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+    }
+    setPlayingPreview(null);
+    updateCurrentState({ music });
+    setIsMusicLibraryOpen(false);
+    showToast(`Added ${music.title}`);
+  };
+
+  const handleRemoveMusic = () => {
+    updateCurrentState({ music: undefined });
+    showToast('Removed music');
+  };
 
   useEffect(() => {
     if (videoRef.current) {
@@ -1049,9 +1142,9 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
       </main>
 
       {/* Bottom Tools & Actions */}
-        <div className="flex flex-col bg-zinc-950 z-40 border-t border-zinc-800/50">
+        <div className="flex flex-col bg-zinc-950 text-white z-40 border-t border-zinc-800">
           {isTrimming && currentMedia.type === 'video' && (
-            <div className="px-8 py-6 flex flex-col gap-6 border-b border-zinc-800/50 bg-zinc-900/50">
+            <div className="px-8 py-6 flex flex-col gap-6 border-b border-zinc-800 bg-zinc-900/50">
               <div className="flex flex-col gap-4">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Trim Video</span>
@@ -1108,7 +1201,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
                   </span>
                   <button
                     onClick={() => updateCurrentState({ muted: !muted })}
-                    className={`p-3 rounded-xl transition-colors ${muted ? 'bg-red-500/20 text-red-500' : 'bg-zinc-800 text-white hover:bg-zinc-700'}`}
+                    className={`p-3 rounded-xl transition-colors ${muted ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-white hover:bg-zinc-700'}`}
                   >
                     {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
                   </button>
@@ -1127,7 +1220,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
             )}
             <ToolButton icon={<RotateCw size={24} />} label="Rotate" onClick={() => { closeAllTools(); handleRotateBase(); }} />
             <ToolButton icon={<FlipHorizontal size={24} />} label="Flip" onClick={() => { closeAllTools(); handleFlipBase(); }} />
-            <ToolButton icon={<Music size={24} />} label="Music" onClick={() => showToast('Music library...')} />
+            <ToolButton icon={<Music size={24} />} label="Music" active={isMusicLibraryOpen || !!currentMusic} onClick={() => { closeAllTools(); setIsMusicLibraryOpen(true); }} />
           </aside>
 
           {/* Quick Actions Footer */}
@@ -1159,7 +1252,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-x-0 bottom-0 h-3/4 bg-zinc-900 rounded-t-[3rem] z-[100] flex flex-col shadow-[0_-20px_80px_rgba(0,0,0,0.8)] border-t border-white/10"
+            className="absolute inset-x-0 bottom-0 h-3/4 bg-zinc-950 text-white rounded-t-[3rem] z-[100] flex flex-col shadow-[0_-20px_80px_rgba(0,0,0,0.5)] border-t border-zinc-800"
           >
             <div className="w-full flex justify-center p-4">
               <div className="w-16 h-1.5 bg-zinc-700 rounded-full" />
@@ -1218,7 +1311,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-x-0 bottom-0 h-1/2 bg-zinc-900 rounded-t-[3rem] z-[100] flex flex-col shadow-[0_-20px_80px_rgba(0,0,0,0.8)] border-t border-white/10"
+            className="absolute inset-x-0 bottom-0 h-1/2 bg-zinc-950 text-white rounded-t-[3rem] z-[100] flex flex-col shadow-[0_-20px_80px_rgba(0,0,0,0.5)] border-t border-zinc-800"
           >
             <div className="w-full flex justify-center p-4">
               <div className="w-16 h-1.5 bg-zinc-700 rounded-full" />
@@ -1279,7 +1372,106 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
         )}
       </AnimatePresence>
 
+      {/* Music Library Bottom Sheet */}
+      <AnimatePresence>
+        {isMusicLibraryOpen && (
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="absolute bottom-0 left-0 right-0 h-[70vh] bg-zinc-950/95 backdrop-blur-3xl rounded-t-3xl border-t border-zinc-800 flex flex-col z-50 shadow-2xl text-white"
+          >
+            <div className="absolute -top-12 left-0 right-0 flex justify-center">
+              <button
+                onClick={() => setIsMusicLibraryOpen(false)}
+                className="bg-zinc-800 text-white p-2 rounded-full hover:bg-zinc-700 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
 
+            <div className="p-4 border-b border-zinc-800 shrink-0">
+              <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-white mb-4">Add Music</h3>
+              
+              <div className="relative">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Search music..."
+                  value={musicSearch}
+                  onChange={(e) => setMusicSearch(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-700 text-white placeholder-zinc-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 no-scrollbar">
+              {currentMusic && (
+                <div className="mb-4 p-4 border border-indigo-500/30 bg-indigo-500/10 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img src={currentMusic.artwork} alt={currentMusic.title} className="w-12 h-12 rounded-lg" />
+                    <div>
+                      <h4 className="text-white font-bold text-sm">{currentMusic.title}</h4>
+                      <p className="text-zinc-400 text-xs">{currentMusic.artist}</p>
+                    </div>
+                  </div>
+                  <button onClick={handleRemoveMusic} className="bg-zinc-800 hover:bg-red-500 hover:text-white text-zinc-400 p-2 rounded-full transition-colors flex items-center justify-center">
+                     <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
+
+              {isSearchingMusic ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-8 h-8 border-2 border-zinc-700 border-t-white rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {musicSearchResults.map((track) => (
+                    <div key={track.id} className="flex items-center justify-between p-2 hover:bg-zinc-900 rounded-xl transition-colors group">
+                      <div className="flex items-center gap-3 flex-1 min-w-0" onClick={() => handleSelectMusic(track)}>
+                        <div className="relative w-12 h-12 rounded-lg shrink-0 overflow-hidden cursor-pointer" onClick={(e) => { e.stopPropagation(); togglePreview(track.url); }}>
+                          <img src={track.artwork} alt={track.title} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            {playingPreview === track.url ? <VolumeX size={16} className="text-white" /> : <Music size={16} className="text-white" />}
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1 cursor-pointer">
+                          <h4 className="text-white font-medium text-sm truncate">{track.title}</h4>
+                          <p className="text-zinc-400 text-xs truncate">{track.artist}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleSelectMusic(track)}
+                        className="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition-colors ml-2 shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))}
+                  {musicSearchResults.length === 0 && !isSearchingMusic && (
+                    <p className="text-center text-zinc-500 py-12">No music found</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {currentMusic && !isMusicLibraryOpen && (
+        <div className="absolute top-[80px] left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 z-[40] shadow-xl cursor-default">
+          <Music size={14} className="text-white drop-shadow" />
+           <span className="text-white text-xs font-bold drop-shadow flex truncate max-w-[150px]">
+              {currentMusic.title}
+           </span>
+           <button onClick={handleRemoveMusic} className="ml-1 p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors focus:outline-none">
+             <X size={12} className="text-white" />
+           </button>
+        </div>
+      )}
 
       {/* Text Editor Overlay */}
       {isEditingText && (
@@ -1457,14 +1649,14 @@ function EditorElementItem({
 
           <div 
             onPointerDown={(e) => onRotate(el.id, e)}
-            className="absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 bg-white text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform cursor-alias z-[60] border-2 border-blue-500"
+            className="absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 bg-zinc-800 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform cursor-alias z-[60] border-2 border-blue-500"
           >
             <RotateCw size={14} />
           </div>
 
           <div 
             onPointerDown={(e) => onScale(el.id, e)}
-            className="absolute -bottom-5 -right-5 w-8 h-8 bg-white text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform z-[60] border-2 border-blue-500 cursor-nwse-resize"
+            className="absolute -bottom-5 -right-5 w-8 h-8 bg-zinc-800 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform z-[60] border-2 border-blue-500 cursor-nwse-resize"
           >
             <Maximize2 size={14} className="rotate-45" />
           </div>
@@ -1472,9 +1664,9 @@ function EditorElementItem({
           {el.type === 'text' && (
             <div 
               onPointerDown={(e) => onWidth(el.id, e)}
-              className="absolute top-1/2 -right-4 -translate-y-1/2 w-6 h-8 bg-white text-black rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform z-[60] border-2 border-blue-500 cursor-ew-resize"
+              className="absolute top-1/2 -right-4 -translate-y-1/2 w-6 h-8 bg-zinc-800 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-transform z-[60] border-2 border-blue-500 cursor-ew-resize"
             >
-              <div className="w-1 h-3 bg-black rounded-full" />
+              <div className="w-1 h-3 bg-white rounded-full" />
             </div>
           )}
         </>
@@ -1490,10 +1682,10 @@ function ToolButton({ icon, label, onClick, active = false }: { icon: React.Reac
       onClick={onClick}
       className={`flex flex-col items-center gap-2 group min-w-[60px] transition-all ${active ? 'scale-110' : ''}`}
     >
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg ${active ? 'bg-blue-600 text-white shadow-blue-600/40' : 'bg-zinc-900 text-zinc-400 group-hover:bg-zinc-800 group-hover:text-white'}`}>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg ${active ? 'bg-blue-600 text-white shadow-blue-600/40' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 group-hover:bg-zinc-800 group-hover:text-zinc-100'}`}>
         {icon}
       </div>
-      <span className={`text-[10px] font-black tracking-widest uppercase transition-colors ${active ? 'text-blue-400' : 'text-zinc-500 group-hover:text-white'}`}>{label}</span>
+      <span className={`text-[10px] font-black tracking-widest uppercase transition-colors ${active ? 'text-blue-500' : 'text-zinc-500 group-hover:text-zinc-300'}`}>{label}</span>
     </button>
   );
 }

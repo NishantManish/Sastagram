@@ -45,6 +45,16 @@
         "caption": { "type": "string", "description": "The caption for the post." },
         "likesCount": { "type": "number", "description": "The number of likes the post has received." },
         "commentsCount": { "type": "number", "description": "The number of comments on the post." },
+        "music": {
+          "type": "object",
+          "description": "Music data added to the post.",
+          "properties": {
+            "url": { "type": "string" },
+            "artist": { "type": "string" },
+            "title": { "type": "string" },
+            "artwork": { "type": "string" }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the post was created." }
       },
       "required": ["authorId", "authorName", "mediaType", "mediaUrls", "likesCount", "commentsCount", "createdAt"]
@@ -129,7 +139,18 @@
         "viewsCount": { "type": "number", "description": "Number of views the story has received." },
         "viewers": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have viewed the story." },
         "likesCount": { "type": "number", "description": "Number of likes the story has received." },
-        "likedBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have liked the story." }
+        "likedBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have liked the story." },
+        "caption": { "type": "string", "description": "The caption for the story." },
+        "music": {
+          "type": "object",
+          "description": "Music data added to the story.",
+          "properties": {
+            "url": { "type": "string" },
+            "artist": { "type": "string" },
+            "title": { "type": "string" },
+            "artwork": { "type": "string" }
+          }
+        }
       },
       "required": ["authorId", "authorName", "mediaType", "createdAt", "expiresAt"]
     },
@@ -203,10 +224,22 @@
         "authorName": { "type": "string", "description": "The display name of the author." },
         "authorPhoto": { "type": "string", "description": "The profile picture URL of the author." },
         "videoUrl": { "type": "string", "description": "The URL of the reel video." },
+        "mediaUrls": { "type": "array", "items": { "type": "object" }, "description": "List of URLs for multiple media, like photos/videos." },
+        "mediaType": { "type": "string", "description": "Type of media (e.g. video, image)." },
         "caption": { "type": "string", "description": "The caption for the reel." },
         "likesCount": { "type": "number", "description": "The number of likes the reel has received." },
         "commentsCount": { "type": "number", "description": "The number of comments on the reel." },
         "viewsCount": { "type": "number", "description": "The number of views the reel has received." },
+        "music": {
+          "type": "object",
+          "description": "Music data added to the reel.",
+          "properties": {
+            "url": { "type": "string" },
+            "artist": { "type": "string" },
+            "title": { "type": "string" },
+            "artwork": { "type": "string" }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the reel was created." }
       },
       "required": ["authorId", "authorName", "videoUrl", "likesCount", "commentsCount", "createdAt"]

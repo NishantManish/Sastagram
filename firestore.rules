@@ -198,7 +198,7 @@ service cloud.firestore {
     }
 
     function isValidPost() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'mediaUrls', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt', 'audience']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'mediaUrls', 'caption', 'tags', 'mentions', 'likesCount', 'commentsCount', 'createdAt', 'audience', 'music']) &&
              hasRequiredFields(['authorId', 'authorName', 'createdAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
@@ -213,7 +213,8 @@ service cloud.firestore {
              isValidOptionalNumber('likesCount') &&
              isValidOptionalNumber('commentsCount') &&
              request.resource.data.createdAt is timestamp &&
-             (!('audience' in request.resource.data) || request.resource.data.audience in ['all', 'close_friends']);
+             (!('audience' in request.resource.data) || request.resource.data.audience in ['all', 'close_friends']) &&
+             (!('music' in request.resource.data) || request.resource.data.music == null || request.resource.data.music is map);
     }
 
     function isValidLike() {
@@ -282,7 +283,7 @@ service cloud.firestore {
     }
 
     function isValidStory() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers', 'likesCount', 'likedBy', 'audience']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'imageUrl', 'videoUrl', 'mediaType', 'createdAt', 'expiresAt', 'viewsCount', 'viewers', 'likesCount', 'likedBy', 'audience', 'caption', 'music']) &&
              hasRequiredFields(['authorId', 'authorName', 'mediaType', 'createdAt', 'expiresAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
@@ -296,7 +297,9 @@ service cloud.firestore {
              (!('viewers' in request.resource.data) || request.resource.data.viewers is list) &&
              isValidOptionalNumber('likesCount') &&
              (!('likedBy' in request.resource.data) || request.resource.data.likedBy is list) &&
-             (!('audience' in request.resource.data) || request.resource.data.audience in ['all', 'close_friends']);
+             (!('audience' in request.resource.data) || request.resource.data.audience in ['all', 'close_friends']) &&
+             isValidOptionalString('caption', 0, 2200) &&
+             (!('music' in request.resource.data) || request.resource.data.music == null || request.resource.data.music is map);
     }
 
     function isValidStoryLike() {
@@ -438,17 +441,20 @@ service cloud.firestore {
     }
 
     function isValidReel() {
-      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'videoUrl', 'caption', 'likesCount', 'commentsCount', 'viewsCount', 'createdAt']) &&
+      return hasOnlyAllowedFields(['authorId', 'authorName', 'authorPhoto', 'videoUrl', 'mediaUrls', 'mediaType', 'caption', 'likesCount', 'commentsCount', 'viewsCount', 'createdAt', 'music']) &&
              hasRequiredFields(['authorId', 'authorName', 'videoUrl', 'likesCount', 'commentsCount', 'viewsCount', 'createdAt']) &&
              validStringLength('authorId', 1, 128) &&
              validStringLength('authorName', 1, 100) &&
              isValidOptionalString('authorPhoto', 0, 2000) &&
              validStringLength('videoUrl', 1, 2000) &&
+             (!('mediaUrls' in request.resource.data) || request.resource.data.mediaUrls is list) &&
+             (!('mediaType' in request.resource.data) || request.resource.data.mediaType in ['image', 'video']) &&
              isValidOptionalString('caption', 0, 2200) &&
              request.resource.data.likesCount is number &&
              request.resource.data.commentsCount is number &&
              request.resource.data.viewsCount is number &&
-             request.resource.data.createdAt is timestamp;
+             request.resource.data.createdAt is timestamp &&
+             (!('music' in request.resource.data) || request.resource.data.music == null || request.resource.data.music is map);
     }
 
     function isValidReelLike() {

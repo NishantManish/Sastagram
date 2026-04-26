@@ -84,10 +84,10 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/50 backdrop-blur-xl bg-zinc-950/80 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-white">
             <X size={24} />
           </button>
-          <h1 className="text-xl font-bold tracking-tight">Create</h1>
+          <h1 className="text-xl font-bold tracking-tight text-white">Create</h1>
         </div>
         
         <button 
@@ -156,7 +156,7 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
                 </div>
                 <button 
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-8 py-3 bg-white text-black rounded-full font-bold hover:bg-zinc-200 transition-colors flex items-center gap-2"
+                  className="px-8 py-3 bg-zinc-800 text-white rounded-full font-bold hover:bg-zinc-700 transition-colors flex items-center gap-2"
                 >
                   <Plus size={20} />
                   Upload from Device
@@ -212,7 +212,7 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
                 </AnimatePresence>
               </div>
               <div className="flex gap-2">
-                <button onClick={toggleGrid} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"><Grid size={20} /></button>
+                <button onClick={toggleGrid} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-white"><Grid size={20} /></button>
               </div>
             </div>
 

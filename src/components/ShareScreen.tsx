@@ -107,8 +107,7 @@ export default function ShareScreen({ images, mediaItems, editorStates, postType
               <label className="text-sm font-black tracking-widest uppercase text-zinc-500">Tagging & Location</label>
               <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] overflow-hidden">
                 <OptionRow icon={<Users size={20} />} label="Tag People" onClick={() => showToast('Tagging...')} />
-                <OptionRow icon={<MapPin size={20} />} label="Add Location" onClick={() => showToast('Locating...')} />
-                <OptionRow icon={<Music size={20} />} label="Add Music" border={false} onClick={() => showToast('Music...')} />
+                <OptionRow icon={<MapPin size={20} />} label="Add Location" border={false} onClick={() => showToast('Locating...')} />
               </div>
             </div>
 

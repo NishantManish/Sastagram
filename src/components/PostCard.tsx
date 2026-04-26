@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2, Volume2, VolumeX, Play, Star } from 'lucide-react';
+import { Heart, MessageCircle, Send, Bookmark, Share2, Trash2, Edit2, Volume2, VolumeX, Play, Star, Music } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { doc, getDoc, setDoc, deleteDoc, writeBatch, increment, serverTimestamp, collection, query, where, getDocs, onSnapshot, limit } from 'firebase/firestore';
 import { db, auth } from '../firebase';
@@ -513,16 +513,24 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
               fallbackName={post.authorName} 
             />
           </button>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => onUserClick?.(post.authorId)}
-              className="font-bold text-[14px] text-zinc-900 hover:text-zinc-600 transition-colors"
-            >
-              {post.authorName}
-            </button>
-            {post.audience === 'close_friends' && (
-              <div className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                <Star className="w-3 h-3 fill-white" />
+          <div className="flex flex-col items-start justify-center">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => onUserClick?.(post.authorId)}
+                className="font-bold text-[14px] text-zinc-900 hover:text-zinc-600 transition-colors"
+              >
+                {post.authorName}
+              </button>
+              {post.audience === 'close_friends' && (
+                <div className="bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                  <Star className="w-3 h-3 fill-white" />
+                </div>
+              )}
+            </div>
+            {post.music && (
+              <div className="flex items-center gap-1 text-[11px] text-zinc-500 mt-0.5">
+                <Music className="w-3 h-3" />
+                <span className="truncate max-w-[150px]">{post.music.title}</span>
               </div>
             )}
           </div>

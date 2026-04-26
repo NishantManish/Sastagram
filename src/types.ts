@@ -27,6 +27,12 @@ export interface Post {
   createdAt: any; // Firestore Timestamp
   isReel?: boolean;
   audience?: 'all' | 'close_friends';
+  music?: {
+    url: string;
+    artist: string;
+    title: string;
+    artwork: string;
+  };
 }
 
 export interface Like {
@@ -94,6 +100,12 @@ export interface Story {
   likesCount?: number;
   likedBy?: string[];
   audience?: 'all' | 'close_friends';
+  music?: {
+    url: string;
+    artist: string;
+    title: string;
+    artwork: string;
+  };
 }
 
 export interface Chat {
@@ -134,12 +146,20 @@ export interface Reel {
   authorName: string;
   authorPhoto?: string;
   videoUrl: string;
+  mediaUrls?: { url: string; type: string }[];
+  mediaType?: 'image' | 'video';
   caption?: string;
   tags?: string[];
   likesCount: number;
   commentsCount: number;
   viewsCount: number;
   createdAt: any; // Firestore Timestamp
+  music?: {
+    url: string;
+    artist: string;
+    title: string;
+    artwork: string;
+  };
 }
 
 export interface ReelLike {

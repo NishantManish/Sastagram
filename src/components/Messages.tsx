@@ -617,21 +617,33 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
               onClick={() => setHeldMessage(null)} 
             />
           )}
-          {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <motion.div 
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="w-20 h-20 bg-white dark:bg-zinc-900 rounded-3xl shadow-lg flex items-center justify-center mb-6"
-              >
-                <Send className="w-10 h-10 text-indigo-500 -rotate-12" />
-              </motion.div>
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-2">Start a conversation</h3>
-              <p className="text-zinc-500 dark:text-zinc-400 text-sm max-w-[240px]">
-                Send a message to {otherUser?.displayName} to start chatting.
-              </p>
+          {/* Profile Header (Instagram style) */}
+          <div className="flex flex-col items-center justify-center pt-8 pb-12 w-full">
+            <div className="w-28 h-28 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden mb-4 border border-zinc-200 dark:border-zinc-800">
+              {otherUser?.photoURL ? (
+                <img src={getOptimizedImageUrl(otherUser.photoURL, 150, 150)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-zinc-400">
+                  {otherUser?.displayName?.charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
-          ) : (
+            <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 leading-tight">{otherUser?.displayName}</h2>
+            <p className="text-[15px] font-medium text-zinc-500 dark:text-zinc-400 mt-1 mb-1">
+              {otherUser?.username || otherUser?.displayName?.toLowerCase().replace(/\s+/g, '_')} • Sastagram
+            </p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-500 mb-5 tracking-wide text-center">
+              You both follow each other on Sastagram
+            </p>
+            <button 
+              onClick={() => otherUser && setSelectedUserId(otherUser.uid)}
+              className="px-4 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-lg text-sm font-bold transition-all active:scale-95"
+            >
+              View Profile
+            </button>
+          </div>
+
+          {messages.length > 0 && (
             <div className="flex flex-col gap-4">
               {messages.map((msg, index) => {
                 const isMine = msg.senderId === auth.currentUser?.uid;
@@ -922,36 +934,32 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
                             {msg.sharedProfileId && (
                               <div 
                                 onClick={() => setSelectedUserId(msg.sharedProfileId!)}
-                                className={`mb-2 p-3 rounded-xl border cursor-pointer transition-all hover:brightness-95 active:scale-[0.98] flex flex-col gap-3 ${
-                                  isMine ? 'bg-white/10 dark:bg-white/5 border-white/20 dark:border-white/10' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800'
+                                className={`mb-1 mt-1 p-5 rounded-[22px] cursor-pointer transition-all hover:brightness-95 active:scale-[0.98] flex flex-col items-center text-center w-[220px] ${
+                                  isMine ? 'bg-[#2983DB]' : 'bg-white dark:bg-zinc-800'
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-12 h-12 rounded-full bg-zinc-100 overflow-hidden shrink-0 border border-black/5">
-                                    {chatUsers[msg.sharedProfileId]?.photoURL ? (
-                                      <img 
-                                        src={getOptimizedImageUrl(chatUsers[msg.sharedProfileId].photoURL, 96, 96)} 
-                                        alt={chatUsers[msg.sharedProfileId].displayName || ''} 
-                                        className="w-full h-full object-cover" 
-                                        referrerPolicy="no-referrer" 
-                                      />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold text-lg">
-                                        {chatUsers[msg.sharedProfileId]?.displayName?.charAt(0).toUpperCase()}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className={`font-bold text-sm truncate ${isMine ? 'text-white' : 'text-zinc-900'}`}>
-                                      {chatUsers[msg.sharedProfileId]?.displayName}
-                                    </span>
-                                    <span className={`text-[11px] font-medium truncate ${isMine ? 'text-white/60' : 'text-zinc-500'}`}>
-                                      @{chatUsers[msg.sharedProfileId]?.username || 'user'}
-                                    </span>
-                                  </div>
+                                <div className="w-20 h-20 rounded-full overflow-hidden mb-3 border border-zinc-200 dark:border-zinc-700">
+                                  {chatUsers[msg.sharedProfileId]?.photoURL ? (
+                                    <img 
+                                      src={getOptimizedImageUrl(chatUsers[msg.sharedProfileId].photoURL, 150, 150)} 
+                                      alt={chatUsers[msg.sharedProfileId].displayName || ''} 
+                                      className="w-full h-full object-cover" 
+                                      referrerPolicy="no-referrer" 
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold text-3xl bg-zinc-100 dark:bg-zinc-900">
+                                      {chatUsers[msg.sharedProfileId]?.displayName?.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
                                 </div>
-                                <div className={`w-full py-2 rounded-lg text-center text-[10px] font-black uppercase tracking-widest ${
-                                  isMine ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-600'
+                                <span className={`font-bold text-base leading-tight mb-0.5 truncate w-full ${isMine ? 'text-white' : 'text-zinc-900 dark:text-white'}`}>
+                                  {chatUsers[msg.sharedProfileId]?.displayName}
+                                </span>
+                                <span className={`text-xs font-medium mb-3 truncate w-full ${isMine ? 'text-white/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                                  {chatUsers[msg.sharedProfileId]?.username || 'user'} • Sastagram
+                                </span>
+                                <div className={`w-full py-2 rounded-lg text-sm font-semibold transition-colors ${
+                                  isMine ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white'
                                 }`}>
                                   View Profile
                                 </div>

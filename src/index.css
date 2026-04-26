@@ -34,7 +34,6 @@
 .dark .text-zinc-500 { color: #a1a1aa !important; }
 .dark .text-zinc-400 { color: #a1a1aa !important; }
 .dark .text-zinc-300 { color: #52525b !important; }
-.dark .text-zinc-950 { color: #ffffff !important; }
 
 .dark .bg-zinc-50 { background-color: #18181b !important; }
 .dark .bg-zinc-50\/50 { background-color: rgba(24, 24, 27, 0.5) !important; }
@@ -43,16 +42,12 @@
 .dark .bg-zinc-100\/50 { background-color: rgba(39, 39, 42, 0.5) !important; }
 .dark .bg-zinc-200 { background-color: #3f3f46 !important; }
 .dark .bg-zinc-200\/50 { background-color: rgba(63, 63, 70, 0.5) !important; }
-.dark .bg-zinc-800 { background-color: #f4f4f5 !important; }
-.dark .bg-zinc-900 { background-color: #fafafa !important; }
-.dark .bg-zinc-950 { background-color: #ffffff !important; }
 
 .dark .border-zinc-100 { border-color: #27272a !important; }
 .dark .border-zinc-100\/50 { border-color: rgba(39, 39, 42, 0.5) !important; }
 .dark .border-zinc-200 { border-color: #3f3f46 !important; }
 .dark .border-zinc-200\/50 { border-color: rgba(63, 63, 70, 0.5) !important; }
 .dark .border-zinc-300 { border-color: #52525b !important; }
-.dark .border-zinc-800 { border-color: #f4f4f5 !important; }
 
 .dark .shadow-zinc-100 { --tw-shadow-color: #27272a !important; }
 .dark .shadow-indigo-50 { --tw-shadow-color: #1e1b4b !important; }
@@ -80,13 +75,6 @@
 .dark ::selection {
   background-color: #312e81 !important;
   color: #eef2ff !important;
-}
-
-/* Fix text-white on light backgrounds in dark mode */
-.dark .bg-zinc-900.text-white,
-.dark .bg-zinc-950.text-white,
-.dark .bg-zinc-800.text-white {
-  color: #09090b !important;
 }
 
 @layer utilities {

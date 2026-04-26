@@ -38,6 +38,7 @@ export default function PexelsReelCard({ video, isActive, isGlobalMuted, onToggl
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
   const [progress, setProgress] = useState(0);
   const [hasTrackedFullWatch, setHasTrackedFullWatch] = useState(false);
   
@@ -65,8 +66,11 @@ export default function PexelsReelCard({ video, isActive, isGlobalMuted, onToggl
       try {
         vid.muted = isMuted; // Ensure muted state is correct before playing
         await vid.play();
+        setHasVideoError(false);
       } catch (error) {
-        if (isMounted && error instanceof Error && error.name !== 'AbortError') {
+        if (isMounted && error instanceof Error && error.name === 'NotSupportedError') {
+          setHasVideoError(true);
+        } else if (isMounted && error instanceof Error && error.name !== 'AbortError') {
           console.error('Video play interrupted:', error);
         }
       }
@@ -124,21 +128,31 @@ export default function PexelsReelCard({ video, isActive, isGlobalMuted, onToggl
 
   return (
     <div className="relative w-full h-full snap-start overflow-hidden bg-black flex items-center justify-center group">
-      {/* Video Player */}
-      <video
-        ref={videoRef}
-        src={video.url}
-        poster={video.image}
-        className="w-full h-full object-cover"
-        loop
-        muted={isMuted}
-        playsInline
-        onTimeUpdate={handleTimeUpdate}
-        onClick={(e) => {
-          handleDoubleTap(e);
-          setIsPlaying(!isPlaying);
-        }}
-      />
+      {/* Video/Image Player */}
+      {!hasVideoError ? (
+        <video
+          ref={videoRef}
+          src={video.url}
+          poster={video.image}
+          className="w-full h-full object-cover"
+          loop
+          muted={isMuted}
+          playsInline
+          onError={() => setHasVideoError(true)}
+          onTimeUpdate={handleTimeUpdate}
+          onClick={(e) => {
+            handleDoubleTap(e);
+            setIsPlaying(!isPlaying);
+          }}
+        />
+      ) : (
+        <img
+          src={video.image || video.url}
+          className="w-full h-full object-cover"
+          alt={video.query}
+          onClick={(e) => handleDoubleTap(e)}
+        />
+      )}
 
       {/* Overlay Controls */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none" />

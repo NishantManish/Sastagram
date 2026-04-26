@@ -112,6 +112,8 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
       }
 
       // Now create Firestore documents
+      const musicInfo = editorStates[0]?.music || null;
+
       if (postType === 'post') {
           const tags = caption.match(/#(\w+)/g)?.map(t => t.slice(1).toLowerCase()) || [];
           const mentions = caption.match(/@(\w+)/g)?.map(m => m.slice(1).toLowerCase()) || [];
@@ -131,6 +133,7 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
             commentsCount: 0,
             createdAt: serverTimestamp(),
             audience: visibility === 'friends' ? 'close_friends' : 'all',
+            music: musicInfo,
           });
       } else if (postType === 'reel') {
           await addDoc(collection(db, 'reels'), {
@@ -138,18 +141,23 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
             authorName: auth.currentUser.displayName || 'Anonymous',
             authorPhoto: auth.currentUser.photoURL || '',
             videoUrl: uploadedUrls[0].url,
+            mediaUrls: uploadedUrls,
+            mediaType: uploadedUrls[0].type,
             caption: caption.trim(),
             likesCount: 0,
             commentsCount: 0,
             viewsCount: 0,
             createdAt: serverTimestamp(),
+            music: musicInfo,
           });
       } else {
           const expiresAt = new Date();
           expiresAt.setHours(expiresAt.getHours() + 24);
 
           const batch = writeBatch(db);
-          for (const media of uploadedUrls) {
+          for (let i = 0; i < uploadedUrls.length; i++) {
+            const media = uploadedUrls[i];
+            const mediaMusicInfo = editorStates[i]?.music || null;
             const storyRef = doc(collection(db, 'stories'));
             batch.set(storyRef, {
               authorId: auth.currentUser.uid,
@@ -158,9 +166,12 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
               imageUrl: media.type === 'image' ? media.url : '',
               videoUrl: media.type === 'video' ? media.url : '',
               mediaType: media.type,
+              caption: caption.trim(),
               createdAt: serverTimestamp(),
               expiresAt: Timestamp.fromDate(expiresAt),
               audience: visibility === 'friends' ? 'close_friends' : 'all',
+              viewers: [],
+              music: mediaMusicInfo,
             });
           }
           await batch.commit();
@@ -265,7 +276,7 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-3 rounded-2xl shadow-2xl z-[100] font-semibold whitespace-nowrap border border-zinc-200"
+            className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-zinc-800 text-white px-6 py-3 rounded-2xl shadow-2xl z-[100] font-semibold whitespace-nowrap border border-zinc-700"
           >
             {toast}
           </motion.div>

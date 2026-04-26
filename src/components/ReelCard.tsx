@@ -57,7 +57,9 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTap = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [loading, setLoading] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
 
   const toggleExpandComment = (commentId: string) => {
     setExpandedComments(prev => {
@@ -112,34 +114,46 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    const audio = audioRef.current;
+    if (!video && !audio && hasVideoError) {} // Just to avoid empty blocks if neither exists
 
     let isMounted = true;
 
-    const playVideo = async () => {
+    const playMedia = async () => {
       if (!isActive || !isPlaying) {
-        video.pause();
+        if (video) video.pause();
+        if (audio) audio.pause();
         return;
       }
 
-      try {
-        video.muted = isMuted; // Ensure muted state is correct before playing
-        await video.play();
-      } catch (error) {
-        // AbortError is expected when play() is interrupted by pause() or removal
-        if (isMounted && error instanceof Error && error.name !== 'AbortError') {
-          console.error('Video play interrupted:', error);
-        }
+      const promises = [];
+      if (video && !hasVideoError) {
+        video.muted = isMuted;
+        promises.push(video.play().catch(e => {
+          if (isMounted && e.name === 'NotSupportedError') {
+            setHasVideoError(true);
+          } else if (isMounted && e.name !== 'AbortError') {
+            console.error('Video play interrupted:', e);
+          }
+        }));
       }
+
+      if (audio) {
+        audio.muted = isMuted;
+        promises.push(audio.play().catch(() => {}));
+      }
+
+      await Promise.all(promises);
     };
 
-    playVideo();
+    playMedia();
 
     return () => {
       isMounted = false;
-      video.pause();
+      if (video) video.pause();
+      if (audio) audio.pause();
     };
-  }, [isActive, isPlaying]);
+  }, [isActive, isPlaying, isMuted, hasVideoError]);
 
   useEffect(() => {
     if (showComments) {
@@ -406,19 +420,42 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
 
   return (
     <div className="relative w-full h-full snap-start overflow-hidden bg-black flex items-center justify-center group">
-      {/* Video Player */}
-      <video
-        ref={videoRef}
-        src={reel.videoUrl}
-        className="w-full h-full object-contain"
-        loop
-        muted={isMuted}
-        playsInline
-        onClick={(e) => {
-          handleDoubleTap(e);
-          setIsPlaying(!isPlaying);
-        }}
-      />
+      {/* Audio Player for Music */}
+      {reel.music && (
+        <audio
+          ref={audioRef}
+          src={reel.music.url}
+          loop
+          muted={isMuted}
+        />
+      )}
+
+      {/* Video/Image Player */}
+      {(reel.mediaType === 'image' || hasVideoError) ? (
+        <img
+          src={reel.videoUrl}
+          className="w-full h-full object-contain"
+          alt={reel.caption}
+          onClick={(e) => {
+            handleDoubleTap(e);
+            setIsPlaying(!isPlaying);
+          }}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          src={reel.videoUrl}
+          className="w-full h-full object-contain"
+          loop
+          muted={isMuted}
+          playsInline
+          onError={() => setHasVideoError(true)}
+          onClick={(e) => {
+            handleDoubleTap(e);
+            setIsPlaying(!isPlaying);
+          }}
+        />
+      )}
 
       {/* Overlay Controls */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none" />
@@ -646,7 +683,7 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
                   transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
                   className="text-white text-[9px] font-black uppercase tracking-widest"
                 >
-                  {reel.authorName} • Original Audio • {reel.authorName}
+                  {reel.music ? `${reel.music.title} • ${reel.music.artist}` : `${reel.authorName} • Original Audio`}
                 </motion.div>
               </div>
             </div>
