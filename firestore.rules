@@ -488,13 +488,7 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow read: if isAuthenticated() && (
-        !('audience' in resource.data) || 
-        resource.data.audience == 'all' || 
-        resource.data.authorId == request.auth.uid || 
-        (resource.data.audience == 'close_friends' && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.authorId)).data.get('closeFriends', [])) ||
-        isAdmin()
-      );
+      allow read: if isAuthenticated();
       
       allow create: if isAuthenticated() && 
                     isValidPost() && 
@@ -768,13 +762,7 @@ service cloud.firestore {
     }
 
     match /stories/{storyId} {
-      allow read: if isAuthenticated() && (
-        !('audience' in resource.data) || 
-        resource.data.audience == 'all' || 
-        resource.data.authorId == request.auth.uid || 
-        (resource.data.audience == 'close_friends' && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.authorId)).data.get('closeFriends', [])) ||
-        isAdmin()
-      );
+      allow read: if isAuthenticated();
       
       allow create: if isAuthenticated() && 
                     isValidStory() &&

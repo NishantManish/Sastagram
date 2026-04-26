@@ -3,11 +3,12 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, add
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, Message, User, Post, Reel } from '../types';
-import { Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard, Heart } from 'lucide-react';
+import { Bot, Sparkles, Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard, Heart } from 'lucide-react';
 import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
 import ReelDetailsModal from './ReelDetailsModal';
+import AIChat from './AIChat';
 import { useBlocks } from '../services/blockService';
 import { cacheService } from '../services/cacheService';
 import { motion, AnimatePresence } from 'motion/react';
@@ -46,6 +47,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [heldMessage, setHeldMessage] = useState<Message | null>(null);
   const messageLongPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const [showAIChat, setShowAIChat] = useState(false);
 
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -540,6 +542,10 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
       console.error('Error fetching reel:', error);
     }
   };
+
+  if (showAIChat) {
+    return <AIChat onBack={() => setShowAIChat(false)} />;
+  }
 
   if (selectedUserId) {
     return <Profile userId={selectedUserId} onBack={() => setSelectedUserId(null)} onNavigate={onNavigate} />;
@@ -1317,6 +1323,41 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           </motion.div>
         ) : (
           <div className="px-2">
+            <motion.button
+              layout
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={() => setShowAIChat(true)}
+              className="w-full flex items-center gap-4 p-4 rounded-[28px] transition-all active:scale-[0.97] group relative mb-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+            >
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[2px] transition-all duration-300 shadow-sm group-hover:shadow-md group-hover:scale-105">
+                  <div className="w-full h-full bg-white dark:bg-zinc-950 rounded-full flex items-center justify-center">
+                    <Bot className="w-6 h-6 text-indigo-500 group-hover:text-purple-500 transition-colors" />
+                  </div>
+                </div>
+                <div className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-gradient-to-tr from-indigo-500 to-purple-500 border-2 border-white dark:border-zinc-950 rounded-full shadow-sm flex items-center justify-center">
+                  <Sparkles className="w-2 h-2 text-white" />
+                </div>
+              </div>
+              
+              <div className="flex-1 min-w-0 flex flex-col items-start">
+                <div className="w-full flex justify-between items-center mb-0.5">
+                  <span className="text-[15px] truncate transition-colors tracking-tight font-black bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    AI Assistant
+                  </span>
+                  <span className="text-[10px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest">
+                    new
+                  </span>
+                </div>
+                <div className="w-full flex items-center justify-between gap-2">
+                  <p className="text-[13px] truncate tracking-tight text-zinc-500 dark:text-zinc-400 font-medium">
+                    Ask me anything or generate ideas...
+                  </p>
+                </div>
+              </div>
+            </motion.button>
+            
             {filteredChats.map((chat, index) => {
               const otherUser = getOtherUser(chat);
               if (!otherUser) return null;

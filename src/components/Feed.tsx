@@ -30,6 +30,7 @@ const Feed = forwardRef<FeedRef, {
   const [selectedPost, setSelectedPost] = useState<{ post: Post, index: number } | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [limitCount, setLimitCount] = useState(20);
+  const [interactions, setInteractions] = useState<{ query: string, action: 'liked' | 'skipped' | 'watched_full' }[]>([]);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const startY = useRef(0);
   const isDragging = useRef(false);
@@ -97,7 +98,7 @@ const Feed = forwardRef<FeedRef, {
         const response = await fetch('/api/unsplash/next', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ interactions: [] }) // We can use empty or fetch from local storage if we want
+          body: JSON.stringify({ interactions: interactions.slice(-10) }) // Send last 10 interactions for context
         });
         if (response.ok) {
           const data = await response.json();
@@ -128,9 +129,20 @@ const Feed = forwardRef<FeedRef, {
       }
     };
     
-    // Fetch every time limitCount increases to get more recommended posts
     fetchUnsplash();
-  }, [limitCount]);
+  }, [limitCount]); // Intentionally not dependent on 'interactions' to avoid re-fetching on every like
+
+  const handleInteraction = (post: Post, action: 'liked' | 'skipped' | 'watched_full') => {
+    let query = post.caption || '';
+    if (post.tags && post.tags.length > 0) {
+      query += ' ' + post.tags.join(' ');
+    }
+    query = query.substring(0, 100);
+    
+    setInteractions(prev => {
+      return [...prev, { query, action }];
+    });
+  };
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -316,7 +328,11 @@ const Feed = forwardRef<FeedRef, {
                 >
                   <PostCard 
                     post={post} 
-                    onCommentClick={(index) => setSelectedPost({ post, index: index || 0 })}
+                    onLikeToggle={() => handleInteraction(post, 'liked')}
+                    onCommentClick={(index) => {
+                      setSelectedPost({ post, index: index || 0 });
+                      handleInteraction(post, 'watched_full');
+                    }}
                     onUserClick={setSelectedUserId}
                     onTagClick={onTagClick}
                     initialMediaIndex={post.id === initialPostId ? initialSlideIndex : 0}

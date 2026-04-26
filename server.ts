@@ -3,7 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { GoogleGenAI, Type } from "@google/genai";
 import { v2 as cloudinary } from "cloudinary";
 
 dotenv.config();
@@ -40,13 +39,36 @@ app.post("/api/cloudinary/delete", async (req, res) => {
   }
 });
 
-// Initialize Gemini lazily
-let ai: GoogleGenAI | null = null;
-function getAI() {
-  if (!ai) {
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Helper to call OpenRouter
+async function callOpenRouter(prompt: string): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY environment variable is required");
   }
-  return ai;
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "http://localhost:3000",
+      "X-Title": "Social App"
+    },
+    body: JSON.stringify({
+      model: "nvidia/nemotron-3-nano-30b-a3b:free",
+      messages: [
+        { role: "user", content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
 }
 
 // Default queries for new users
@@ -138,42 +160,32 @@ app.post("/api/reels/next", async (req, res) => {
     } else {
       // Use Gemini to generate personalized queries
       const prompt = `
-      You are a video recommendation engine. Analyze the user's recent video interactions and generate 3 specific, diverse search queries for a stock video API to find videos this user will enjoy.
+      You are an elite, highly advanced video recommendation algorithm powering an addictive social media feed.
+      Analyze the user's sequential interaction history and generate 3 highly targeted, nuanced search queries for a stock video API.
       
-      User interactions:
+      User interactions (ordered chronologically, oldest to newest):
       ${JSON.stringify(interactions, null, 2)}
       
-      Rules:
-      1. Focus on topics similar to what the user 'liked' or 'watched_full'.
-      2. Avoid topics similar to what the user 'skipped'.
-      3. Make the queries specific enough to yield good stock videos (e.g., "mountain biking" instead of just "sports").
-      4. Return ONLY a JSON array of 3 strings.
+      Advanced Personalization Rules:
+      1. Temporal Weighting: Recent interactions carry significantly more weight than older ones. Track the user's shifting interests.
+      2. Affinity Mapping: Identify the underlying themes, aesthetics, and emotional tones of 'liked' and 'watched_full' items. 
+      3. Negative Signals: Strongly suppress concepts, visual styles, and themes correlated with 'skipped' items.
+      4. Serendipity Injection: Make 2 queries highly relevant to their core interests, but make the 3rd query a "tangential exploration" designed to expand their taste profile securely.
+      5. Contextual Nuance: Use specific, descriptive keywords that translate well to visual stock footage (e.g., "cinematic neon cyberpunk city" instead of "future").
+      6. Output Constraint: Return EXACTLY a JSON array containing exactly 3 string queries based strictly on the user's complex cognitive profile.
       `;
 
       try {
-        const aiClient = getAI();
-        const response = await aiClient.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING
-              }
-            }
-          }
-        });
-
-        const generatedQueries = JSON.parse(response.text || "[]");
+        const rawText = await callOpenRouter(prompt);
+        const cleanText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const generatedQueries = JSON.parse(cleanText);
         if (Array.isArray(generatedQueries) && generatedQueries.length > 0) {
           queriesToSearch = generatedQueries.slice(0, 3);
         } else {
-          throw new Error("Invalid response from Gemini");
+          throw new Error("Invalid response from OpenRouter");
         }
-      } catch (geminiError) {
-        console.error("Gemini error, falling back to defaults:", geminiError);
+      } catch (aiError) {
+        console.error("AI error, falling back to defaults:", aiError);
         const shuffled = [...DEFAULT_QUERIES].sort(() => 0.5 - Math.random());
         queriesToSearch = shuffled.slice(0, 3);
       }
@@ -205,42 +217,32 @@ app.post("/api/unsplash/next", async (req, res) => {
       queriesToSearch = shuffled.slice(0, 3);
     } else {
       const prompt = `
-      You are an image recommendation engine. Analyze the user's recent interactions and generate 3 specific, diverse search queries for a stock photo API to find images this user will enjoy.
+      You are an elite, highly advanced content recommendation algorithm powering an addictive image discovery feed.
+      Analyze the user's sequential interaction history and generate 3 highly targeted, visually evocative search queries for the Unsplash API.
       
-      User interactions:
+      User interactions (ordered chronologically, oldest to newest):
       ${JSON.stringify(interactions, null, 2)}
       
-      Rules:
-      1. Focus on topics similar to what the user 'liked' or 'watched_full'.
-      2. Avoid topics similar to what the user 'skipped'.
-      3. Make the queries specific enough to yield good stock photos (e.g., "mountain biking" instead of just "sports").
-      4. Return ONLY a JSON array of 3 strings.
+      Advanced Personalization Rules:
+      1. Temporal Decay: Heavily prioritize the cognitive themes present in the most recent positive interactions.
+      2. Visual Aesthetic Extraction: Deduce the user's preferred visual style (e.g., minimalist, moody, vibrant, macro) based on their engagement, and inject those aesthetic terms into your new queries.
+      3. Aversion Modeling: Analyze 'skipped' items not just for their explicit subjects, but for their underlying genres, and actively filter those out.
+      4. Exploitation vs. Exploration: Make the first 2 queries exploit known high-affinity topics. Make the 3rd query an exploratory leap into an adjacent but novel domain to discover new interests.
+      5. Unsplash Optimization: Formulate queries that are known to perform exceptionally well on Unsplash (e.g., adding terms like "experimental architecture", "film photography aesthetics", "abstract texture").
+      6. Output Constraint: Return EXACTLY a JSON array of 3 string queries reflecting this sophisticated analysis.
       `;
 
       try {
-        const aiClient = getAI();
-        const response = await aiClient.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING
-              }
-            }
-          }
-        });
-
-        const generatedQueries = JSON.parse(response.text || "[]");
+        const rawText = await callOpenRouter(prompt);
+        const cleanText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const generatedQueries = JSON.parse(cleanText);
         if (Array.isArray(generatedQueries) && generatedQueries.length > 0) {
           queriesToSearch = generatedQueries.slice(0, 3);
         } else {
-          throw new Error("Invalid response from Gemini");
+          throw new Error("Invalid response from OpenRouter");
         }
-      } catch (geminiError) {
-        console.error("Gemini error, falling back to defaults:", geminiError);
+      } catch (aiError) {
+        console.error("AI error, falling back to defaults:", aiError);
         const shuffled = [...DEFAULT_QUERIES].sort(() => 0.5 - Math.random());
         queriesToSearch = shuffled.slice(0, 3);
       }
@@ -255,6 +257,55 @@ app.post("/api/unsplash/next", async (req, res) => {
     res.json({ images: allImages, queriesUsed: queriesToSearch });
   } catch (error: any) {
     console.error("Error in /api/unsplash/next:", error);
+    res.status(500).json({ error: error.message || "Internal server error" });
+  }
+});
+
+// API Route for AI Chat feature
+app.post("/api/ai/chat", async (req, res) => {
+  try {
+    const { messages } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "Messages array is required" });
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "OPENROUTER_API_KEY environment variable is required" });
+    }
+
+    const systemMessage = {
+      role: "system",
+      content: "You are Sastagram AI, the official and helpful AI assistant for Sastagram, a modern social media platform. You are engaging, friendly, and knowledgeable about social media, trends, and content creation. You keep your answers concise and helpful."
+    };
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "Sastagram"
+      },
+      body: JSON.stringify({
+        model: "nvidia/nemotron-3-nano-30b-a3b:free",
+        messages: [systemMessage, ...messages]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("OpenRouter API error:", err);
+      return res.status(500).json({ error: "Failed to generate AI response" });
+    }
+
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || "I couldn't process that.";
+
+    res.json({ reply });
+  } catch (error: any) {
+    console.error("Error in /api/ai/chat:", error);
     res.status(500).json({ error: error.message || "Internal server error" });
   }
 });
