@@ -23,13 +23,14 @@ const Feed = forwardRef<FeedRef, {
   initialSlideIndex?: number
 }>(({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }, ref) => {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [unsplashPosts, setUnsplashPosts] = useState<Post[]>([]);
+  const [externalFeedPosts, setExternalFeedPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchingExternal, setFetchingExternal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [selectedPost, setSelectedPost] = useState<{ post: Post, index: number } | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [limitCount, setLimitCount] = useState(20);
+  const [limitCount, setLimitCount] = useState(6);
   const [interactions, setInteractions] = useState<{ query: string, action: 'liked' | 'skipped' | 'watched_full' }[]>([]);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const startY = useRef(0);
@@ -91,19 +92,31 @@ const Feed = forwardRef<FeedRef, {
     return () => unsubscribe();
   }, [limitCount]);
 
-  // Fetch Personalized Unsplash Posts
+  // Fetch Personalized External Posts
   useEffect(() => {
-    const fetchUnsplash = async () => {
+    const fetchExternal = async () => {
+      if (fetchingExternal) return;
+      setFetchingExternal(true);
       try {
-        const response = await fetch('/api/unsplash/next', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ interactions: interactions.slice(-10) }) // Send last 10 interactions for context
-        });
-        if (response.ok) {
-          const data = await response.json();
+        const [unsplashRes, reelsRes] = await Promise.all([
+          fetch('/api/unsplash/next', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interactions: interactions.slice(-10) })
+          }),
+          fetch('/api/reels/next', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interactions: interactions.slice(-10) })
+          })
+        ]);
+
+        let newExternalPosts: Post[] = [];
+
+        if (unsplashRes.ok) {
+          const data = await unsplashRes.json();
           if (data.images) {
-            const mappedPosts: Post[] = data.images.map((img: any) => ({
+            const mappedImages: Post[] = data.images.map((img: any) => ({
               id: `unsplash-${img.id}`,
               authorId: `unsplash-${img.user.id}`,
               authorName: img.user.name,
@@ -117,19 +130,47 @@ const Feed = forwardRef<FeedRef, {
               createdAt: new Date(),
               isReel: false
             }));
-            setUnsplashPosts(prev => {
-              const existingIds = new Set(prev.map(p => p.id));
-              const newP = mappedPosts.filter(p => !existingIds.has(p.id));
-              return [...prev, ...newP];
-            });
+            newExternalPosts = [...newExternalPosts, ...mappedImages];
           }
         }
+
+        if (reelsRes.ok) {
+          const data = await reelsRes.json();
+          if (data.videos) {
+            const mappedVideos: Post[] = data.videos.map((vid: any) => ({
+              id: `pexels-${vid.id}`,
+              authorId: `pexels-${vid.user.id}`,
+              authorName: vid.user.name,
+              authorPhoto: vid.user.profile_image,
+              videoUrl: vid.videoUrl,
+              mediaType: 'video',
+              mediaUrls: [{ url: vid.videoUrl, type: 'video' }],
+              caption: `Recommended reel for you: ${vid.query}`,
+              likesCount: Math.floor(Math.random() * 10000) + 1000,
+              commentsCount: Math.floor(Math.random() * 500) + 50,
+              createdAt: new Date(),
+              isReel: true
+            }));
+            newExternalPosts = [...newExternalPosts, ...mappedVideos];
+          }
+        }
+
+        // Shuffle new posts
+        newExternalPosts = newExternalPosts.sort(() => 0.5 - Math.random());
+
+        setExternalFeedPosts(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newP = newExternalPosts.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newP];
+        });
       } catch (err) {
-        console.error("Failed to fetch personalized unsplash posts", err);
+        console.error("Failed to fetch personalized external posts", err);
+      } finally {
+        setFetchingExternal(false);
       }
     };
     
-    fetchUnsplash();
+    fetchExternal();
   }, [limitCount]); // Intentionally not dependent on 'interactions' to avoid re-fetching on every like
 
   const handleInteraction = (post: Post, action: 'liked' | 'skipped' | 'watched_full') => {
@@ -147,8 +188,8 @@ const Feed = forwardRef<FeedRef, {
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && !loading) {
-          setLimitCount(prev => prev + 20);
+        if (entries[0].isIntersecting && !loading && !fetchingExternal) {
+          setLimitCount(prev => prev + 6);
         }
       },
       { threshold: 0.1 }
@@ -163,7 +204,7 @@ const Feed = forwardRef<FeedRef, {
         observer.unobserve(observerTarget.current);
       }
     };
-  }, [observerTarget.current, loading]);
+  }, [observerTarget.current, loading, fetchingExternal]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (window.scrollY === 0) {
@@ -206,18 +247,18 @@ const Feed = forwardRef<FeedRef, {
     !blockedByIds.includes(post.authorId)
   );
 
-  // Interleave Firebase posts and Pexels posts
+  // Interleave Firebase posts and External posts
   const combinedPosts: Post[] = [];
   let fbIndex = 0;
   let pxIndex = 0;
   
-  while (fbIndex < filteredPosts.length || pxIndex < unsplashPosts.length) {
-    // Add 3 Firebase posts, then 1 Unsplash post
+  while (fbIndex < filteredPosts.length || pxIndex < externalFeedPosts.length) {
+    // Add 3 Firebase posts, then 1 External post
     for (let i = 0; i < 3 && fbIndex < filteredPosts.length; i++) {
       combinedPosts.push(filteredPosts[fbIndex++]);
     }
-    if (pxIndex < unsplashPosts.length) {
-      combinedPosts.push(unsplashPosts[pxIndex++]);
+    if (pxIndex < externalFeedPosts.length) {
+      combinedPosts.push(externalFeedPosts[pxIndex++]);
     }
   }
 
@@ -355,7 +396,11 @@ const Feed = forwardRef<FeedRef, {
                   />
                 </motion.div>
               ))}
-              <div ref={observerTarget} className="h-10 w-full" />
+              <div ref={observerTarget} className="h-20 w-full flex items-center justify-center">
+                {fetchingExternal && (
+                  <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                )}
+              </div>
             </AnimatePresence>
           )}
         </div>

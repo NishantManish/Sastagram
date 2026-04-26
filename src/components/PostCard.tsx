@@ -648,15 +648,15 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                     />
                     
                     {/* Custom Video Controls */}
-                    <div className="absolute bottom-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute bottom-2 right-2 z-10 opacity-90 transition-opacity">
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleMute(e);
                         }}
-                        className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-all"
+                        className="p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-sm"
                       >
-                        {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                        {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                     

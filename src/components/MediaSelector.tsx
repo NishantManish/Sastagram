@@ -101,7 +101,7 @@ export default function MediaSelector({ initialType, onSelect, onClose, showToas
       {/* Post Type Selector (Mobile) */}
       <div className="flex bg-zinc-950 p-3 border-b border-zinc-800/50 justify-center shrink-0">
         <div className="flex bg-zinc-900 p-1 rounded-full w-full max-w-sm">
-          {(['post', 'story', 'reel'] as const).map((type) => (
+          {(['post', 'story'] as const).map((type) => (
             <button
               key={type}
               onClick={() => setPostType(type)}

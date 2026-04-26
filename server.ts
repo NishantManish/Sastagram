@@ -75,14 +75,14 @@ async function callOpenRouter(prompt: string): Promise<string> {
 const DEFAULT_QUERIES = ["nature", "travel", "sports", "technology", "lifestyle", "food", "animals", "fashion"];
 
 // Helper to fetch videos from Pexels
-async function fetchPexelsVideos(query: string, perPage: number = 5) {
+async function fetchPexelsVideos(query: string, perPage: number = 15) {
   const apiKey = process.env.PEXELS_API_KEY;
   if (!apiKey) {
     throw new Error("PEXELS_API_KEY environment variable is required");
   }
 
   try {
-    const response = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${perPage}&orientation=portrait`, {
+    const response = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${perPage}&page=1&orientation=portrait`, {
       headers: {
         Authorization: apiKey
       }
@@ -94,7 +94,14 @@ async function fetchPexelsVideos(query: string, perPage: number = 5) {
     }
 
     const data = await response.json();
-    return data.videos.map((v: any) => ({
+    let videos = data.videos || [];
+    
+    if (videos.length > 0) {
+      const idx = Math.floor(Math.random() * videos.length);
+      videos = [videos[idx]];
+    }
+
+    return videos.map((v: any) => ({
       id: v.id,
       url: v.video_files.find((f: any) => f.quality === 'hd' || f.quality === 'sd')?.link || v.video_files[0].link,
       image: v.image,
@@ -109,7 +116,7 @@ async function fetchPexelsVideos(query: string, perPage: number = 5) {
 }
 
 // Helper to fetch images from Unsplash
-async function fetchUnsplashImages(query: string, perPage: number = 5) {
+async function fetchUnsplashImages(query: string, perPage: number = 15) {
   const accessKey = process.env.UNSPLASH_ACCESS_KEY;
   if (!accessKey) {
     console.warn("UNSPLASH_ACCESS_KEY environment variable is missing");
@@ -117,7 +124,7 @@ async function fetchUnsplashImages(query: string, perPage: number = 5) {
   }
 
   try {
-    const response = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${perPage}&orientation=portrait`, {
+    const response = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${perPage}&page=1&orientation=portrait`, {
       headers: {
         Authorization: `Client-ID ${accessKey}`
       }
@@ -129,7 +136,14 @@ async function fetchUnsplashImages(query: string, perPage: number = 5) {
     }
 
     const data = await response.json();
-    return data.results.map((img: any) => ({
+    let results = data.results || [];
+    
+    if (results.length > 0) {
+      const idx = Math.floor(Math.random() * results.length);
+      results = [results[idx]];
+    }
+
+    return results.map((img: any) => ({
       id: img.id,
       url: img.urls.regular,
       user: {
@@ -156,12 +170,12 @@ app.post("/api/reels/next", async (req, res) => {
     if (!interactions || interactions.length === 0) {
       // Pick 3 random default queries
       const shuffled = [...DEFAULT_QUERIES].sort(() => 0.5 - Math.random());
-      queriesToSearch = shuffled.slice(0, 3);
+      queriesToSearch = shuffled.slice(0, 6);
     } else {
       // Use Gemini to generate personalized queries
       const prompt = `
       You are an elite, highly advanced video recommendation algorithm powering an addictive social media feed.
-      Analyze the user's sequential interaction history and generate 3 highly targeted, nuanced search queries for a stock video API.
+      Analyze the user's sequential interaction history and generate 6 highly targeted, nuanced search queries for a stock video API.
       
       User interactions (ordered chronologically, oldest to newest):
       ${JSON.stringify(interactions, null, 2)}
@@ -170,9 +184,9 @@ app.post("/api/reels/next", async (req, res) => {
       1. Temporal Weighting: Recent interactions carry significantly more weight than older ones. Track the user's shifting interests.
       2. Affinity Mapping: Identify the underlying themes, aesthetics, and emotional tones of 'liked' and 'watched_full' items. 
       3. Negative Signals: Strongly suppress concepts, visual styles, and themes correlated with 'skipped' items.
-      4. Serendipity Injection: Make 2 queries highly relevant to their core interests, but make the 3rd query a "tangential exploration" designed to expand their taste profile securely.
+      4. Serendipity Injection: Make 4 queries highly relevant to their core interests, but make the other 2 queries a "tangential exploration" designed to expand their taste profile securely.
       5. Contextual Nuance: Use specific, descriptive keywords that translate well to visual stock footage (e.g., "cinematic neon cyberpunk city" instead of "future").
-      6. Output Constraint: Return EXACTLY a JSON array containing exactly 3 string queries based strictly on the user's complex cognitive profile.
+      6. Output Constraint: Return EXACTLY a JSON array containing exactly 6 string queries based strictly on the user's complex cognitive profile.
       `;
 
       try {
@@ -180,19 +194,19 @@ app.post("/api/reels/next", async (req, res) => {
         const cleanText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
         const generatedQueries = JSON.parse(cleanText);
         if (Array.isArray(generatedQueries) && generatedQueries.length > 0) {
-          queriesToSearch = generatedQueries.slice(0, 3);
+          queriesToSearch = generatedQueries.slice(0, 6);
         } else {
           throw new Error("Invalid response from OpenRouter");
         }
       } catch (aiError) {
         console.error("AI error, falling back to defaults:", aiError);
         const shuffled = [...DEFAULT_QUERIES].sort(() => 0.5 - Math.random());
-        queriesToSearch = shuffled.slice(0, 3);
+        queriesToSearch = shuffled.slice(0, 6);
       }
     }
 
     // Fetch videos for the selected queries
-    const videoPromises = queriesToSearch.map(q => fetchPexelsVideos(q, 4));
+    const videoPromises = queriesToSearch.map(q => fetchPexelsVideos(q, 1));
     const videoResults = await Promise.all(videoPromises);
     
     // Flatten and shuffle the results
@@ -214,11 +228,11 @@ app.post("/api/unsplash/next", async (req, res) => {
 
     if (!interactions || interactions.length === 0) {
       const shuffled = [...DEFAULT_QUERIES].sort(() => 0.5 - Math.random());
-      queriesToSearch = shuffled.slice(0, 3);
+      queriesToSearch = shuffled.slice(0, 6);
     } else {
       const prompt = `
       You are an elite, highly advanced content recommendation algorithm powering an addictive image discovery feed.
-      Analyze the user's sequential interaction history and generate 3 highly targeted, visually evocative search queries for the Unsplash API.
+      Analyze the user's sequential interaction history and generate 6 highly targeted, visually evocative search queries for the Unsplash API.
       
       User interactions (ordered chronologically, oldest to newest):
       ${JSON.stringify(interactions, null, 2)}
@@ -227,9 +241,9 @@ app.post("/api/unsplash/next", async (req, res) => {
       1. Temporal Decay: Heavily prioritize the cognitive themes present in the most recent positive interactions.
       2. Visual Aesthetic Extraction: Deduce the user's preferred visual style (e.g., minimalist, moody, vibrant, macro) based on their engagement, and inject those aesthetic terms into your new queries.
       3. Aversion Modeling: Analyze 'skipped' items not just for their explicit subjects, but for their underlying genres, and actively filter those out.
-      4. Exploitation vs. Exploration: Make the first 2 queries exploit known high-affinity topics. Make the 3rd query an exploratory leap into an adjacent but novel domain to discover new interests.
+      4. Exploitation vs. Exploration: Make 4 queries exploit known high-affinity topics. Make the other 2 queries an exploratory leap into an adjacent but novel domain to discover new interests.
       5. Unsplash Optimization: Formulate queries that are known to perform exceptionally well on Unsplash (e.g., adding terms like "experimental architecture", "film photography aesthetics", "abstract texture").
-      6. Output Constraint: Return EXACTLY a JSON array of 3 string queries reflecting this sophisticated analysis.
+      6. Output Constraint: Return EXACTLY a JSON array of 6 string queries reflecting this sophisticated analysis.
       `;
 
       try {
@@ -237,18 +251,18 @@ app.post("/api/unsplash/next", async (req, res) => {
         const cleanText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
         const generatedQueries = JSON.parse(cleanText);
         if (Array.isArray(generatedQueries) && generatedQueries.length > 0) {
-          queriesToSearch = generatedQueries.slice(0, 3);
+          queriesToSearch = generatedQueries.slice(0, 6);
         } else {
           throw new Error("Invalid response from OpenRouter");
         }
       } catch (aiError) {
         console.error("AI error, falling back to defaults:", aiError);
         const shuffled = [...DEFAULT_QUERIES].sort(() => 0.5 - Math.random());
-        queriesToSearch = shuffled.slice(0, 3);
+        queriesToSearch = shuffled.slice(0, 6);
       }
     }
 
-    const imagePromises = queriesToSearch.map(q => fetchUnsplashImages(q, 4));
+    const imagePromises = queriesToSearch.map(q => fetchUnsplashImages(q, 1));
     const imageResults = await Promise.all(imagePromises);
     
     let allImages = imageResults.flat();

@@ -73,6 +73,17 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
     onSettingsToggle?.(showSettingsPage);
   }, [showSettingsPage, onSettingsToggle]);
   const [activeGridTab, setActiveGridTab] = useState<'posts' | 'reels' | 'tagged'>('posts');
+  
+  const combinedPosts = [...posts, ...(reels as unknown as Post[])].sort((a, b) => {
+    const timeA = a.createdAt?.seconds || 0;
+    const timeB = b.createdAt?.seconds || 0;
+    return timeB - timeA;
+  });
+
+  const combinedReels = combinedPosts.filter(p => p.mediaType === 'video' || p.videoUrl);
+
+  const activeData = activeGridTab === 'posts' ? combinedPosts : activeGridTab === 'reels' ? combinedReels : taggedPosts;
+
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [isCreatingHighlight, setIsCreatingHighlight] = useState(false);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
@@ -710,7 +721,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
 
           <div className="flex items-center gap-8 mb-6">
             <div className="flex flex-col items-center">
-              <span className="text-base font-black text-zinc-900 leading-none">{posts.length}</span>
+              <span className="text-base font-black text-zinc-900 leading-none">{combinedPosts.length}</span>
               <span className="text-[8px] uppercase tracking-[0.15em] text-zinc-400 font-black mt-1.5">Posts</span>
             </div>
             <button 
@@ -900,7 +911,7 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
               <div key={`post-skeleton-${i}`} className="aspect-square bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
             ))}
           </div>
-        ) : (activeGridTab === 'posts' ? posts : activeGridTab === 'reels' ? reels : taggedPosts).length === 0 ? (
+        ) : activeData.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-zinc-500">
             <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center mb-6">
               {activeGridTab === 'reels' ? <Clapperboard className="w-10 h-10 text-zinc-300" /> : <Camera className="w-10 h-10 text-zinc-300" />}
@@ -912,117 +923,67 @@ export default function Profile({ userId, onBack, onNavigate, onTagClick, onSett
               {activeGridTab === 'posts' ? 'Capture and share your first moment.' : activeGridTab === 'reels' ? 'Share your first reel with the world.' : 'When people tag you in posts, they will appear here.'}
             </p>
           </div>
-        ) : activeGridTab === 'reels' ? (
-          /* 3-Column Grid for Reels */
-          <div className="grid grid-cols-3 gap-1.5">
-            {reels.map((reel, index) => (
-              <motion.div 
-                key={`reel-${reel.id}-${index}`}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.03 }}
-                className="aspect-[9/16] bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl"
-                onClick={() => setSelectedReel(reel)}
-              >
-                <video 
-                  src={reel.videoUrl} 
-                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                  muted
-                  playsInline
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center text-white backdrop-blur-[4px]">
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col items-center gap-1">
-                      <Heart className="w-4 h-4 fill-white" />
-                      <span className="font-black text-[9px] tracking-widest uppercase">{(reel.likesCount || 0).toLocaleString()}</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <MessageCircle className="w-4 h-4 fill-white" />
-                      <span className="font-black text-[9px] tracking-widest uppercase">{(reel.commentsCount || 0).toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[10px] font-bold">
-                  <Clapperboard className="w-3 h-3" />
-                  <span>{(reel.viewsCount || 0).toLocaleString()}</span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
         ) : (
-          /* Standard 3-Column Grid for Posts and Tagged */
           <div className="grid grid-cols-3 gap-1.5">
-            {(activeGridTab === 'posts' ? posts : taggedPosts).map((post, index) => (
-              <motion.div 
-                key={`post-${post.id}-${index}`}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.03 }}
-                className="aspect-square bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl"
-              >
-                {post.mediaUrls && post.mediaUrls.length > 0 ? (
-                  post.mediaUrls[0].type === 'video' ? (
+            {activeData.map((post, index) => {
+              const isVideo = post.mediaType === 'video' || post.videoUrl || (post.mediaUrls && post.mediaUrls?.[0]?.type === 'video');
+              const mediaUrl = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls[0].url : (post.videoUrl || post.imageUrl);
+              
+              return (
+                <motion.div 
+                  key={`post-${post.id}-${index}`}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.03 }}
+                  className={`${activeGridTab === 'reels' ? 'aspect-[9/16]' : 'aspect-square'} bg-zinc-50 relative group cursor-pointer overflow-hidden rounded-2xl`}
+                  onClick={() => setSelectedPost(post as any)}
+                >
+                  {isVideo ? (
                     <video 
-                      src={post.mediaUrls[0].url} 
+                      src={mediaUrl} 
                       className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                       muted
                       playsInline
-                      onClick={() => setSelectedPost(post)}
                     />
                   ) : (
                     <img 
-                      src={getOptimizedImageUrl(post.mediaUrls[0].url, 400, 400)} 
+                      src={getOptimizedImageUrl(mediaUrl, 400, 400)} 
                       alt="Post" 
                       className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                       referrerPolicy="no-referrer"
-                      onClick={() => setSelectedPost(post)}
                     />
-                  )
-                ) : post.mediaType === 'video' || post.videoUrl || (post.imageUrl && (post.imageUrl.match(/\.(mp4|webm|ogg|mov)$/i) || post.imageUrl.includes('/video/upload/'))) ? (
-                  <video 
-                    src={post.videoUrl || post.imageUrl} 
-                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                    muted
-                    playsInline
-                    onClick={() => setSelectedPost(post)}
-                  />
-                ) : (
-                  <img 
-                    src={getOptimizedImageUrl(post.imageUrl, 400, 400)} 
-                    alt="Post" 
-                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                    referrerPolicy="no-referrer"
-                    onClick={() => setSelectedPost(post)}
-                  />
-                )}
-                <div 
-                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center text-white backdrop-blur-[4px]"
-                  onClick={() => setSelectedPost(post)}
-                >
-                  <div className="flex items-center gap-6">
-                    <div className="flex flex-col items-center gap-1.5">
-                      <Heart className="w-5 h-5 fill-white" />
-                      <span className="font-black text-[10px] tracking-widest uppercase">{(post.likesCount || 0).toLocaleString()}</span>
+                  )}
+                  {isVideo && (
+                    <div className="absolute top-2 right-2 text-white drop-shadow-md">
+                      <Clapperboard className="w-4 h-4 fill-white text-transparent opacity-90" />
                     </div>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <MessageCircle className="w-5 h-5 fill-white" />
-                      <span className="font-black text-[10px] tracking-widest uppercase">{(post.commentsCount || 0).toLocaleString()}</span>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center text-white backdrop-blur-[4px]">
+                    <div className="flex items-center gap-4">
+                      <div className="flex flex-col items-center gap-1">
+                        <Heart className="w-4 h-4 fill-white" />
+                        <span className="font-black text-[9px] tracking-widest uppercase">{(post.likesCount || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <MessageCircle className="w-4 h-4 fill-white" />
+                        <span className="font-black text-[9px] tracking-widest uppercase">{((post as any).commentsCount || 0).toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                {isOwnProfile && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPostToDelete(post);
-                    }}
-                    className="absolute top-3 right-3 p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-2xl shadow-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white active:scale-90"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </motion.div>
-            ))}
+                  {isOwnProfile && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPostToDelete(post as any);
+                      }}
+                      className="absolute top-3 right-3 p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-2xl shadow-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white active:scale-90"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>
