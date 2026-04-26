@@ -89,13 +89,15 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
   const currentMedia = mediaItems[currentIndex] || mediaItems[0] || { url: '', type: 'image' };
   const [mediaAspectRatios, setMediaAspectRatios] = useState<number[]>(mediaItems.map(() => 1));
 
+  const defaultAspectRatio = postType === 'story' || postType === 'reel' ? '9:16' : 'original';
+
   // Initialize states for each media item
   const [mediaStates, setMediaStates] = useState<EditorState[]>(mediaItems.map(() => ({
     elements: [],
     filter: 'none',
     baseRotation: 0,
     baseFlipH: false,
-    crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'original' },
+    crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: defaultAspectRatio },
     trim: { start: 0, end: 100 },
     speed: 1,
     muted: false,
@@ -107,7 +109,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
     filter: 'none',
     baseRotation: 0,
     baseFlipH: false,
-    crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'original' },
+    crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: defaultAspectRatio },
     trim: { start: 0, end: 100 },
     speed: 1,
     muted: false,
@@ -946,14 +948,11 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
             const displayAspectRatio = (baseRotation === 90 || baseRotation === 270) ? 1 / currentAspectRatio : currentAspectRatio;
             return (
               <div 
-                className="relative bg-zinc-900 rounded-[2rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] ring-1 ring-white/10"
+                className="relative bg-zinc-900 rounded-[2rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] ring-1 ring-white/10 flex items-center justify-center"
                 style={{ 
                   aspectRatio: isFinite(displayAspectRatio) ? displayAspectRatio : 1,
                   maxWidth: '100%',
                   maxHeight: '100%',
-                  width: 'auto',
-                  height: 'auto',
-                  objectFit: 'contain'
                 }}
                 onPointerDown={(e) => {
                   if (e.target === e.currentTarget) {
@@ -963,9 +962,9 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
               >
                 {/* Invisible image to force size and aspect ratio */}
                 {currentMedia.type === 'video' ? (
-                  <video src={currentMedia.url} className="max-w-full max-h-full opacity-0 pointer-events-none" style={{ maxHeight: 'calc(100vh - 200px)', aspectRatio: displayAspectRatio }} />
+                  <video src={currentMedia.url} className="w-auto h-auto max-w-full max-h-full opacity-0 pointer-events-none block" style={{ aspectRatio: displayAspectRatio }} />
                 ) : (
-                  <img src={currentMedia.url} className="max-w-full max-h-full opacity-0 pointer-events-none" style={{ maxHeight: 'calc(100vh - 200px)', aspectRatio: displayAspectRatio }} />
+                  <img src={currentMedia.url} className="w-auto h-auto max-w-full max-h-full opacity-0 pointer-events-none block" style={{ aspectRatio: displayAspectRatio }} />
                 )}
                 
                 <div 
