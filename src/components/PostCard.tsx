@@ -46,6 +46,8 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const [mediaAspectRatio, setMediaAspectRatio] = useState<number>(1);
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -153,65 +155,84 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    const audio = audioRef.current;
+    const container = containerRef.current;
+    if (!container) return;
 
     let isMounted = true;
+
+    const playMedia = async () => {
+      try {
+        const promises = [];
+        if (videoRef.current) promises.push(videoRef.current.play().catch(() => {}));
+        if (audioRef.current) {
+          audioRef.current.muted = isMuted;
+          promises.push(audioRef.current.play().catch(() => {}));
+        }
+        await Promise.all(promises);
+        if (isMounted) setIsPlaying(true);
+      } catch (error) {
+        if (isMounted && error instanceof Error && error.name !== 'AbortError') {
+          console.error('Media play interrupted:', error);
+        }
+        if (isMounted) setIsPlaying(false);
+      }
+    };
+
+    const pauseMedia = () => {
+      if (videoRef.current) videoRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
+      if (isMounted) setIsPlaying(false);
+    };
 
     const observer = new IntersectionObserver(
       async (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            try {
-              await video.play();
-              if (isMounted) setIsPlaying(true);
-            } catch (error) {
-              if (isMounted && error instanceof Error && error.name !== 'AbortError') {
-                console.error('Video play interrupted:', error);
-              }
-              if (isMounted) setIsPlaying(false);
-            }
+            await playMedia();
           } else {
-            video.pause();
-            if (isMounted) setIsPlaying(false);
+            pauseMedia();
           }
         }
       },
       { threshold: 0.6 }
     );
 
-    observer.observe(video);
+    observer.observe(container);
 
     return () => {
       isMounted = false;
-      observer.unobserve(video);
-      video.pause();
+      observer.unobserve(container);
+      pauseMedia();
     };
-  }, []);
+  }, [currentMediaIndex, isMuted]);
 
   const toggleMute = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (videoRef.current) {
-      videoRef.current.muted = !videoRef.current.muted;
-      setIsMuted(videoRef.current.muted);
-    }
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    if (videoRef.current) videoRef.current.muted = newMuted;
+    if (audioRef.current) audioRef.current.muted = newMuted;
   };
 
   const togglePlay = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-        setIsPlaying(false);
-      } else {
-        try {
-          await videoRef.current.play();
-          setIsPlaying(true);
-        } catch (error) {
-          if (error instanceof Error && error.name !== 'AbortError') {
-            console.error('Video play interrupted:', error);
-          }
-          setIsPlaying(false);
+    if (e) e.stopPropagation();
+    if (isPlaying) {
+      if (videoRef.current) videoRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      try {
+        const promises = [];
+        if (videoRef.current) promises.push(videoRef.current.play());
+        if (audioRef.current) promises.push(audioRef.current.play());
+        await Promise.all(promises);
+        setIsPlaying(true);
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Media play interrupted:', error);
         }
+        setIsPlaying(false);
       }
     }
   };
@@ -599,6 +620,7 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
 
       {/* Image/Video */}
       <div 
+        ref={containerRef}
         className="w-full bg-zinc-50 dark:bg-zinc-900 relative cursor-pointer overflow-hidden group flex items-center justify-center"
         style={{ 
           aspectRatio: `${Math.max(4/5, Math.min(mediaAspectRatio, 1.91))}`,
@@ -669,19 +691,46 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                     )}
                   </div>
                 ) : (
-                  <img 
-                    src={getOptimizedImageUrl(currentMedia.url, 800)} 
-                    alt="Post content" 
-                    onLoad={onMediaLoad}
-                    className="w-full h-full max-h-[min(500px,70vh)] object-contain block"
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                  />
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <img 
+                      src={getOptimizedImageUrl(currentMedia.url, 800)} 
+                      alt="Post content" 
+                      onLoad={onMediaLoad}
+                      className="w-full h-full max-h-[min(500px,70vh)] object-contain block"
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                    />
+                    
+                    {/* Custom Audio Controls for images with music */}
+                    {post.music && (
+                      <div className="absolute bottom-2 right-2 z-10 opacity-90 transition-opacity">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleMute(e);
+                          }}
+                          className="p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-sm"
+                        >
+                          {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </ZoomableMedia>
             </motion.div>
           </AnimatePresence>
         </motion.div>
+        
+        {/* Audio Player for Music */}
+        {post.music && (
+          <audio
+            ref={audioRef}
+            src={post.music.url}
+            loop
+            muted={isMuted}
+          />
+        )}
         
         {/* Pagination Dots */}
         {mediaList.length > 1 && (

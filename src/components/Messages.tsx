@@ -3,7 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc, setDoc, add
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Chat, Message, User, Post, Reel } from '../types';
-import { Bot, Sparkles, Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard, Heart } from 'lucide-react';
+import { Bot, Sparkles, Send, ArrowLeft, Paperclip, X, Trash2, ShieldAlert, Image as ImageIcon, Search, Pencil, Phone, Video, Info, ArrowRight, ChevronLeft, MoreVertical, Edit2, Check, CheckCheck, Clock, Plus, FileText, UserPlus, Clapperboard, Heart, ArrowDown } from 'lucide-react';
 import { formatDistanceToNow, format, isSameDay } from 'date-fns';
 import Profile from './Profile';
 import PostDetailsModal from './PostDetailsModal';
@@ -48,6 +48,12 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
   const [heldMessage, setHeldMessage] = useState<Message | null>(null);
   const messageLongPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    setShowScrollButton(scrollHeight - scrollTop - clientHeight > 150);
+  };
 
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -616,7 +622,7 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-zinc-50/50 dark:bg-zinc-950/50 relative scroll-smooth no-scrollbar">
+        <div onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-zinc-50/50 dark:bg-zinc-950/50 relative scroll-smooth no-scrollbar">
           {heldMessage && (
             <div 
               className="fixed inset-0 z-40 bg-black/5 backdrop-blur-[2px]" 
@@ -1029,6 +1035,26 @@ export default function Messages({ onBack, onNavigate, onTagClick }: { onBack?: 
           })}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Scroll to bottom button */}
+        <AnimatePresence>
+          {showScrollButton && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.8, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 10 }}
+              className="absolute right-6 bottom-24 z-50 pointer-events-auto"
+            >
+              <button
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="p-3 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-full shadow-lg border border-zinc-200/50 dark:border-zinc-700/50 hover:text-indigo-600 dark:hover:text-indigo-400 hover:scale-110 active:scale-95 transition-all"
+                title="Scroll to bottom"
+              >
+                <ArrowDown className="w-5 h-5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Input Area */}
         <div className="bg-white/80 dark:bg-zinc-950/80 backdrop-blur-2xl border-t border-zinc-100/50 dark:border-zinc-800/50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.04)] shrink-0 transition-colors duration-300">

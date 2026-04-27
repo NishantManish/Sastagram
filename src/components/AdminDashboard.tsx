@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy, limit, doc, deleteDoc, where, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, query, getDocs, orderBy, limit, doc, deleteDoc, where, getDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { User, MessageSquare, Image as ImageIcon, Trash2, ChevronRight, ChevronLeft, ArrowLeft, Search, Bookmark, Heart, Users, Star, ShieldAlert, AlertTriangle, X, Layers, BarChart3, ShieldCheck, UserPlus, Mail } from 'lucide-react';
+import { User, MessageSquare, Image as ImageIcon, Trash2, ChevronRight, ChevronLeft, ArrowLeft, Search, Bookmark, Heart, Users, Star, ShieldAlert, AlertTriangle, X, Layers, BarChart3, ShieldCheck, UserPlus, Mail, Bell, Send, Play, ArrowDown } from 'lucide-react';
 import { cn } from '../utils';
 import { deleteFromCloudinary } from '../utils/media';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,6 +23,7 @@ interface ChatData {
   id: string;
   participants: string[];
   participantNames?: string[];
+  participantPhotos?: string[];
   lastMessage?: string;
   updatedAt: any;
 }
@@ -68,9 +69,24 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
-  const [view, setView] = useState<'users' | 'user-details' | 'user-chats' | 'user-chat-messages' | 'user-posts' | 'user-saved' | 'user-liked' | 'user-highlights' | 'user-stories' | 'user-followers' | 'user-following' | 'post-details'>('users');
+  const [view, setView] = useState<'users' | 'user-details' | 'user-chats' | 'user-chat-messages' | 'user-posts' | 'user-saved' | 'user-liked' | 'user-highlights' | 'user-stories' | 'user-followers' | 'user-following' | 'post-details' | 'recent-content'>('users');
   
   const [fullControl, setFullControl] = useState(false);
+  const [recentPosts, setRecentPosts] = useState<PostData[]>([]);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (view !== 'user-chat-messages') return;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = document.documentElement.scrollTop || window.scrollY;
+      const clientHeight = document.documentElement.clientHeight;
+      setShowScrollButton(scrollHeight - scrollTop - clientHeight > 150);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [view]);
 
   const [userChats, setUserChats] = useState<ChatData[]>([]);
   const [selectedChat, setSelectedChat] = useState<ChatData | null>(null);
@@ -87,8 +103,12 @@ export default function AdminDashboard() {
   const [currentPostMediaIndex, setCurrentPostMediaIndex] = useState(0);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  const [postDetailsSource, setPostDetailsSource] = useState<'user-posts' | 'user-saved' | 'user-liked'>('user-posts');
+  const [postDetailsSource, setPostDetailsSource] = useState<'user-posts' | 'user-saved' | 'user-liked' | 'recent-content'>('user-posts');
   const [viewingHighlight, setViewingHighlight] = useState<HighlightData | null>(null);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
+  
   const [confirmModal, setConfirmModal] = useState<{
 
     isOpen: boolean;
@@ -108,6 +128,16 @@ export default function AdminDashboard() {
     setConfirmModal({ isOpen: true, title, message, onConfirm, isDestructive });
   };
 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (view === 'user-chat-messages' && chatMessages.length > 0) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+    }
+  }, [chatMessages, view]);
+
   const sendAdminDeleteNotification = async (userId: string, contentPreview: string, contentId?: string, contentType?: 'post' | 'story' | 'comment' | 'highlight' | 'message') => {
     try {
       await addDoc(collection(db, 'notifications'), {
@@ -125,6 +155,35 @@ export default function AdminDashboard() {
       });
     } catch (error) {
       console.error('Error sending admin delete notification:', error);
+    }
+  };
+
+  const handleSendAnnouncement = async () => {
+    if (!announcementText.trim()) return;
+    setSendingAnnouncement(true);
+    try {
+      // Loop through all users and send notification
+      for (const user of users) {
+        if (user.uid === auth.currentUser?.uid) continue;
+        await addDoc(collection(db, 'notifications'), {
+          userId: user.uid,
+          type: 'admin_broadcast',
+          senderId: auth.currentUser?.uid || 'admin',
+          senderName: 'System Update',
+          senderPhoto: '',
+          contentPreview: announcementText,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      }
+      setAnnouncementText('');
+      setShowAnnouncementModal(false);
+      alert('Announcement broadcasted to all users successfully.');
+    } catch (error) {
+      console.error('Error sending announcement:', error);
+      alert('Failed to send announcement');
+    } finally {
+      setSendingAnnouncement(false);
     }
   };
 
@@ -157,6 +216,25 @@ export default function AdminDashboard() {
       console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRecentPosts = async () => {
+    setLoadingDetails(true);
+    setView('recent-content');
+    try {
+      const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(30));
+      const qr = query(collection(db, 'reels'), orderBy('createdAt', 'desc'), limit(30));
+      const [snapshot, rSnapshot] = await Promise.all([getDocs(q), getDocs(qr)]);
+      let postsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PostData));
+      let reelsData = rSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), isReel: true } as unknown as PostData));
+      let combined = [...postsData, ...reelsData];
+      combined.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setRecentPosts(combined.slice(0, 30));
+    } catch (error) {
+      console.error('Error fetching recent posts and reels:', error);
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
@@ -221,18 +299,22 @@ export default function AdminDashboard() {
       const snapshot = await getDocs(q);
       const chatsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatData));
       
-      // Fetch participant names
+      // Fetch participant names and photos
       for (const chat of chatsData) {
         const names = [];
+        const photos = [];
         for (const pId of chat.participants) {
           const uDoc = await getDoc(doc(db, 'users', pId));
           if (uDoc.exists()) {
             names.push(uDoc.data().displayName || pId.slice(0, 8));
+            photos.push(uDoc.data().photoURL || '');
           } else {
             names.push(pId.slice(0, 8));
+            photos.push('');
           }
         }
         chat.participantNames = names;
+        chat.participantPhotos = photos;
       }
       
       setUserChats(chatsData);
@@ -263,12 +345,15 @@ export default function AdminDashboard() {
     setView('user-posts');
     try {
       const q = query(collection(db, 'posts'), where('authorId', '==', userId));
-      const snapshot = await getDocs(q);
+      const qr = query(collection(db, 'reels'), where('authorId', '==', userId));
+      const [snapshot, rSnapshot] = await Promise.all([getDocs(q), getDocs(qr)]);
       let postsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PostData));
-      postsData.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-      setUserPosts(postsData);
+      let reelsData = rSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), isReel: true } as unknown as PostData));
+      let combined = [...postsData, ...reelsData];
+      combined.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setUserPosts(combined);
     } catch (error) {
-      console.error('Error fetching posts:', error);
+      console.error('Error fetching posts and reels:', error);
     } finally {
       setLoadingDetails(false);
     }
@@ -282,19 +367,24 @@ export default function AdminDashboard() {
       const snapshot = await getDocs(q);
       let savedDocs = snapshot.docs.map(doc => doc.data());
       savedDocs.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-      const postIds = savedDocs.map(data => data.postId).filter(Boolean);
+      const postIds = savedDocs.map(data => data.postId || data.reelId).filter(Boolean);
       
       const posts: PostData[] = [];
       for (const pid of postIds) {
         if (!pid) continue;
-        const pDoc = await getDoc(doc(db, 'posts', pid));
+        let pDoc = await getDoc(doc(db, 'posts', pid));
         if (pDoc.exists()) {
           posts.push({ id: pDoc.id, ...pDoc.data() } as PostData);
+        } else {
+          pDoc = await getDoc(doc(db, 'reels', pid));
+          if (pDoc.exists()) {
+            posts.push({ id: pDoc.id, ...pDoc.data(), isReel: true } as unknown as PostData);
+          }
         }
       }
       setUserSaved(posts);
     } catch (error) {
-      console.error('Error fetching saved posts:', error);
+      console.error('Error fetching saved posts and reels:', error);
     } finally {
       setLoadingDetails(false);
     }
@@ -305,22 +395,29 @@ export default function AdminDashboard() {
     setView('user-liked');
     try {
       const q = query(collection(db, 'likes'), where('userId', '==', userId));
-      const snapshot = await getDocs(q);
-      let likedDocs = snapshot.docs.map(doc => doc.data());
+      const qr = query(collection(db, 'reelLikes'), where('userId', '==', userId));
+      const [snapshot, rSnapshot] = await Promise.all([getDocs(q), getDocs(qr)]);
+      let likedDocs = [
+        ...snapshot.docs.map(d => d.data()),
+        ...rSnapshot.docs.map(d => ({ ...d.data(), isReelLike: true }))
+      ] as any[];
       likedDocs.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-      const postIds = likedDocs.map(data => data.postId).filter(Boolean);
       
       const posts: PostData[] = [];
-      for (const pid of postIds) {
+      for (const data of likedDocs) {
+        const pid = data.postId || data.reelId;
         if (!pid) continue;
-        const pDoc = await getDoc(doc(db, 'posts', pid));
-        if (pDoc.exists()) {
-          posts.push({ id: pDoc.id, ...pDoc.data() } as PostData);
+        if (data.isReelLike) {
+          const pDoc = await getDoc(doc(db, 'reels', pid));
+          if (pDoc.exists()) posts.push({ id: pDoc.id, ...pDoc.data(), isReel: true } as unknown as PostData);
+        } else {
+          const pDoc = await getDoc(doc(db, 'posts', pid));
+          if (pDoc.exists()) posts.push({ id: pDoc.id, ...pDoc.data() } as PostData);
         }
       }
       setUserLiked(posts);
     } catch (error) {
-      console.error('Error fetching liked posts:', error);
+      console.error('Error fetching liked posts and reels:', error);
     } finally {
       setLoadingDetails(false);
     }
@@ -359,13 +456,13 @@ export default function AdminDashboard() {
   };
 
   const handleDeletePost = async (postId: string, postData?: PostData) => {
-    if (!fullControl || !selectedUser) return;
+    if (!fullControl) return;
     confirmAction('Delete Post', 'Are you sure you want to delete this post? This action cannot be undone.', async () => {
       try {
         const postSnap = await getDoc(doc(db, 'posts', postId));
         const fetchedPostData = postSnap.exists() ? postSnap.data() as PostData : null;
         const finalPostData = postData || fetchedPostData;
-        const authorId = finalPostData?.authorId || selectedUser.uid;
+        const authorId = finalPostData?.authorId || selectedUser?.uid || '';
         const caption = finalPostData?.caption || '';
 
         await deleteDoc(doc(db, 'posts', postId));
@@ -382,18 +479,21 @@ export default function AdminDashboard() {
         }
 
         // Send notification to user
-        await sendAdminDeleteNotification(
-          authorId,
-          caption.slice(0, 50) || 'Post content removed',
-          postId,
-          'post'
-        );
+        if (authorId) {
+          await sendAdminDeleteNotification(
+            authorId,
+            caption.slice(0, 50) || 'Post content removed',
+            postId,
+            'post'
+          );
+        }
 
         setUserPosts(prev => prev.filter(p => p.id !== postId));
         setUserSaved(prev => prev.filter(p => p.id !== postId));
         setUserLiked(prev => prev.filter(p => p.id !== postId));
+        setRecentPosts(prev => prev.filter(p => p.id !== postId));
         if (view === 'post-details') {
-          setView('user-posts');
+          setView(postDetailsSource as any);
         }
       } catch (error) {
         console.error('Error deleting post:', error);
@@ -662,7 +762,33 @@ export default function AdminDashboard() {
     );
   };
 
-  const renderPostGrid = (posts: PostData[], type: 'posts' | 'saved' | 'liked') => {
+  const handleUpdateRole = async (user: UserData, newRole: string) => {
+    if (!fullControl) return;
+    const actionText = newRole === 'admin' ? 'promote to admin' : 'demote to regular user';
+    confirmAction(
+      'Change User Role',
+      `Are you sure you want to ${actionText} ${user.displayName}?`,
+      async () => {
+        setLoadingDetails(true);
+        try {
+          await updateDoc(doc(db, 'users', user.uid), { role: newRole });
+          setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, role: newRole } : u));
+          setFilteredUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, role: newRole } : u));
+          if (selectedUser?.uid === user.uid) {
+            setSelectedUser({ ...selectedUser, role: newRole });
+          }
+        } catch (error) {
+          console.error('Error updating role:', error);
+          alert('Failed to update role');
+        } finally {
+          setLoadingDetails(false);
+        }
+      },
+      false
+    );
+  };
+
+  const renderPostGrid = (posts: PostData[], type: 'posts' | 'saved' | 'liked', sourceOverride?: 'recent-content') => {
     if (loadingDetails) {
       return <div className="flex justify-center p-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>;
     }
@@ -685,7 +811,7 @@ export default function AdminDashboard() {
               onClick={() => {
                 setSelectedPost(post);
                 setCurrentPostMediaIndex(0);
-                setPostDetailsSource(type === 'posts' ? 'user-posts' : type === 'saved' ? 'user-saved' : 'user-liked');
+                setPostDetailsSource(sourceOverride || (type === 'posts' ? 'user-posts' : type === 'saved' ? 'user-saved' : 'user-liked') as any);
                 setView('post-details');
               }}
             >
@@ -694,6 +820,9 @@ export default function AdminDashboard() {
                   <div className="w-full h-full relative">
                     <video src={displayUrl} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-black/10" />
+                    <div className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-sm rounded-full">
+                      <Play className="w-3 h-3 text-white fill-white" />
+                    </div>
                   </div>
                 ) : (
                   <img src={displayUrl} alt="" className="w-full h-full object-cover" />
@@ -704,8 +833,8 @@ export default function AdminDashboard() {
                 </div>
               )}
               
-              {isMultiMedia && (
-                <div className="absolute top-2 right-2 p-1 bg-black/50 backdrop-blur-sm rounded-md">
+              {isMultiMedia && mediaList[0].type !== 'video' && (
+                <div className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-sm rounded-md">
                   <Layers className="w-3 h-3 text-white" />
                 </div>
               )}
@@ -747,9 +876,9 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="bg-[#F8F9FB] min-h-screen pb-20 font-sans">
+    <div className="bg-[#F8F9FB] dark:bg-zinc-950 min-h-screen pb-20 font-sans">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-zinc-200/50 px-4 h-16 flex items-center justify-between shadow-sm">
+      <div className="sticky top-0 z-30 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50 px-4 h-16 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           {view !== 'users' && (
             <button 
@@ -759,13 +888,13 @@ export default function AdminDashboard() {
                 else if (view === 'user-followers' || view === 'user-following' || view === 'user-chats' || view === 'user-posts' || view === 'user-saved' || view === 'user-liked' || view === 'user-highlights' || view === 'user-stories') setView('user-details');
                 else setView('users');
               }}
-              className="p-2 bg-zinc-100 text-zinc-600 hover:bg-zinc-200 rounded-xl transition-all active:scale-95"
+              className="p-2 bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
           <div>
-            <h1 className="text-lg font-bold text-zinc-900 leading-tight">
+            <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">
               {view === 'users' ? 'Admin Console' : 
                view === 'user-details' ? 'User Profile' :
                view === 'user-chats' ? 'Conversations' : 
@@ -777,14 +906,25 @@ export default function AdminDashboard() {
                view === 'user-stories' ? 'Stories' :
                view === 'user-followers' ? 'Followers' :
                view === 'user-following' ? 'Following' :
+               view === 'recent-content' ? 'Global Content' :
                view === 'post-details' ? 'Content Review' : ''}
             </h1>
             {view === 'users' && <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">System Management</p>}
-            {view !== 'users' && selectedUser && <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">@{selectedUser.username}</p>}
+            {view === 'recent-content' && <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Latest Posts</p>}
+            {view !== 'users' && view !== 'recent-content' && selectedUser && <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">@{selectedUser.username}</p>}
           </div>
         </div>
         
         <div className="flex items-center gap-3">
+          {view === 'users' && fullControl && (
+            <button
+              onClick={() => setShowAnnouncementModal(true)}
+              className="flex items-center justify-center p-2 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-all border border-indigo-100"
+              title="Broadcast Announcement"
+            >
+              <Bell className="w-4 h-4" />
+            </button>
+          )}
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all border",
             fullControl ? "bg-red-50 border-red-100 text-red-600" : "bg-zinc-50 border-zinc-100 text-zinc-500"
@@ -820,19 +960,42 @@ export default function AdminDashboard() {
             >
               {/* Stats Overview */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-3xl border border-zinc-100 shadow-sm">
-                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center mb-3">
-                    <Users className="w-5 h-5 text-indigo-600" />
+                <div className="bg-white dark:bg-zinc-900 p-4 rounded-[32px] border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl flex items-center justify-center shrink-0">
+                      <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-black text-zinc-900 dark:text-zinc-100 leading-none">{users.length}</div>
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase mt-1 tracking-widest">Total Users</div>
+                    </div>
                   </div>
-                  <div className="text-2xl font-bold text-zinc-900">{users.length}</div>
-                  <div className="text-xs text-zinc-500 font-medium">Total Users</div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="text-2xl font-black text-zinc-900 dark:text-zinc-100 leading-none">{users.filter(u => u.role === 'admin').length}</div>
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase mt-1 tracking-widest">Admins</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-white p-4 rounded-3xl border border-zinc-100 shadow-sm">
-                  <div className="w-10 h-10 bg-emerald-50 rounded-2xl flex items-center justify-center mb-3">
-                    <ShieldCheck className="w-5 h-5 text-emerald-600" />
+
+                <div 
+                  onClick={fetchRecentPosts}
+                  className="bg-indigo-50 dark:bg-indigo-900/20 p-5 rounded-[32px] shadow-sm flex flex-col justify-between cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors group relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-indigo-500/20" />
+                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-indigo-100 text-indigo-600">
+                    <Layers className="w-6 h-6" />
                   </div>
-                  <div className="text-2xl font-bold text-zinc-900">{users.filter(u => u.role === 'admin').length}</div>
-                  <div className="text-xs text-zinc-500 font-medium">Admins</div>
+                  <div className="relative z-10">
+                    <div className="text-xl font-black text-indigo-900 mb-1">Global Content</div>
+                    <div className="text-xs text-indigo-600/70 font-bold uppercase tracking-widest">Review recent posts</div>
+                  </div>
+                  <div className="absolute bottom-5 right-5 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-all -translate-x-4 group-hover:translate-x-0">
+                    <ChevronRight className="w-4 h-4 text-indigo-600" />
+                  </div>
                 </div>
               </div>
 
@@ -858,33 +1021,34 @@ export default function AdminDashboard() {
                     <div 
                       key={user.uid} 
                       onClick={() => handleUserClick(user)}
-                      className="flex items-center justify-between p-4 bg-white border border-zinc-100 rounded-3xl cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all active:scale-[0.98]"
+                      className="flex items-center justify-between p-4 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-3xl cursor-pointer hover:border-indigo-200 dark:hover:border-indigo-900/50 hover:shadow-md transition-all active:scale-[0.98]"
                     >
                       <div className="flex items-center gap-4">
                         <div className="relative">
-                          <div className="w-12 h-12 rounded-2xl bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200">
+                          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700">
                             {user.photoURL ? (
                               <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" />
                             ) : (
-                              <User className="w-6 h-6 m-3 text-zinc-400" />
+                              <User className="w-6 h-6 m-3 text-zinc-400 dark:text-zinc-500" />
                             )}
                           </div>
                           {user.role === 'admin' && (
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 rounded-full border-2 border-white flex items-center justify-center">
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center">
                               <ShieldCheck className="w-2 h-2 text-white" />
                             </div>
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-zinc-900 truncate">{user.displayName}</div>
-                          <div className="text-xs text-zinc-500 truncate">@{user.username}</div>
+                          <div className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{user.displayName}</div>
+                          <div className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400 truncate">@{user.username}</div>
+                          {user.email && <div className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{user.email}</div>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="text-[10px] font-bold text-zinc-400 bg-zinc-50 px-2 py-1 rounded-lg hidden sm:block">
+                        <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-50 dark:bg-zinc-800 px-2 py-1 rounded-lg hidden sm:block">
                           {new Date(user.createdAt?.seconds * 1000).toLocaleDateString()}
                         </div>
-                        <ChevronRight className="w-5 h-5 text-zinc-300" />
+                        <ChevronRight className="w-5 h-5 text-zinc-300 dark:text-zinc-600" />
                       </div>
                     </div>
                   ))}
@@ -923,10 +1087,14 @@ export default function AdminDashboard() {
                   </div>
                   
                   <h2 className="text-2xl font-black text-zinc-900">{selectedUser.displayName}</h2>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm font-bold text-indigo-600">@{selectedUser.username}</span>
-                    <span className="w-1 h-1 bg-zinc-300 rounded-full" />
-                    <span className="text-xs font-medium text-zinc-500">{selectedUser.email || 'No Email'}</span>
+                  <div className="flex flex-col items-center gap-2 mt-2">
+                    <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">@{selectedUser.username}</span>
+                    {selectedUser.email && (
+                      <span className="text-xs font-semibold text-zinc-500 bg-zinc-50 px-3 py-1 rounded-full border border-zinc-100 flex items-center gap-1.5">
+                        <Mail className="w-3 h-3" />
+                        {selectedUser.email}
+                      </span>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-8 mt-8 w-full max-w-xs">
@@ -1017,7 +1185,21 @@ export default function AdminDashboard() {
               </div>
 
               {fullControl && (
-                <div className="pt-4">
+                <div className="pt-4 space-y-4">
+                  <button
+                    onClick={() => handleUpdateRole(selectedUser, selectedUser.role === 'admin' ? 'user' : 'admin')}
+                    disabled={loadingDetails}
+                    className={cn(
+                      "w-full py-5 px-6 font-bold rounded-[32px] flex items-center justify-center gap-3 transition-all active:scale-95 border",
+                      selectedUser.role === 'admin' 
+                        ? "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100" 
+                        : "bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100"
+                    )}
+                  >
+                    <ShieldCheck className="w-5 h-5" />
+                    {selectedUser.role === 'admin' ? 'Revoke Admin Privileges' : 'Grant Admin Privileges'}
+                  </button>
+
                   <button
                     onClick={() => handleDeleteUser(selectedUser)}
                     disabled={loadingDetails}
@@ -1069,6 +1251,7 @@ export default function AdminDashboard() {
                         <div className="min-w-0">
                           <div className="font-bold text-zinc-900 truncate">{user.displayName}</div>
                           <div className="text-xs text-zinc-500 truncate">@{user.username}</div>
+                          {user.email && <div className="text-[11px] text-zinc-400 truncate mt-0.5">{user.email}</div>}
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-zinc-300 shrink-0" />
@@ -1098,42 +1281,50 @@ export default function AdminDashboard() {
                   <p className="text-zinc-400 font-medium">No active conversations found</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {userChats.map(chat => (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {userChats.map(chat => {
+                    const otherParticipantIndex = chat.participants.findIndex(p => p !== selectedUser?.uid);
+                    const otherParticipantName = otherParticipantIndex >= 0 && chat.participantNames ? chat.participantNames[otherParticipantIndex] : 'Unknown User';
+                    const otherParticipantPhoto = otherParticipantIndex >= 0 && chat.participantPhotos ? chat.participantPhotos[otherParticipantIndex] : null;
+                    let timeString = '';
+                    if (chat.updatedAt && chat.updatedAt.toDate) {
+                      const date = chat.updatedAt.toDate();
+                      const now = new Date();
+                      const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+                      timeString = isToday ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                    }
+
+                    return (
                     <div 
                       key={chat.id} 
                       onClick={() => {
                         setSelectedChat(chat);
                         fetchChatMessages(chat.id);
                       }}
-                      className="group relative p-5 bg-white border border-zinc-100 rounded-[32px] cursor-pointer hover:border-purple-200 hover:shadow-lg transition-all active:scale-[0.98]"
+                      className="group relative p-4 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[24px] cursor-pointer hover:border-indigo-100 dark:hover:border-indigo-900/50 hover:shadow-md hover:bg-indigo-50/30 dark:hover:bg-zinc-800 transition-all active:scale-[0.98] flex items-center justify-between"
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-purple-50 rounded-xl flex items-center justify-center">
-                            <MessageSquare className="w-4 h-4 text-purple-600" />
+                      <div className="flex items-center gap-4 overflow-hidden pr-4 w-full">
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center font-bold text-lg shrink-0 shadow-inner overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                          {otherParticipantPhoto ? (
+                            <img src={otherParticipantPhoto} alt={otherParticipantName} className="w-full h-full object-cover" />
+                          ) : (
+                            otherParticipantName.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="overflow-hidden flex flex-col justify-center flex-1">
+                          <div className="flex justify-between items-center mb-1 gap-2">
+                            <div className="font-bold text-zinc-900 dark:text-zinc-100 truncate text-base">{otherParticipantName}</div>
+                            {timeString && <span className="text-[11px] font-bold tracking-wide text-zinc-400 dark:text-zinc-500 whitespace-nowrap">{timeString}</span>}
                           </div>
-                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">ID: {chat.id.slice(0, 8)}</span>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-zinc-300 group-hover:text-purple-400 transition-colors" />
-                      </div>
-                      
-                      <div className="mb-4">
-                        <div className="text-xs font-bold text-zinc-400 uppercase tracking-tight mb-1.5">Participants</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(chat.participantNames || chat.participants).map((name, i) => (
-                            <span key={i} className="px-2 py-1 bg-zinc-50 text-zinc-600 text-[10px] font-bold rounded-lg border border-zinc-100">
-                              {name}
-                            </span>
-                          ))}
+                          <div className="text-[14px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5 font-medium leading-snug">
+                            {chat.lastMessage || 'No messages yet'}
+                          </div>
                         </div>
                       </div>
-
-                      <div className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100/50">
-                        <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-tight mb-1">Last Message</div>
-                        <p className="text-sm text-zinc-600 truncate font-medium italic">
-                          "{chat.lastMessage || 'No messages yet'}"
-                        </p>
+                      <div className="flex flex-col items-end justify-center shrink-0 ml-2">
+                        <div className="w-8 h-8 rounded-full bg-zinc-50 dark:bg-zinc-800 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-500/20 flex items-center justify-center transition-colors">
+                          <ChevronRight className="w-4 h-4 text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
+                        </div>
                       </div>
 
                       {fullControl && (
@@ -1142,13 +1333,13 @@ export default function AdminDashboard() {
                             e.stopPropagation();
                             handleDeleteChat(chat.id);
                           }}
-                          className="absolute top-4 right-12 p-2 bg-red-50 text-red-600 rounded-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-100 shadow-sm"
+                          className="absolute -top-2 -right-2 p-2 bg-white text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 border border-red-100 shadow-sm"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </motion.div>
@@ -1161,7 +1352,7 @@ export default function AdminDashboard() {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="space-y-6"
+              className="space-y-6 relative"
             >
               <div className="bg-white p-4 rounded-3xl border border-zinc-100 shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1194,7 +1385,7 @@ export default function AdminDashboard() {
                       <div 
                         key={msg.id} 
                         className={cn(
-                          "max-w-[85%] rounded-3xl p-4 relative group shadow-sm border",
+                          "max-w-[85%] rounded-2xl p-4 relative group shadow-sm border",
                           isSelectedUser 
                             ? "bg-indigo-600 border-indigo-500 text-white self-end rounded-tr-sm" 
                             : "bg-white border-zinc-100 text-zinc-900 self-start rounded-tl-sm"
@@ -1210,36 +1401,60 @@ export default function AdminDashboard() {
                         </div>
                         
                         {msg.attachmentUrl && (
-                          <div className="rounded-2xl overflow-hidden mb-3 border border-black/5 shadow-inner">
+                          <div className="rounded-xl overflow-hidden mb-3 border border-black/5 shadow-inner">
                             <img src={msg.attachmentUrl} alt="Attachment" className="w-full h-auto max-h-64 object-cover" />
                           </div>
                         )}
                         
                         <p className="text-sm leading-relaxed font-medium whitespace-pre-wrap break-words">{msg.text}</p>
                         
-                        <div className={cn(
-                          "text-[9px] mt-2 font-bold opacity-50",
-                          isSelectedUser ? "text-indigo-200" : "text-zinc-400"
-                        )}>
-                          {new Date(msg.createdAt?.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <div className={cn(
+                            "text-[9px] font-bold opacity-50",
+                            isSelectedUser ? "text-indigo-200" : "text-zinc-400"
+                          )}>
+                            {new Date(msg.createdAt?.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
 
-                        {fullControl && (
-                          <button 
-                            onClick={() => handleDeleteMessage(selectedChat.id, msg.id, msg.attachmentUrl)}
-                            className={cn(
-                              "absolute top-1/2 -translate-y-1/2 p-2 bg-red-50 text-red-600 rounded-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-100 shadow-lg border border-red-100",
-                              isSelectedUser ? "-left-12" : "-right-12"
-                            )}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                          {fullControl && (
+                            <button 
+                              onClick={() => handleDeleteMessage(selectedChat.id, msg.id, msg.attachmentUrl)}
+                              className={cn(
+                                "p-1 opacity-0 group-hover:opacity-100 transition-all rounded text-red-500",
+                                isSelectedUser ? "hover:bg-indigo-700 text-red-300 hover:text-red-300" : "hover:bg-red-50 hover:text-red-600"
+                              )}
+                              title="Delete Message"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
+                  <div ref={messagesEndRef} className="h-4" />
                 </div>
               )}
+
+              {/* Scroll to bottom button */}
+              <AnimatePresence>
+                {showScrollButton && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                    className="fixed right-6 bottom-10 z-[100] pointer-events-auto"
+                  >
+                    <button
+                      onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                      className="p-3 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-full shadow-lg border border-zinc-200/50 dark:border-zinc-700/50 hover:text-indigo-600 dark:hover:text-indigo-400 hover:scale-110 active:scale-95 transition-all group"
+                      title="Scroll to bottom"
+                    >
+                      <ArrowDown className="w-5 h-5" />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
 
@@ -1491,6 +1706,14 @@ export default function AdminDashboard() {
               )}
             </motion.div>
           )}
+          {view === 'recent-content' && (
+            <motion.div key="recent-content" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
+              <div className="flex items-center justify-between px-1 mb-2">
+                <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Global Feed (Latest 30)</h2>
+              </div>
+              {renderPostGrid(recentPosts, 'posts', 'recent-content')}
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
 
@@ -1503,6 +1726,71 @@ export default function AdminDashboard() {
             isOwnProfile={false}
             isAdminView={true}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAnnouncementModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[32px] p-6 w-full max-w-md shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowAnnouncementModal(false)}
+                className="absolute top-4 right-4 p-2 bg-zinc-100 text-zinc-500 rounded-full hover:bg-zinc-200 transition-colors"
+                disabled={sendingAnnouncement}
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 rounded-full bg-indigo-100 text-indigo-600">
+                  <Bell className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-zinc-900 leading-tight">Global Broadcast</h3>
+                  <p className="text-xs text-zinc-500 font-medium">Send a system notification to all users</p>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <textarea
+                  value={announcementText}
+                  onChange={(e) => setAnnouncementText(e.target.value)}
+                  placeholder="Enter your announcement here..."
+                  className="w-full h-32 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl resize-none focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-sm"
+                  disabled={sendingAnnouncement}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowAnnouncementModal(false)}
+                  disabled={sendingAnnouncement}
+                  className="flex-1 py-4 px-4 bg-zinc-100 text-zinc-700 font-bold rounded-2xl hover:bg-zinc-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendAnnouncement}
+                  disabled={!announcementText.trim() || sendingAnnouncement}
+                  className="flex-[2] py-4 px-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {sendingAnnouncement ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Broadcast Now
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

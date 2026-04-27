@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Trash2, Heart, Edit2, MessageCircle, Bookmark, Star } from 'lucide-react';
+import { X, Send, Trash2, Heart, Edit2, MessageCircle, Bookmark, Star, Volume2, VolumeX } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, writeBatch, increment, getDocs, updateDoc, limit, getDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
@@ -173,6 +173,14 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(initialMediaIndex);
   const [mediaAspectRatio, setMediaAspectRatio] = useState<number>(1);
+  const [isMuted, setIsMuted] = useState(true);
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (audioRef.current && !isMuted) {
+       audioRef.current.play().catch(() => {});
+    }
+  }, [isMuted]);
 
   const mediaList = post.mediaUrls && post.mediaUrls.length > 0 
     ? post.mediaUrls 
@@ -545,6 +553,16 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      {/* Audio Player for Music */}
+      {post.music && (
+        <audio
+          ref={audioRef}
+          src={post.music.url}
+          loop
+          muted={isMuted}
+          autoPlay
+        />
+      )}
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -578,21 +596,40 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
               >
                 <ZoomableMedia className="w-full h-full">
                   {currentMedia.type === 'video' ? (
-                    <video 
-                      src={currentMedia.url} 
-                      controls 
-                      playsInline
-                      onLoadedMetadata={onMediaLoad}
-                      className="max-w-full max-h-full object-contain"
-                    />
+                    <div className="relative w-full h-full flex items-center justify-center">
+                      <video 
+                        src={currentMedia.url} 
+                        controls 
+                        playsInline
+                        muted={isMuted}
+                        onVolumeChange={(e) => setIsMuted((e.target as HTMLVideoElement).muted)}
+                        onLoadedMetadata={onMediaLoad}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
                   ) : (
-                    <img 
-                      src={getOptimizedImageUrl(currentMedia.url, 1200)} 
-                      alt="Post content" 
-                      onLoad={onMediaLoad}
-                      className="max-w-full max-h-full object-contain"
-                      referrerPolicy="no-referrer"
-                    />
+                    <div className="relative w-full h-full flex items-center justify-center">
+                      <img 
+                        src={getOptimizedImageUrl(currentMedia.url, 1200)} 
+                        alt="Post content" 
+                        onLoad={onMediaLoad}
+                        className="max-w-full max-h-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                      {post.music && (
+                        <div className="absolute bottom-4 right-4 z-10 opacity-90 transition-opacity">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsMuted(!isMuted);
+                            }}
+                            className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-sm"
+                          >
+                            {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </ZoomableMedia>
               </motion.div>
@@ -736,21 +773,40 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                 >
                   <ZoomableMedia className="w-full h-full">
                     {currentMedia.type === 'video' ? (
-                      <video 
-                        src={currentMedia.url} 
-                        controls 
-                        playsInline
-                        onLoadedMetadata={onMediaLoad}
-                        className="max-w-full max-h-full object-contain"
-                      />
+                      <div className="relative w-full h-full flex items-center justify-center">
+                        <video 
+                          src={currentMedia.url} 
+                          controls 
+                          playsInline
+                          muted={isMuted}
+                          onVolumeChange={(e) => setIsMuted((e.target as HTMLVideoElement).muted)}
+                          onLoadedMetadata={onMediaLoad}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
                     ) : (
-                      <img 
-                        src={getOptimizedImageUrl(currentMedia.url, 800)} 
-                        alt="Post content" 
-                        onLoad={onMediaLoad}
-                        className="max-w-full max-h-full object-contain"
-                        referrerPolicy="no-referrer"
-                      />
+                      <div className="relative w-full h-full flex items-center justify-center">
+                        <img 
+                          src={getOptimizedImageUrl(currentMedia.url, 800)} 
+                          alt="Post content" 
+                          onLoad={onMediaLoad}
+                          className="max-w-full max-h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                        {post.music && (
+                          <div className="absolute bottom-4 right-4 z-10 opacity-90 transition-opacity">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsMuted(!isMuted);
+                              }}
+                              className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-sm"
+                            >
+                              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </ZoomableMedia>
                 </motion.div>

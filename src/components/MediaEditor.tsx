@@ -4,6 +4,8 @@ import { motion, AnimatePresence, useMotionValue, useTransform } from 'motion/re
 import { useGesture } from '@use-gesture/react';
 import TextEditor, { TextStyle, getFontClass, getBgColor, getTextShadow, getWebkitTextStroke } from './TextEditor';
 import { MediaItem } from './MediaSelector';
+import { auth } from '../firebase';
+import { fetchPersonalizedMusic, saveMusicSearchActivity } from '../utils/musicRecommendations';
 
 export type EditorElement = {
   id: string;
@@ -176,26 +178,30 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
   useEffect(() => {
     if (!isMusicLibraryOpen) return;
 
-    const query = musicSearch.trim() || 'trending';
+    const query = musicSearch.trim();
     setIsSearchingMusic(true);
     
-    // Simulate API call to iTunes
     const searchMusic = async () => {
       try {
-        const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=25`);
-        const data = await response.json();
-        
-        if (data && data.results) {
-          const results = data.results.map((track: any) => ({
-            id: track.trackId,
-            title: track.trackName,
-            artist: track.artistName,
-            url: track.previewUrl,
-            artwork: track.artworkUrl100
-          })).filter((track: any) => track.url); // Ensure we have a preview URL
+        let results = [];
+        if (!query) {
+          results = await fetchPersonalizedMusic(auth.currentUser?.uid || '');
+        } else {
+          saveMusicSearchActivity(auth.currentUser?.uid || '', query);
+          const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=25`);
+          const data = await response.json();
           
-          setMusicSearchResults(results);
+          if (data && data.results) {
+            results = data.results.map((track: any) => ({
+              id: track.trackId,
+              title: track.trackName,
+              artist: track.artistName,
+              url: track.previewUrl,
+              artwork: track.artworkUrl100
+            })).filter((track: any) => track.url); // Ensure we have a preview URL
+          }
         }
+        setMusicSearchResults(results);
       } catch (e) {
         console.error('Failed to search music', e);
       } finally {
@@ -203,7 +209,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
       }
     };
     
-    const timeoutId = setTimeout(searchMusic, 500);
+    const timeoutId = setTimeout(searchMusic, !query ? 0 : 500);
     return () => clearTimeout(timeoutId);
   }, [musicSearch, isMusicLibraryOpen]);
 
