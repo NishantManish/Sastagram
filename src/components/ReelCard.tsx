@@ -13,17 +13,18 @@ import ConfirmationModal from './ConfirmationModal';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { deleteFromCloudinary } from '../utils/media';
 
+import { useAudio } from '../contexts/AudioContext';
+
 interface ReelCardProps {
   reel: Reel;
   isActive: boolean;
-  isGlobalMuted?: boolean;
-  onToggleGlobalMute?: (muted: boolean) => void;
   onNavigate?: (tab: any, initialType?: any) => void;
   onDelete?: (reelId: string) => void;
   isModal?: boolean;
 }
 
-export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobalMute, onNavigate, onDelete, isModal = false }: ReelCardProps) {
+export default function ReelCard({ reel, isActive, onNavigate, onDelete, isModal = false }: ReelCardProps) {
+  const { isMuted, setIsMuted } = useAudio();
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState<boolean | null>(null);
@@ -31,16 +32,10 @@ export default function ReelCard({ reel, isActive, isGlobalMuted, onToggleGlobal
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [localMuted, setLocalMuted] = useState(true);
-  const isMuted = isGlobalMuted !== undefined ? isGlobalMuted : localMuted;
   
   const handleToggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onToggleGlobalMute) {
-      onToggleGlobalMute(!isMuted);
-    } else {
-      setLocalMuted(!isMuted);
-    }
+    setIsMuted(!isMuted);
   };
 
   const [isPlaying, setIsPlaying] = useState(true);

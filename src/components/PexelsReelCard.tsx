@@ -3,6 +3,8 @@ import { Heart, MessageCircle, Send, MoreVertical, Music, Volume2, VolumeX, Play
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../utils';
 
+import { useAudio } from '../contexts/AudioContext';
+
 export interface PexelsVideoData {
   id: number;
   url: string;
@@ -15,28 +17,20 @@ export interface PexelsVideoData {
 interface PexelsReelCardProps {
   video: PexelsVideoData;
   isActive: boolean;
-  isGlobalMuted?: boolean;
-  onToggleGlobalMute?: (muted: boolean) => void;
   onInteraction: (action: 'liked' | 'skipped' | 'watched_full') => void;
 }
 
-export default function PexelsReelCard({ video, isActive, isGlobalMuted, onToggleGlobalMute, onInteraction }: PexelsReelCardProps) {
+export default function PexelsReelCard({ video, isActive, onInteraction }: PexelsReelCardProps) {
+  const { isMuted, setIsMuted } = useAudio();
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [localMuted, setLocalMuted] = useState(true);
-  const isMuted = isGlobalMuted !== undefined ? isGlobalMuted : localMuted;
+  const [isPlaying, setIsPlaying] = useState(true);
   
   const handleToggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onToggleGlobalMute) {
-      onToggleGlobalMute(!isMuted);
-    } else {
-      setLocalMuted(!isMuted);
-    }
+    setIsMuted(!isMuted);
   };
-
-  const [isPlaying, setIsPlaying] = useState(true);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
   const [progress, setProgress] = useState(0);

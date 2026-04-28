@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestore';
 import { Post } from '../types';
@@ -10,6 +10,7 @@ import Stories from './Stories';
 import { Camera, RefreshCw, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useBlocks } from '../services/blockService';
+import { cn } from '../utils';
 
 export interface FeedRef {
   scrollToTop: () => void;
@@ -23,19 +24,40 @@ const Feed = forwardRef<FeedRef, {
   initialSlideIndex?: number
 }>(({ onNavigate, onTagClick, initialPostId, initialSlideIndex = 0 }, ref) => {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [rawPosts, setRawPosts] = useState<Post[]>([]);
   const [externalFeedPosts, setExternalFeedPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchingExternal, setFetchingExternal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [shuffleKey, setShuffleKey] = useState(0);
   const [pullDistance, setPullDistance] = useState(0);
   const [selectedPost, setSelectedPost] = useState<{ post: Post, index: number } | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [limitCount, setLimitCount] = useState(6);
+  const [limitCount, setLimitCount] = useState(12); // Fetch more for shuffling
   const [interactions, setInteractions] = useState<{ query: string, action: 'liked' | 'skipped' | 'watched_full' }[]>([]);
   const { blockedIds, blockedByIds } = useBlocks(auth.currentUser?.uid);
   const startY = useRef(0);
   const isDragging = useRef(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  // Load saved interactions on mount
+  useEffect(() => {
+    const loadInteractions = async () => {
+      if (!auth.currentUser) return;
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (data.recentInteractions) {
+            setInteractions(data.recentInteractions);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading interactions:", err);
+      }
+    };
+    loadInteractions();
+  }, []);
 
   useImperativeHandle(ref, () => ({
     scrollToTop: () => {
@@ -51,7 +73,6 @@ const Feed = forwardRef<FeedRef, {
     if (initialPostId) {
       const fetchInitialPost = async () => {
         try {
-          const { doc, getDoc } = await import('firebase/firestore');
           const postDoc = await getDoc(doc(db, 'posts', initialPostId));
           if (postDoc.exists()) {
             const postData = { id: postDoc.id, ...postDoc.data() } as Post;
@@ -78,7 +99,8 @@ const Feed = forwardRef<FeedRef, {
         id: doc.id,
         ...doc.data(),
       })) as Post[];
-      setPosts(newPosts);
+      
+      setRawPosts(newPosts);
       setLoading(false);
     }, (error) => {
       if (error.message.includes('permission')) {
@@ -88,9 +110,31 @@ const Feed = forwardRef<FeedRef, {
       }
       setLoading(false);
     });
-
+    
     return () => unsubscribe();
   }, [limitCount]);
+
+  // Handle shuffling logic separately to avoid UI jumping on minor updates like likes
+  useEffect(() => {
+    if (rawPosts.length === 0) return;
+    
+    setPosts(prev => {
+      const existingIds = new Set(prev.map(p => p.id));
+      const newItems = rawPosts.filter(p => !existingIds.has(p.id));
+      
+      if (newItems.length > 0 || shuffleKey > 0) {
+        // If we have new items or an explicit shuffle was requested
+        // Mix new items with existing ones and shuffle the whole set
+        return [...rawPosts].sort(() => 0.5 - Math.random());
+      }
+      
+      // Otherwise keep current order to avoid jumping during likes/comments
+      return prev.map(p => {
+        const updatedRaw = rawPosts.find(rp => rp.id === p.id);
+        return updatedRaw ? { ...p, ...updatedRaw } : p;
+      });
+    });
+  }, [rawPosts, shuffleKey]);
 
   // Fetch Personalized External Posts
   useEffect(() => {
@@ -173,15 +217,30 @@ const Feed = forwardRef<FeedRef, {
     fetchExternal();
   }, [limitCount]); // Intentionally not dependent on 'interactions' to avoid re-fetching on every like
 
-  const handleInteraction = (post: Post, action: 'liked' | 'skipped' | 'watched_full') => {
-    let query = post.caption || '';
+  const handleInteraction = async (post: Post, action: 'liked' | 'skipped' | 'watched_full') => {
+    let queryText = post.caption || '';
     if (post.tags && post.tags.length > 0) {
-      query += ' ' + post.tags.join(' ');
+      queryText += ' ' + post.tags.join(' ');
     }
-    query = query.substring(0, 100);
+    queryText = queryText.substring(0, 100);
+    
+    if (!queryText && post.isReel) queryText = post.authorName; // Fallback for video search
     
     setInteractions(prev => {
-      return [...prev, { query, action }];
+      const newInteractions = [...prev, { query: queryText, action }];
+      const limited = newInteractions.slice(-20); // Keep last 20
+
+      // Persist to user doc
+      if (auth.currentUser) {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        
+        // Optimistically update firestore
+        updateDoc(userRef, {
+          recentInteractions: limited
+        }).catch(err => console.error("Error persisting interaction:", err));
+      }
+
+      return limited;
     });
   };
 
@@ -220,7 +279,7 @@ const Feed = forwardRef<FeedRef, {
     const distance = currentY - startY.current;
     
     if (distance > 0 && window.scrollY === 0) {
-      const resisted = Math.min(distance * 0.4, 100);
+      const resisted = Math.min(distance * 0.6, 120);
       setPullDistance(resisted);
       if (e.cancelable) {
         e.preventDefault();
@@ -234,12 +293,14 @@ const Feed = forwardRef<FeedRef, {
     
     if (pullDistance > 60) {
       setRefreshing(true);
-      setPullDistance(60); 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      setPullDistance(0); // Reset distance immediately for refresh state
+      setShuffleKey(prev => prev + 1);
+      await new Promise(resolve => setTimeout(resolve, 1500));
       setRefreshing(false);
+    } else {
+      setPullDistance(0);
     }
-    
-    setPullDistance(0);
+    isDragging.current = false;
   };
 
   const filteredPosts = posts.filter(post => 
@@ -308,35 +369,70 @@ const Feed = forwardRef<FeedRef, {
         <motion.div 
           className="flex flex-col items-center justify-center w-full h-full"
           animate={{ 
-            y: refreshing ? 0 : pullDistance - 80,
-            opacity: refreshing ? 1 : Math.min(pullDistance / 60, 1)
+            y: refreshing ? 20 : pullDistance - 60,
+            opacity: refreshing ? 1 : Math.min(pullDistance / 40, 1)
           }}
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
         >
-          <div className="bg-white/90 backdrop-blur-xl p-2.5 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-white/50 ring-1 ring-black/5">
-            <motion.div
-              animate={{ 
-                rotate: refreshing ? 360 : pullDistance * 3,
-                scale: refreshing ? 1 : Math.min(pullDistance / 40, 1)
-              }}
-              transition={refreshing ? { repeat: Infinity, duration: 0.8, ease: "linear" } : { type: "spring", bounce: 0 }}
-            >
-              {refreshing ? (
-                <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
-              ) : (
-                <RefreshCw className="w-6 h-6 text-indigo-600" />
-              )}
-            </motion.div>
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-tr from-orange-500 via-pink-500 to-indigo-600 rounded-full blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
+            <div className="bg-white dark:bg-zinc-900 p-2.5 rounded-full shadow-lg border border-white/20 relative">
+              <motion.div
+                animate={{ 
+                  rotate: refreshing ? 360 : pullDistance * 4,
+                  scale: refreshing ? 1.1 : Math.min(0.2 + (pullDistance / 50), 1),
+                }}
+                transition={refreshing ? { repeat: Infinity, duration: 1, ease: "linear" } : { type: "spring", bounce: 0.4 }}
+              >
+                {refreshing ? (
+                  <div className="relative w-7 h-7 flex items-center justify-center">
+                    <Loader2 className="w-7 h-7 text-transparent bg-clip-text bg-gradient-to-tr from-orange-500 via-pink-500 to-indigo-600 animate-spin" style={{ stroke: 'url(#gradient)' }} />
+                    <svg width="0" height="0" className="absolute">
+                      <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#f97316" />
+                          <stop offset="50%" stopColor="#ec4899" />
+                          <stop offset="100%" stopColor="#4f46e5" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 rounded-full border-2 border-zinc-100 dark:border-zinc-800 flex items-center justify-center relative">
+                    <motion.div 
+                      className="absolute inset-0 rounded-full border-2 border-pink-500"
+                      style={{ 
+                        clipPath: `inset(0 0 0 0 round 999px)`,
+                        strokeDasharray: 100,
+                        strokeDashoffset: 100 - Math.min(pullDistance, 100)
+                      }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: pullDistance > 10 ? 1 : 0 }}
+                    />
+                    <RefreshCw className={cn(
+                      "w-4 h-4 transition-colors",
+                      pullDistance > 60 ? "text-pink-500" : "text-zinc-400"
+                    )} />
+                  </div>
+                )}
+              </motion.div>
+            </div>
           </div>
-          {!refreshing && pullDistance > 20 && (
-            <motion.span 
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-2"
-            >
-              {pullDistance > 60 ? "Release to refresh" : "Pull to refresh"}
-            </motion.span>
-          )}
+          
+          <AnimatePresence>
+            {!refreshing && pullDistance > 30 && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.8, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                className="mt-3 px-3 py-1 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md rounded-full shadow-sm border border-white/20"
+              >
+                <span className="text-[9px] font-black bg-gradient-to-r from-orange-500 via-pink-500 to-indigo-600 bg-clip-text text-transparent uppercase tracking-[0.2em]">
+                  {pullDistance > 60 ? "Release for more" : "Pull for new posts"}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
 

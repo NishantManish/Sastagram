@@ -183,7 +183,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser() {
-      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'closeFriends']) &&
+      return hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'closeFriends', 'recentMusicSearches', 'recentInteractions']) &&
              hasRequiredFields(['uid', 'username', 'displayName']) &&
              validStringLength('uid', 1, 128) &&
              validStringLength('username', 3, 30) &&
@@ -194,7 +194,9 @@ service cloud.firestore {
              isValidOptionalNumber('followingCount') &&
              (request.resource.data.get('createdAt', null) == null || request.resource.data.createdAt is timestamp) &&
              (request.resource.data.get('role', 'user') in ['user', 'admin']) &&
-             (!('closeFriends' in request.resource.data) || request.resource.data.closeFriends is list);
+             (!('closeFriends' in request.resource.data) || request.resource.data.closeFriends is list) &&
+             (!('recentMusicSearches' in request.resource.data) || (request.resource.data.recentMusicSearches is list && request.resource.data.recentMusicSearches.size() <= 60)) &&
+             (!('recentInteractions' in request.resource.data) || (request.resource.data.recentInteractions is list && request.resource.data.recentInteractions.size() <= 60));
     }
 
     function isValidPost() {
@@ -373,8 +375,8 @@ service cloud.firestore {
                        isUnchanged('role'))
                       ||
                       // System/Users updating counts (Follow/Unfollow/Block)
-                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'closeFriends']) &&
-                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role', 'closeFriends']) &&
+                      (hasOnlyAllowedFields(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followersCount', 'followingCount', 'createdAt', 'role', 'closeFriends', 'recentMusicSearches', 'recentInteractions']) &&
+                       areImmutableFieldsUnchanged(['uid', 'username', 'displayName', 'photoURL', 'bio', 'createdAt', 'role', 'closeFriends', 'recentMusicSearches', 'recentInteractions']) &&
                        (
                          (
                            isUnchanged('followersCount') ||

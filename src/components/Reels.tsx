@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, Clapperboard } from 'lucide-react';
 import PexelsReelCard, { PexelsVideoData } from './PexelsReelCard';
 
+import { useAudio } from '../contexts/AudioContext';
+
 interface Interaction {
   videoId: number;
   query: string;
@@ -13,11 +15,11 @@ interface ReelsProps {
 }
 
 export default function Reels({ onNavigate }: ReelsProps) {
+  const { isMuted: isGlobalMuted, setIsMuted: onToggleGlobalMute } = useAudio();
   const [reels, setReels] = useState<PexelsVideoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchingMore, setFetchingMore] = useState(false);
   const [activeReelId, setActiveReelId] = useState<number | null>(null);
-  const [isGlobalMuted, setIsGlobalMuted] = useState(true);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -139,8 +141,6 @@ export default function Reels({ onNavigate }: ReelsProps) {
           <PexelsReelCard 
             video={reel} 
             isActive={activeReelId === reel.id}
-            isGlobalMuted={isGlobalMuted}
-            onToggleGlobalMute={setIsGlobalMuted}
             onInteraction={(action) => handleInteraction(reel.id, reel.query, action)}
           />
         </div>

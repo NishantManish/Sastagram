@@ -280,7 +280,12 @@ export default function App() {
           </div>
 
           {/* Non-cached Pages */}
-          {activeTab === 'reels' && <Reels key={`reels-${reelsViewKey}`} onNavigate={handleNavigate} />}
+          {activeTab === 'reels' && (
+            <Reels 
+              key={`reels-${reelsViewKey}`} 
+              onNavigate={handleNavigate} 
+            />
+          )}
           {activeTab === 'create' && <CreatePost initialType={createInitialType} onSuccess={() => handleNavigate('feed')} onBack={() => handleNavigate('feed')} />}
           {activeTab === 'notifications' && <Notifications onBack={() => handleNavigate('feed')} />}
           {activeTab === 'profile' && <Profile userId={selectedUserId} onNavigate={handleNavigate} onTagClick={handleNavigateToSearch} onSettingsToggle={setIsSettingsOpen} />}

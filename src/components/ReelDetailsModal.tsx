@@ -4,6 +4,8 @@ import { X } from 'lucide-react';
 import ReelCard from './ReelCard';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { useAudio } from '../contexts/AudioContext';
+
 interface ReelDetailsModalProps {
   reel: Reel;
   onClose: () => void;
@@ -11,6 +13,7 @@ interface ReelDetailsModalProps {
 }
 
 export default function ReelDetailsModal({ reel, onClose, onNavigate }: ReelDetailsModalProps) {
+  const { isMuted, setIsMuted } = useAudio();
   return (
     <AnimatePresence>
       <motion.div

@@ -15,6 +15,8 @@ import EditPostModal from './EditPostModal';
 import ZoomableMedia from './ZoomableMedia';
 import ShareModal from './ShareModal';
 
+import { useAudio } from '../contexts/AudioContext';
+
 interface PostDetailsModalProps {
   post: Post;
   onClose: () => void;
@@ -26,6 +28,7 @@ interface PostDetailsModalProps {
 }
 
 export default function PostDetailsModal({ post, onClose, onUserClick, onTagClick, onSwipeNext, onSwipePrev, initialMediaIndex = 0 }: PostDetailsModalProps) {
+  const { isMuted, setIsMuted } = useAudio();
   const [comments, setComments] = useState<Comment[]>([]);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const [processingLikes, setProcessingLikes] = useState<Set<string>>(new Set());
@@ -173,8 +176,12 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(initialMediaIndex);
   const [mediaAspectRatio, setMediaAspectRatio] = useState<number>(1);
-  const [isMuted, setIsMuted] = useState(true);
   const audioRef = React.useRef<HTMLAudioElement>(null);
+
+  const toggleMute = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsMuted(!isMuted);
+  };
 
   useEffect(() => {
     if (audioRef.current && !isMuted) {
@@ -602,7 +609,9 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                         controls 
                         playsInline
                         muted={isMuted}
-                        onVolumeChange={(e) => setIsMuted((e.target as HTMLVideoElement).muted)}
+                        onVolumeChange={(e) => {
+                          setIsMuted((e.target as HTMLVideoElement).muted);
+                        }}
                         onLoadedMetadata={onMediaLoad}
                         className="max-w-full max-h-full object-contain"
                       />
@@ -621,7 +630,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              setIsMuted(!isMuted);
+                              toggleMute(e);
                             }}
                             className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-sm"
                           >
@@ -779,7 +788,9 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                           controls 
                           playsInline
                           muted={isMuted}
-                          onVolumeChange={(e) => setIsMuted((e.target as HTMLVideoElement).muted)}
+                          onVolumeChange={(e) => {
+                            setIsMuted((e.target as HTMLVideoElement).muted);
+                          }}
                           onLoadedMetadata={onMediaLoad}
                           className="max-w-full max-h-full object-contain"
                         />
@@ -798,7 +809,7 @@ export default function PostDetailsModal({ post, onClose, onUserClick, onTagClic
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setIsMuted(!isMuted);
+                                toggleMute(e);
                               }}
                               className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-sm"
                             >

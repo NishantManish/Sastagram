@@ -15,6 +15,8 @@ import ShareModal from './ShareModal';
 import EditPostModal from './EditPostModal';
 import ZoomableMedia from './ZoomableMedia';
 
+import { useAudio } from '../contexts/AudioContext';
+
 interface PostCardProps {
   key?: string | number;
   post: Post;
@@ -28,6 +30,7 @@ interface PostCardProps {
 }
 
 export default function PostCard({ post, onLikeToggle, onCommentClick, onUserClick, onTagClick, onSwipeNext, onSwipePrev, initialMediaIndex = 0 }: PostCardProps) {
+  const { isMuted, setIsMuted } = useAudio();
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likesCount);
   const [isLiking, setIsLiking] = useState(false);
@@ -48,7 +51,6 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const mediaList = post.mediaUrls && post.mediaUrls.length > 0 
@@ -164,7 +166,10 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
     const playMedia = async () => {
       try {
         const promises = [];
-        if (videoRef.current) promises.push(videoRef.current.play().catch(() => {}));
+        if (videoRef.current) {
+          videoRef.current.muted = isMuted;
+          promises.push(videoRef.current.play().catch(() => {}));
+        }
         if (audioRef.current) {
           audioRef.current.muted = isMuted;
           promises.push(audioRef.current.play().catch(() => {}));
@@ -623,11 +628,17 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
         ref={containerRef}
         className="w-full bg-zinc-50 dark:bg-zinc-900 relative cursor-pointer overflow-hidden group flex items-center justify-center"
         style={{ 
-          aspectRatio: `${Math.max(4/5, Math.min(mediaAspectRatio, 1.91))}`,
-          maxHeight: 'min(600px, 70vh)'
+          aspectRatio: post.isReel ? '9/16' : `${Math.max(4/5, Math.min(mediaAspectRatio, 1.91))}`,
+          maxHeight: post.isReel ? 'min(750px, 85vh)' : 'min(600px, 70vh)'
         }}
         onClick={handleDoubleTap}
       >
+        {post.isReel && (
+          <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-black/30 backdrop-blur-md px-2 py-1 rounded-md border border-white/10 pointer-events-none">
+            <Play className="w-3 h-3 text-white fill-white" />
+            <span className="text-[10px] font-bold text-white uppercase tracking-wider">Reel</span>
+          </div>
+        )}
         <motion.div
           drag={(mediaList.length > 1 || onSwipeNext || onSwipePrev) ? "x" : false}
           dragConstraints={{ left: 0, right: 0 }}
@@ -666,7 +677,10 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                           toggleMute();
                         }
                       }}
-                      className="w-full h-full max-h-[min(500px,70vh)] object-contain block"
+                      className={cn(
+                        "w-full h-full block",
+                        post.isReel ? "object-cover max-h-[min(750px,85vh)]" : "object-contain max-h-[min(500px,70vh)]"
+                      )}
                     />
                     
                     {/* Custom Video Controls */}
@@ -696,7 +710,10 @@ export default function PostCard({ post, onLikeToggle, onCommentClick, onUserCli
                       src={getOptimizedImageUrl(currentMedia.url, 800)} 
                       alt="Post content" 
                       onLoad={onMediaLoad}
-                      className="w-full h-full max-h-[min(500px,70vh)] object-contain block"
+                      className={cn(
+                        "w-full h-full block",
+                        post.isReel ? "object-cover max-h-[min(750px,85vh)]" : "object-contain max-h-[min(500px,70vh)]"
+                      )}
                       referrerPolicy="no-referrer"
                       loading="lazy"
                     />

@@ -6,6 +6,7 @@ import TextEditor, { TextStyle, getFontClass, getBgColor, getTextShadow, getWebk
 import { MediaItem } from './MediaSelector';
 import { auth } from '../firebase';
 import { fetchPersonalizedMusic, saveMusicSearchActivity } from '../utils/musicRecommendations';
+import { cn } from '../utils';
 
 export type EditorElement = {
   id: string;
@@ -245,6 +246,14 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
       audioPreviewRef.current.pause();
     }
     setPlayingPreview(null);
+    
+    // Save as activity to personalize library
+    if (auth.currentUser) {
+      // Logic to save the specific artist or title as a future recommendation keyword
+      saveMusicSearchActivity(auth.currentUser.uid, music.artist);
+      saveMusicSearchActivity(auth.currentUser.uid, music.title);
+    }
+
     updateCurrentState({ music });
     setIsMusicLibraryOpen(false);
     showToast(`Added ${music.title}`);
@@ -1400,7 +1409,7 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
               <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-4" />
               <h3 className="text-lg font-bold text-white mb-4">Add Music</h3>
               
-              <div className="relative">
+              <div className="relative mb-4">
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
@@ -1409,6 +1418,34 @@ export default function MediaEditor({ mediaItems, postType, onNext, onBack, show
                   onChange={(e) => setMusicSearch(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-700 text-white placeholder-zinc-500"
                 />
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
+                {[
+                  { label: 'Hindi', query: 'Hindi Hits' },
+                  { label: 'Punjabi', query: 'Punjabi Viral' },
+                  { label: 'Telugu', query: 'Telugu Songs' },
+                  { label: 'Tamil', query: 'Tamil Hits' },
+                  { label: 'Malayalam', query: 'Malayalam' },
+                  { label: 'Kannada', query: 'Kannada Songs' },
+                  { label: 'Haryanvi', query: 'Haryanvi' },
+                  { label: 'Bhojpuri', query: 'Bhojpuri' },
+                  { label: 'Arijit Singh', query: 'Arijit Singh' },
+                  { label: 'Lofi', query: 'Lofi Hindi' },
+                ].map((cat) => (
+                  <button
+                    key={cat.label}
+                    onClick={() => setMusicSearch(cat.query)}
+                    className={cn(
+                      "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all shrink-0",
+                      musicSearch === cat.query 
+                        ? "bg-white text-black shadow-lg shadow-white/20" 
+                        : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700"
+                    )}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
               </div>
             </div>
 

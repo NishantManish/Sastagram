@@ -5,7 +5,30 @@ const CACHE_KEY = 'sastagram_music_cache';
 
 export const fetchPersonalizedMusic = async (uid: string) => {
   try {
-    let queries = ['trending', 'top hits', 'viral'];
+    // Default Indian-centric queries with heavy focus on regional languages
+    const defaultQueries = [
+      'Hindi Top Hits',
+      'Punjabi Viral',
+      'New Hindi Songs',
+      'Arijit Singh Hits',
+      'Sidhu Moose Wala',
+      'Diljit Dosanjh',
+      'Badshah',
+      'Telugu Melodies',
+      'Tamil Gana',
+      'Malayalam Hits',
+      'Kannada Grooves',
+      'Haryanvi Hits',
+      'Bhojpuri Top 10',
+      'Lofi India Hindi',
+      'Gazals',
+      'Bollywood Party Hits',
+      'Indian Hip Hop',
+      'Coke Studio Bharat',
+      'Desi Pop'
+    ];
+    
+    let queries = [...defaultQueries];
     
     if (uid) {
       const userRef = doc(db, 'users', uid);
@@ -13,13 +36,20 @@ export const fetchPersonalizedMusic = async (uid: string) => {
       if (userDoc.exists()) {
         const data = userDoc.data();
         if (data.recentMusicSearches && data.recentMusicSearches.length > 0) {
-          // Use up to 3 recent searches to build a personalized flavor
-          queries = [...data.recentMusicSearches].slice(-3);
+          // Mix user search history with global defaults, prioritizing user history
+          const searchHistory = [...data.recentMusicSearches].slice(-5);
+          // If they have history, focus on it 80% of the time
+          if (Math.random() > 0.2) {
+            queries = searchHistory;
+          } else {
+            // Otherwise mix history with defaults
+            queries = [...searchHistory, ...defaultQueries];
+          }
         }
       }
     }
 
-    // Pick a random query from their history or defaults
+    // Pick a random query from the weighted list
     const selectedQuery = queries[Math.floor(Math.random() * queries.length)];
     
     const cacheKey = `${CACHE_KEY}_${selectedQuery}`;

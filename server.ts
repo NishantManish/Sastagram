@@ -71,8 +71,12 @@ async function callOpenRouter(prompt: string): Promise<string> {
   return data.choices?.[0]?.message?.content || "";
 }
 
-// Default queries for new users
-const DEFAULT_QUERIES = ["nature", "travel", "sports", "technology", "lifestyle", "food", "animals", "fashion"];
+// Default queries for new users (Indian context)
+const DEFAULT_QUERIES = [
+  "india travel", "indian street food", "bollywood lifestyle", 
+  "indian festivals", "indian nature", "mumbai streets", 
+  "indian ethnic wear", "delhi life", "kerala nature", "indian weddings"
+];
 
 // Helper to fetch videos from Pexels
 async function fetchPexelsVideos(query: string, perPage: number = 15) {
@@ -184,8 +188,8 @@ app.post("/api/reels/next", async (req, res) => {
       1. Temporal Weighting: Recent interactions carry significantly more weight than older ones. Track the user's shifting interests.
       2. Affinity Mapping: Identify the underlying themes, aesthetics, and emotional tones of 'liked' and 'watched_full' items. 
       3. Negative Signals: Strongly suppress concepts, visual styles, and themes correlated with 'skipped' items.
-      4. Serendipity Injection: Make 4 queries highly relevant to their core interests, but make the other 2 queries a "tangential exploration" designed to expand their taste profile securely.
-      5. Contextual Nuance: Use specific, descriptive keywords that translate well to visual stock footage (e.g., "cinematic neon cyberpunk city" instead of "future").
+      4. Serendipity Injection: Make 4 queries highly relevant to their core interests, but make the other 2 queries a "tangential exploration".
+      5. Indian Context (CRITICAL): Ensure that the generated queries are highly contextualized for an Indian audience (e.g., "indian streets", "bollywood dance", "mumbai local", "kerala nature").
       6. Output Constraint: Return EXACTLY a JSON array containing exactly 6 string queries based strictly on the user's complex cognitive profile.
       `;
 
@@ -239,10 +243,10 @@ app.post("/api/unsplash/next", async (req, res) => {
       
       Advanced Personalization Rules:
       1. Temporal Decay: Heavily prioritize the cognitive themes present in the most recent positive interactions.
-      2. Visual Aesthetic Extraction: Deduce the user's preferred visual style (e.g., minimalist, moody, vibrant, macro) based on their engagement, and inject those aesthetic terms into your new queries.
-      3. Aversion Modeling: Analyze 'skipped' items not just for their explicit subjects, but for their underlying genres, and actively filter those out.
-      4. Exploitation vs. Exploration: Make 4 queries exploit known high-affinity topics. Make the other 2 queries an exploratory leap into an adjacent but novel domain to discover new interests.
-      5. Unsplash Optimization: Formulate queries that are known to perform exceptionally well on Unsplash (e.g., adding terms like "experimental architecture", "film photography aesthetics", "abstract texture").
+      2. Visual Aesthetic Extraction: Deduce the user's preferred visual style (e.g., minimalist, moody, vibrant, macro).
+      3. Aversion Modeling: Analyze 'skipped' items not just for their explicit subjects, but for their underlying genres.
+      4. Exploitation vs. Exploration: 4 queries exploit known high-affinity topics, 2 explore adjacent domains.
+      5. Unsplash Optimization & Indian Context: Formulate queries that perform exceptionally well on Unsplash AND are contextualized for an Indian audience (e.g., "indian architecture", "mumbai street photography", "indian culture"). 
       6. Output Constraint: Return EXACTLY a JSON array of 6 string queries reflecting this sophisticated analysis.
       `;
 
