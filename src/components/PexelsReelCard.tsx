@@ -6,12 +6,13 @@ import { cn } from '../utils';
 import { useAudio } from '../contexts/AudioContext';
 
 export interface PexelsVideoData {
-  id: number;
+  id: number | string;
   url: string;
   image: string;
   user: string;
   duration: number;
   query: string;
+  type?: 'pexels' | 'youtube';
 }
 
 interface PexelsReelCardProps {
@@ -122,8 +123,22 @@ export default function PexelsReelCard({ video, isActive, onInteraction }: Pexel
 
   return (
     <div className="relative w-full h-full snap-start overflow-hidden bg-black flex items-center justify-center group">
-      {/* Video/Image Player */}
-      {!hasVideoError ? (
+      {/* Video/Image/YouTube Player */}
+      {video.type === 'youtube' ? (
+        <div 
+          className="relative w-full h-full cursor-pointer overflow-hidden"
+          onClick={(e) => handleDoubleTap(e)}
+        >
+          <iframe 
+            src={video.url + (isMuted ? '&mute=1' : '&mute=0')}
+            className="w-[150%] h-[150%] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+            title="YouTube Shorts"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          ></iframe>
+        </div>
+      ) : !hasVideoError ? (
         <video
           ref={videoRef}
           src={video.url}

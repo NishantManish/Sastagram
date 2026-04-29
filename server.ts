@@ -111,10 +111,41 @@ async function fetchPexelsVideos(query: string, perPage: number = 15) {
       image: v.image,
       user: v.user.name,
       duration: v.duration,
-      query: query // attach query so client knows what this was
+      query: query, // attach query so client knows what this was
+      type: 'pexels'
     }));
   } catch (error) {
     console.error("Error fetching from Pexels:", error);
+    return [];
+  }
+}
+
+// Helper to fetch YouTube Shorts
+async function fetchYouTubeShorts(query: string, maxResults: number = 2) {
+  const apiKey = process.env.VITE_YOUTUBE_API_KEY || process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    console.warn("YOUTUBE_API_KEY missing, skipping YouTube");
+    return [];
+  }
+
+  try {
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query + ' #shorts')}&maxResults=${maxResults}&type=video&videoDuration=short&key=${apiKey}`);
+    if (!response.ok) {
+      console.error(`YouTube API error: ${response.status}`);
+      return [];
+    }
+    const data = await response.json();
+    return data.items.map((item: any) => ({
+      id: `yt-${item.id.videoId}`,
+      url: `https://www.youtube.com/embed/${item.id.videoId}?autoplay=1&controls=0&modestbranding=1&loop=1&playlist=${item.id.videoId}&showinfo=0&rel=0&iv_load_policy=3&fs=0`,
+      image: item.snippet.thumbnails.high.url,
+      user: item.snippet.channelTitle,
+      duration: 60,
+      query: query,
+      type: 'youtube'
+    }));
+  } catch (err) {
+    console.error("Failed to fetch YouTube shorts:", err);
     return [];
   }
 }
@@ -211,10 +242,15 @@ app.post("/api/reels/next", async (req, res) => {
 
     // Fetch videos for the selected queries
     const videoPromises = queriesToSearch.map(q => fetchPexelsVideos(q, 1));
-    const videoResults = await Promise.all(videoPromises);
+    const ytPromises = queriesToSearch.slice(0, 3).map(q => fetchYouTubeShorts(q, 1));
+    
+    const [videoResults, ytResults] = await Promise.all([
+      Promise.all(videoPromises),
+      Promise.all(ytPromises)
+    ]);
     
     // Flatten and shuffle the results
-    let allVideos = videoResults.flat();
+    let allVideos = [...videoResults.flat(), ...ytResults.flat()];
     allVideos = allVideos.sort(() => 0.5 - Math.random());
 
     res.json({ videos: allVideos, queriesUsed: queriesToSearch });

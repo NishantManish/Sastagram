@@ -5,7 +5,7 @@ import PexelsReelCard, { PexelsVideoData } from './PexelsReelCard';
 import { useAudio } from '../contexts/AudioContext';
 
 interface Interaction {
-  videoId: number;
+  videoId: string | number;
   query: string;
   action: 'liked' | 'skipped' | 'watched_full';
 }
@@ -19,7 +19,7 @@ export default function Reels({ onNavigate }: ReelsProps) {
   const [reels, setReels] = useState<PexelsVideoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchingMore, setFetchingMore] = useState(false);
-  const [activeReelId, setActiveReelId] = useState<number | null>(null);
+  const [activeReelId, setActiveReelId] = useState<string | number | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -88,7 +88,7 @@ export default function Reels({ onNavigate }: ReelsProps) {
     }
   };
 
-  const handleInteraction = (videoId: number, query: string, action: 'liked' | 'skipped' | 'watched_full') => {
+  const handleInteraction = (videoId: string | number, query: string, action: 'liked' | 'skipped' | 'watched_full') => {
     setInteractions(prev => {
       // Avoid duplicate actions for the same video unless it's an upgrade
       const existing = prev.find(i => i.videoId === videoId);

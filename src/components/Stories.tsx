@@ -110,7 +110,35 @@ export default function Stories({
         grouped[key].sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
       });
 
-      setGroupedStories(grouped);
+      const checkCloseFriendsAndSet = async () => {
+        const authorsWithCF = validStories.filter(s => s.audience === 'close_friends').map(s => s.authorId);
+        const uniqueAuthors = Array.from(new Set(authorsWithCF));
+        let filteredGroups = { ...grouped };
+        
+        if (uniqueAuthors.length > 0 && auth.currentUser) {
+          const myId = auth.currentUser.uid;
+          for (const authorId of uniqueAuthors) {
+            if (authorId === myId) continue;
+            try {
+              const udoc = await getDoc(doc(db, 'users', authorId));
+              if (udoc.exists()) {
+                const cfList = udoc.data().closeFriends || [];
+                if (!cfList.includes(myId)) {
+                  filteredGroups[authorId] = filteredGroups[authorId].filter(s => s.audience !== 'close_friends');
+                  if (filteredGroups[authorId].length === 0) {
+                    delete filteredGroups[authorId];
+                  }
+                }
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }
+        }
+        setGroupedStories(filteredGroups);
+      };
+      
+      checkCloseFriendsAndSet();
     }, (error) => {
       if (error.message.includes('permission')) {
         console.warn('Permission denied on stories query. This is expected if blocked users are in the results.');

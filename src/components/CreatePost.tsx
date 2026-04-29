@@ -171,6 +171,9 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
               expiresAt: Timestamp.fromDate(expiresAt),
               audience: visibility === 'friends' ? 'close_friends' : 'all',
               viewers: [],
+              viewsCount: 0,
+              likesCount: 0,
+              likedBy: [],
               music: mediaMusicInfo,
             });
           }
@@ -184,7 +187,9 @@ export default function CreatePost({ onSuccess, onBack, initialType = 'post' }: 
 
     } catch (err: any) {
       console.error(`Error creating ${postType}:`, err);
-      showToast(parseFirestoreError(err));
+      // Determine precise error string
+      const errStr = err instanceof Error ? err.message : JSON.stringify(err);
+      showToast(`Upload Failed: ${errStr}`);
     } finally {
       setIsUploading(false);
     }
